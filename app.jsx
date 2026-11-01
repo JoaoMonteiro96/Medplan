@@ -1962,6 +1962,42 @@ function App() {
     setImportLog((p) => p.filter((x) => x.id !== bid));
   };
 
+  // ---- apagar lançamentos em massa ----
+  // Esvazia as listas pelo mesmo caminho da exclusão individual: a sincronização marca
+  // cada item como apagado na nuvem, e ele some dos outros aparelhos sem voltar depois.
+  const [wipeUndo, setWipeUndo] = useState(null);
+  const wipeData = (cols) => {
+    const cur = latestRef.current;
+    const chosen = new Set(cols);
+    const snapshot = {};
+    let removed = 0;
+    cols.forEach((c) => { snapshot[c] = cur[c] || []; removed += snapshot[c].length; });
+    setWipeUndo({ snapshot, removed, importedKeys: cur.settings.importedKeys, importLog: cur.settings.importLog });
+    cols.forEach((c) => settersRef.current[c]([]));
+    // libera a reimportação do que foi apagado, para o extrato não ser ignorado como "Já importado antes"
+    const importCols = ["expenses", "oneOffIncomes", "investments"];
+    const touched = importCols.filter((c) => chosen.has(c));
+    if (!touched.length) return;
+    const allGone = touched.length === importCols.length;
+    const kept = new Set();
+    importCols.filter((c) => !chosen.has(c)).forEach((c) => (cur[c] || []).forEach((it) => { if (it.batch) kept.add(it.batch); }));
+    const gone = new Set();
+    touched.forEach((c) => (cur[c] || []).forEach((it) => { if (it.batch && !kept.has(it.batch)) gone.add(it.batch); }));
+    setImportedKeys((p) => { const n = {}; if (!allGone) Object.keys(p).forEach((k) => { if (!gone.has(p[k])) n[k] = p[k]; }); return n; });
+    setImportLog((p) => (allGone ? [] : p.filter((x) => !gone.has(x.id))));
+  };
+  const undoWipe = () => {
+    if (!wipeUndo) return;
+    Object.keys(wipeUndo.snapshot).forEach((c) => {
+      const items = wipeUndo.snapshot[c];
+      const ids = new Set(items.map((it) => it.id));
+      settersRef.current[c]((p) => [...items, ...p.filter((it) => !ids.has(it.id))]);
+    });
+    setImportedKeys((p) => ({ ...wipeUndo.importedKeys, ...p }));
+    setImportLog((p) => { const ids = new Set(wipeUndo.importLog.map((x) => x.id)); return [...p.filter((x) => !ids.has(x.id)), ...wipeUndo.importLog].slice(0, 30); });
+    setWipeUndo(null);
+  };
+
   // ---- patrimônio total (recebido - pago, independente de estar em caixa ou investido) ----
   const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + portfolio.unrealized;
 
@@ -2876,6 +2912,7 @@ function App() {
         )}
         {activeTab === "backup" && (
           <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
+            wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
             cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
         )}
       </div>
@@ -3140,7 +3177,84 @@ function FaturamentoTab({
   );
 }
 
-function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard }) {
+const WIPE_GROUPS = [
+  { id: "plantoes", label: "Plantões e presenças", cols: ["shifts", "presencas"] },
+  { id: "receitas", label: "Receitas avulsas", cols: ["oneOffIncomes"] },
+  { id: "recorrentes", label: "Receitas recorrentes", cols: ["extraRecurringIncomes"] },
+  { id: "despesas", label: "Despesas", cols: ["expenses"] },
+  { id: "fixas", label: "Despesas fixas", cols: ["recurringExpenses"] },
+  { id: "investimentos", label: "Investimentos", cols: ["investments"] },
+  { id: "metas", label: "Metas", cols: ["goals"] },
+  { id: "vinculos", label: "Vínculos", hint: "também apaga plantões e presenças", cols: ["vinculos"] },
+];
+
+function WipeDataCard({ data, onWipe, undo, onUndo, onDismissUndo, downloadBackup }) {
+  const [sel, setSel] = useState({});
+  const [typed, setTyped] = useState("");
+  const countOf = (g) => g.cols.reduce((a, c) => a + (data[c] || []).length, 0);
+  const isOn = (g) => !!sel[g.id] || (g.id === "plantoes" && !!sel.vinculos);
+  const available = WIPE_GROUPS.filter((g) => countOf(g) > 0);
+  const chosen = available.filter(isOn);
+  const total = chosen.reduce((a, g) => a + countOf(g), 0);
+  const allOn = available.length > 0 && available.every(isOn);
+  const ready = total > 0 && typed.trim().toUpperCase() === "APAGAR";
+  const toggleAll = () => { const n = {}; if (!allOn) available.forEach((g) => { n[g.id] = true; }); setSel(n); };
+  const submit = () => {
+    if (!ready) return;
+    onWipe(chosen.reduce((a, g) => [...a, ...g.cols], []));
+    setSel({}); setTyped("");
+  };
+  const rowStyle = { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--border)", fontSize: 14, cursor: "pointer" };
+  return (
+    <div className="day-panel" id="wipe-card">
+      <div className="day-panel-title"><span>Apagar lançamentos</span></div>
+      {undo && (
+        <div role="status" style={{ background: "var(--surface-3)", borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 13 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>{undo.removed} {undo.removed === 1 ? "registro apagado" : "registros apagados"}. Você pode desfazer até fechar ou recarregar o app.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn btn-primary" onClick={onUndo}>Desfazer</button>
+            <button className="btn btn-ghost" onClick={onDismissUndo}>Ok</button>
+          </div>
+        </div>
+      )}
+      {available.length === 0 ? (
+        <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>Não há lançamentos para apagar.</p>
+      ) : (
+        <>
+          <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 0 }}>
+            Escolha o que apagar. Vale para todos os meses e para todos os aparelhos conectados à sua conta. Baixe um backup antes, porque ele é a forma de recuperar os dados depois de fechar o app.
+          </p>
+          <label style={{ ...rowStyle, fontWeight: 600 }}>
+            <input type="checkbox" checked={allOn} onChange={toggleAll} />
+            <span style={{ flex: 1 }}>Selecionar tudo</span>
+          </label>
+          {available.map((g) => {
+            const forced = g.id === "plantoes" && !!sel.vinculos;
+            return (
+              <label key={g.id} style={{ ...rowStyle, opacity: forced ? 0.65 : 1 }}>
+                <input type="checkbox" checked={isOn(g)} disabled={forced} onChange={(e) => setSel((p) => ({ ...p, [g.id]: e.target.checked }))} />
+                <span style={{ flex: 1 }}>{g.label}{g.hint && <span style={{ display: "block", fontSize: 12, color: "var(--text-dim)" }}>{g.hint}</span>}</span>
+                <span className="mono" style={{ color: "var(--text-dim)" }}>{countOf(g)}</span>
+              </label>
+            );
+          })}
+          <div className="field" style={{ marginTop: 14 }}>
+            <label htmlFor="wipe-confirm">Para confirmar, digite APAGAR</label>
+            <input id="wipe-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" autoCapitalize="characters" placeholder="APAGAR" />
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <button className="btn btn-ghost" onClick={downloadBackup}><IconDownload size={15} /> Baixar backup</button>
+            <button className="btn" disabled={!ready} onClick={submit} style={{ background: "var(--brick)", color: "#fff", opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "not-allowed" }}>
+              <IconTrash size={15} /> {total > 0 ? `Apagar ${total} ${total === 1 ? "registro" : "registros"}` : "Apagar"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard }) {
   return (
     <div>
       {cloudCard}
@@ -3165,6 +3279,8 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
         </div>
         {saveError && <div style={{ color: "var(--brick)", marginTop: 10, fontSize: 13 }}>Não foi possível salvar as últimas alterações neste navegador.</div>}
       </div>
+
+      {wipeCard}
     </div>
   );
 }
