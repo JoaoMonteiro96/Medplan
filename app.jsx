@@ -1477,7 +1477,7 @@ function App() {
   const monthPresencas = presencas.filter((p) => inMonth(p.date, viewYear, viewMonth));
   const monthIncomeItems = buildIncomeItems(viewYear, viewMonth);
   const monthExpenseItems = buildExpenseItems(viewYear, viewMonth);
-  const monthInvestments = investments.filter((i) => inMonth(i.date, viewYear, viewMonth));
+  const monthInvestments = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, viewYear, viewMonth));
 
   const totalGross = monthIncomeItems.reduce((a, i) => a + i.gross, 0);
   const totalNet = monthIncomeItems.reduce((a, i) => a + i.net, 0);
@@ -1596,6 +1596,13 @@ function App() {
   };
 
   const removeInvestment = (id) => setInvestments((prev) => prev.filter((i) => i.id !== id));
+  // Posição inicial: investimento que já existia antes de usar o app. Fica na carteira, mas não é aporte nem sai do caixa.
+  const setPosicaoInicial = (date, on) => setInvestments((prev) => prev.map((i) => {
+    if (i.date !== date) return i;
+    if (on) return { ...i, posicaoInicial: true };
+    const { posicaoInicial, ...rest } = i;
+    return rest;
+  }));
 
   // ---- CRUD: metas ----
   const addGoal = (data) => setGoals((prev) => [...prev, { id: uid(), nome: data.nome, valorAlvo: Number(data.valorAlvo) || 0, valorAtual: Number(data.valorAtual) || 0, prazo: data.prazo || null, cor: data.cor || GOLD }]);
@@ -1634,7 +1641,7 @@ function App() {
   const monthStats = (y, m) => {
     const inc = buildIncomeItems(y, m);
     const exp = buildExpenseItems(y, m);
-    const inv = investments.filter((i) => inMonth(i.date, y, m)).reduce((a, i) => a + Number(i.amount || 0), 0);
+    const inv = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, y, m)).reduce((a, i) => a + Number(i.amount || 0), 0);
     const hrs = shifts.filter((s) => inMonth(s.date, y, m)).reduce((a, s) => a + Number(s.hours || 0), 0) +
                 presencas.filter((p) => inMonth(p.date, y, m)).reduce((a, p) => a + Number(p.hours || 0), 0);
     const net = inc.reduce((a, i) => a + i.net, 0);
@@ -1666,12 +1673,13 @@ function App() {
     }
     const windowStart = monthsWindow[0];
     const before = investments.filter((inv) => {
+      if (inv.posicaoInicial) return true; // a posição inicial já é o ponto de partida do acumulado, sem virar aporte de um mês
       const [iy, im] = inv.date.split("-").map(Number);
       return iy < windowStart.y || (iy === windowStart.y && im - 1 < windowStart.m);
     }).reduce((a, i) => a + Number(i.amount || 0), 0);
     let cumulative = before;
     monthsWindow.forEach(({ y, m }) => {
-      const monthTotal = investments.filter((i) => inMonth(i.date, y, m)).reduce((a, i) => a + Number(i.amount || 0), 0);
+      const monthTotal = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, y, m)).reduce((a, i) => a + Number(i.amount || 0), 0);
       cumulative += monthTotal;
       arr.push({ full: MONTHS_PT[m] + " " + y, label: MONTHS_ABBR_PT[m], aporte: Math.round(monthTotal * 100) / 100, acumulado: Math.round(cumulative * 100) / 100 });
     });
@@ -1701,7 +1709,8 @@ function App() {
     return total;
   }, [expenses, recurringExpenses]);
 
-  const totalInvestedAllTime = investments.reduce((a, i) => a + Number(i.amount || 0), 0);
+  const totalInvestedAllTime = investments.filter((i) => !i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0);
+  const posicaoInicialTotal = investments.filter((i) => i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0);
   const portfolio = useMemo(() => computePortfolio(investments, cotacoes), [investments, cotacoes]);
   const saldoRealizado = totalRecebidoAllTime - totalPagoAllTime - totalInvestedAllTime;
 
@@ -1999,7 +2008,7 @@ function App() {
   };
 
   // ---- patrimônio total (recebido - pago, independente de estar em caixa ou investido) ----
-  const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + portfolio.unrealized;
+  const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + posicaoInicialTotal + portfolio.unrealized;
 
   // ---- alertas / notificações ----
   const alerts = useMemo(() => {
@@ -2912,6 +2921,7 @@ function App() {
         )}
         {activeTab === "backup" && (
           <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
+            posicaoCard={<PosicaoInicialCard investments={investments} onToggle={setPosicaoInicial} />}
             wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
             cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
         )}
@@ -3254,7 +3264,42 @@ function WipeDataCard({ data, onWipe, undo, onUndo, onDismissUndo, downloadBacku
   );
 }
 
-function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard }) {
+function PosicaoInicialCard({ investments, onToggle }) {
+  const [showAll, setShowAll] = useState(false);
+  const groups = useMemo(() => {
+    const map = {};
+    investments.forEach((i) => {
+      if (!i.date) return;
+      const g = map[i.date] = map[i.date] || { date: i.date, count: 0, total: 0, marked: 0 };
+      g.count += 1; g.total += Number(i.amount || 0); if (i.posicaoInicial) g.marked += 1;
+    });
+    return Object.values(map).sort((a, b) => (b.marked > 0) - (a.marked > 0) || b.total - a.total);
+  }, [investments]);
+  const shown = showAll ? groups : groups.slice(0, 5);
+  return (
+    <div className="day-panel" id="posicao-card">
+      <div className="day-panel-title"><span>Posição inicial da carteira</span></div>
+      <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 0 }}>
+        Marque a data dos investimentos que você já tinha e cadastrou de uma vez. Eles continuam na carteira e no patrimônio, mas não contam como aporte do mês, não aparecem como pico nos gráficos e não saem do saldo em caixa.
+      </p>
+      {groups.length === 0 ? <p style={{ fontSize: 13, color: "var(--text-dim)", margin: 0 }}>Não há investimentos lançados.</p> : shown.map((g) => {
+        const on = g.marked > 0;
+        return (
+          <div key={g.date} className="posicao-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 0", borderTop: "1px solid var(--border)" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{fmtDatePt(g.date)}{on && <span className="badge badge-paid" style={{ cursor: "default", marginLeft: 8 }}>Posição inicial</span>}</div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>{g.count} {g.count === 1 ? "lançamento" : "lançamentos"} · {fmtBRL(g.total)}</div>
+            </div>
+            <button className={on ? "btn btn-ghost" : "btn btn-primary"} style={{ flexShrink: 0 }} onClick={() => onToggle(g.date, !on)}>{on ? "Desmarcar" : "Marcar"}</button>
+          </div>
+        );
+      })}
+      {groups.length > 5 && <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => setShowAll((v) => !v)}>{showAll ? "Mostrar menos" : `Ver todas as ${groups.length} datas`}</button>}
+    </div>
+  );
+}
+
+function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard }) {
   return (
     <div>
       {cloudCard}
@@ -3279,6 +3324,8 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
         </div>
         {saveError && <div style={{ color: "var(--brick)", marginTop: 10, fontSize: 13 }}>Não foi possível salvar as últimas alterações neste navegador.</div>}
       </div>
+
+      {posicaoCard}
 
       {wipeCard}
     </div>
@@ -4055,7 +4102,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                       <tr key={i.id}>
                         <td>{fmtDatePt(i.date).slice(0, 5)}<span className="cell-sub">{i.date.slice(0, 4)}</span></td>
                         <td><b>{i.description}</b><span className="cell-sub">{i.category}</span></td>
-                        <td><span className={`badge ${sell ? "badge-pending" : "badge-paid"}`} style={{ cursor: "default" }}>{sell ? "Venda" : "Compra"}</span></td>
+                        <td><span className={`badge ${i.posicaoInicial ? "" : sell ? "badge-pending" : "badge-paid"}`} style={{ cursor: "default" }}>{i.posicaoInicial ? "Posição inicial" : sell ? "Venda" : "Compra"}</span></td>
                         <td className="num mono hide-sm">{i.qty > 0 ? Number(i.qty) : "—"}</td>
                         <td className="num mono hide-sm">{i.qty > 0 ? fmtBRL(i.price) : "—"}</td>
                         <td className="num mono" style={{ color: sell ? "var(--brick)" : "var(--text)" }}>{fmtBRL(Math.abs(i.amount))}</td>
