@@ -1504,7 +1504,7 @@ function App() {
       const v = vinculoMap[s.vinculoId];
       const delayed = payDateOf(s) !== s.date;
       items.push({ key: "shift-" + s.id, vinculoId: s.vinculoId, nome: v ? v.nome : "(vínculo removido)", cor: v ? v.cor : GOLD,
-        tipo: "plantao", dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: netOf(s.gross, v ? v.taxOverride : null),
+        tipo: "plantao", dateIso: payDateOf(s), dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: netOf(s.gross, v ? v.taxOverride : null),
         recebido: !!s.recebido, toggle: () => toggleShiftReceived(s.id), removable: true, remove: () => removeShift(s.id) });
     });
     const refLabel = (ck) => { const [cy, cm] = ck.split("-").map(Number); return MONTHS_ABBR_PT[cm - 1] + "/" + cy; };
@@ -1512,7 +1512,7 @@ function App() {
       const d = Number(v.prazoMeses || 0);
       const ck = shiftMonthKey(mk, -d);
       if (v.startMonth > ck) return;
-      items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, nome: v.nome, cor: v.cor, tipo: "mensal",
+      items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, nome: v.nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, v.diaRecebimento || 5)),
         dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: netOf(v.valorMensal, v.taxOverride),
         recebido: !!(v.recebidoMonths && v.recebidoMonths[ck]), toggle: () => toggleVinculoMensalRecebido(v.id, ck), removable: false });
     });
@@ -1520,12 +1520,12 @@ function App() {
       const d = Number(e.prazoMeses || 0);
       const ck = shiftMonthKey(mk, -d);
       if (e.startMonth > ck) return;
-      items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, nome: e.description, cor: SLATE, tipo: "extra",
+      items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, nome: e.description, cor: SLATE, tipo: "extra", dateIso: dateStr(y, m, clampDay(y, m, e.diaRecebimento || 5)),
         dateLabel: d > 0 ? `dia ${e.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${e.diaRecebimento || 5} · recorrente`, gross: Number(e.amount || 0), net: netOf(e.amount, e.taxOverride),
         recebido: !!(e.recebidoMonths && e.recebidoMonths[ck]), toggle: () => toggleExtraIncomeRecebido(e.id, ck), removable: true, remove: () => removeExtraRecurringIncome(e.id) });
     });
     oneOffIncomes.filter((o) => inMonth(o.date, y, m)).forEach((o) => {
-      items.push({ key: "one-" + o.id, vinculoId: null, nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateLabel: fmtDatePt(o.date) + " · entrada avulsa",
+      items.push({ key: "one-" + o.id, vinculoId: null, nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · entrada avulsa",
         gross: Number(o.amount || 0), net: Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
         removable: true, removeOne: () => setOneOffIncomes((prev) => prev.filter((x) => x.id !== o.id)) });
     });
@@ -1547,6 +1547,23 @@ function App() {
     });
     return items;
   };
+
+  // Lembretes: o que vence ou cai nos próximos 40 dias e ainda está em aberto. A opção fica só neste aparelho.
+  const [notifOn, setNotifOnState] = useState(() => { try { return localStorage.getItem("mediplan-notif") === "1"; } catch (e) { return false; } });
+  const setNotifOn = (v) => { setNotifOnState(!!v); try { localStorage.setItem("mediplan-notif", v ? "1" : "0"); } catch (e) {} };
+  const lembretes = useMemo(() => {
+    const t = new Date(), hoje = todayStr(), fim = addDaysIso(hoje, 40), out = [];
+    for (let k = 0; k < 3; k++) {
+      const d = new Date(t.getFullYear(), t.getMonth() + k, 1), y = d.getFullYear(), m = d.getMonth();
+      buildExpenseItems(y, m).forEach((e) => { if (!e.paid && e.amount > 0 && e.dateIso >= hoje && e.dateIso <= fim) out.push({ key: e.key, date: e.dateIso, tipo: "despesa", nome: e.description, valor: e.amount }); });
+      buildIncomeItems(y, m).forEach((i) => { if (!i.recebido && i.net > 0 && i.dateIso && i.dateIso >= hoje && i.dateIso <= fim) out.push({ key: i.key, date: i.dateIso, tipo: "receita", nome: i.nome, valor: i.net }); });
+    }
+    return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).map((i) => ({ ...i,
+      t1: i.tipo === "despesa" ? `Vence amanhã: ${i.nome}` : `Amanhã você recebe: ${i.nome}`,
+      t0: i.tipo === "despesa" ? `Vence hoje: ${i.nome}` : `Hoje você recebe: ${i.nome}`,
+      body: i.tipo === "despesa" ? `${fmtBRL(i.valor)} · vencimento em ${fmtDatePt(i.date)}` : `${fmtBRL(i.valor)} líquidos · previsto para ${fmtDatePt(i.date)}` }));
+  }, [expenses, recurringExpenses, shifts, vinculos, extraRecurringIncomes, oneOffIncomes, taxRateGeral]);
+  useEffect(() => { if (!loaded) return undefined; const tm = setTimeout(() => syncLembretes(notifOn, lembretes), 600); return () => clearTimeout(tm); }, [loaded, notifOn, lembretes]);
 
   const monthKey = monthKeyOf(viewYear, viewMonth);
   // Tributação pela contabilidade: a alíquota geral do app passa a ser a carga calculada na simulação
@@ -3187,6 +3204,23 @@ function App() {
         .ct-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
         .ct-item > div b { display: block; font-size: 14.5px; } .ct-item small { display: block; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; margin-top: 2px; } .ct-item > b { font-size: 15px; flex-shrink: 0; }
         .ct-details > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: #475569; list-style-position: inside; } .ct-details[open] > summary { margin-bottom: 8px; }
+        /* ---- v15: escala com intervalo, lançamento do dia, lembretes e nota de corretagem ---- */
+        .escala-row.rep { margin-top: 8px; } .escala-prox { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+        .add-box { border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-top: 14px; background: var(--surface-2); }
+        .add-box .mini-form { background: transparent; border: none; padding: 0; margin-top: 0; }
+        .add-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; margin-bottom: 10px; }
+        .add-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 12px; }
+        .add-tip { font-size: 12.5px; color: var(--text-dim); background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-top: 8px; }
+        .add-box select, .add-box input[type=number] { background: #fff; }
+        .lb-on { font-size: 11px; font-weight: 700; color: #166534; background: #DCFCE7; border-radius: 999px; padding: 2px 9px; }
+        .lb-list { display: flex; flex-direction: column; gap: 5px; font-size: 13px; margin-top: 12px; background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+        .lb-list b { font-size: 12px; color: var(--text-dim); } .lb-list i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; }
+        .lb-list i.out { background: var(--brick); } .lb-list i.in { background: var(--teal); }
+        .choice-row { grid-template-columns: repeat(2, 1fr); }
+        @media (max-width: 720px) { .choice-row { grid-template-columns: 1fr; } }
+        .imp-ctrl .tk-in { width: 130px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px; font-size: 13px; background: #fff; font-family: inherit; text-transform: uppercase; }
+        .imp-ctrl .tk-in.need { border-color: var(--brick); }
+        .pm-line { display: block; margin-top: 3px; color: var(--text); } .pm-line b { color: var(--teal); }
       `}</style>
 
       <div className="main">
@@ -3276,6 +3310,7 @@ function App() {
         )}
         {activeTab === "backup" && (
           <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
+            notifCard={<LembretesCard on={notifOn} setOn={setNotifOn} itens={lembretes} />}
             posicaoCard={<PosicaoInicialCard investments={investments} onToggle={setPosicaoInicial} />}
             wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
             cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
@@ -3649,7 +3684,87 @@ function PosicaoInicialCard({ investments, onToggle }) {
   );
 }
 
-function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto }) {
+// ---- Lembretes: aviso no celular um dia antes de uma despesa vencer ou de um pagamento cair ----
+const LEMBRETES_CACHE = "mediplan-lembretes", LEMBRETES_TAG = "mediplan-lembretes";
+const notifSuporte = () => typeof window !== "undefined" && "Notification" in window && "serviceWorker" in navigator;
+const swReady = () => new Promise((res) => {
+  if (!("serviceWorker" in navigator)) return res(null);
+  let fim = false; const t = setTimeout(() => { if (!fim) { fim = true; res(null); } }, 3000);
+  navigator.serviceWorker.ready.then((r) => { if (!fim) { fim = true; clearTimeout(t); res(r); } }).catch(() => { if (!fim) { fim = true; clearTimeout(t); res(null); } });
+});
+// Guarda a lista no aparelho (fora da nuvem) para o serviço em segundo plano consultar, e pede uma conferência agora
+async function syncLembretes(on, items) {
+  try {
+    if (typeof caches === "undefined") return;
+    const c = await caches.open(LEMBRETES_CACHE);
+    await c.put("./__lembretes.json", new Response(JSON.stringify({ on: !!on, at: Date.now(), items: on ? items : [] }), { headers: { "Content-Type": "application/json" } }));
+    const reg = await swReady();
+    if (!reg) return;
+    if (!on) { if (reg.periodicSync) { try { await reg.periodicSync.unregister(LEMBRETES_TAG); } catch (e) {} } return; }
+    if (reg.active) reg.active.postMessage({ type: LEMBRETES_TAG });
+    if (reg.periodicSync) { try { await reg.periodicSync.register(LEMBRETES_TAG, { minInterval: 6 * 3600 * 1000 }); } catch (e) {} }
+  } catch (e) {}
+}
+async function notifTeste() {
+  const titulo = "Mediplan: lembretes ativados", opts = { body: "É assim que o aviso aparece, um dia antes de cada vencimento e de cada pagamento.", icon: "icon-192.png", badge: "icon-192.png", tag: "mediplan-teste" };
+  try { const reg = await swReady(); if (reg && reg.showNotification) { await reg.showNotification(titulo, opts); return true; } } catch (e) {}
+  try { new Notification(titulo, opts); return true; } catch (e) { return false; }
+}
+
+function LembretesCard({ on, setOn, itens }) {
+  const sup = notifSuporte();
+  const [perm, setPerm] = useState(sup ? Notification.permission : "unsupported");
+  const [msg, setMsg] = useState("");
+  const ativo = on && perm === "granted";
+  const ativar = async () => {
+    setMsg("");
+    let p = Notification.permission;
+    if (p === "default") { try { p = await Notification.requestPermission(); } catch (e) { p = Notification.permission; } }
+    setPerm(p);
+    if (p !== "granted") { setMsg("O celular bloqueou os avisos deste app. Para liberar, toque no cadeado ao lado do endereço do site, depois em Permissões e Notificações."); return; }
+    setOn(true);
+    const okT = await notifTeste();
+    setMsg(okT ? "Pronto. Enviei um aviso de teste agora." : "Lembretes ligados, mas o aviso de teste não saiu neste navegador.");
+  };
+  const testar = async () => { const okT = await notifTeste(); setMsg(okT ? "Aviso de teste enviado." : "O aviso de teste não saiu neste navegador."); };
+  const prox = itens.slice(0, 5);
+  return (
+    <div className="day-panel" id="lembretes-card">
+      <div className="day-panel-title"><span>Lembretes no celular</span>{ativo && <span className="lb-on">ligados</span>}</div>
+      <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 0 }}>
+        Um aviso um dia antes do vencimento de cada despesa e um dia antes de cada pagamento que você vai receber (salário, plantão e outras entradas).
+      </p>
+      {!sup ? (
+        <div className="note-info" style={{ marginBottom: 0 }}>Este navegador não permite avisos. No iPhone, adicione o Mediplan à Tela de Início e abra por lá. No Android, use o Chrome.</div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {!ativo ? <button className="btn btn-primary" id="lb-ativar" onClick={ativar}><IconBell size={15} /> Ativar lembretes</button> : (
+              <>
+                <button className="btn btn-ghost" id="lb-testar" onClick={testar}><IconBell size={15} /> Enviar aviso de teste</button>
+                <button className="btn btn-ghost" id="lb-desativar" onClick={() => { setOn(false); setMsg("Lembretes desligados neste aparelho."); }}>Desativar</button>
+              </>
+            )}
+          </div>
+          {msg && <div className="field-hint" id="lb-msg" style={{ marginTop: 10 }}>{msg}</div>}
+          {ativo && (
+            <div className="lb-list" id="lb-list">
+              <b>Próximos avisos (chegam um dia antes da data)</b>
+              {prox.length === 0 && <span>Nada a pagar ou a receber nos próximos 40 dias.</span>}
+              {prox.map((i) => <span key={i.key + i.date}><i className={i.tipo === "despesa" ? "out" : "in"} />{fmtDatePt(i.date).slice(0, 5)} · {i.tipo === "despesa" ? "vence" : "cai"} {i.nome} · {fmtBRL(i.valor)}</span>)}
+              {itens.length > prox.length && <span>e mais {itens.length - prox.length}.</span>}
+            </div>
+          )}
+          <div className="field-hint" style={{ marginTop: 10 }}>
+            Vale para este aparelho. Para o aviso chegar com o app fechado, use o Chrome no Android com o Mediplan instalado na tela inicial. Quem decide a hora de conferir é o celular, então o aviso pode atrasar. Sempre que você abre o app, ele confere na hora.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard }) {
   return (
     <div>
       {cloudCard}
@@ -3662,6 +3777,8 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
         </div>
         {contabAuto && <div className="field-hint">Calculada pela aba Contabilidade. Para digitar uma porcentagem, escolha “Porcentagem fixa” lá.</div>}
       </div>
+
+      {notifCard}
 
       <div className="day-panel">
         <div className="day-panel-title"><span>Backup dos dados</span></div>
@@ -3868,13 +3985,22 @@ function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCale
 const TURNOS = { manha: "Manhã", tarde: "Tarde", noite: "Noite", dia: "Dia todo" };
 const DIAS_SEM = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const ORDEM_SEM = [1, 2, 3, 4, 5, 6, 0];
+// Semanas contadas de segunda a domingo, para o sábado e o domingo do mesmo fim de semana ficarem juntos
+const semanaIdx = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return Math.floor((Date.UTC(y, m - 1, d) / 86400000 - 4) / 7); };
+const slotCada = (s) => { const c = Math.round(Number(s && s.cada) || 1); return c > 1 ? c : 1; };
+const slotNaSemana = (s, iso) => { const c = slotCada(s); if (c === 1 || !s.inicio) return true; return (((semanaIdx(iso) - semanaIdx(s.inicio)) % c) + c) % c === 0; };
+function escalaProximas(s, n) {
+  const out = [], hoje = todayStr();
+  for (let k = 0; k < 150 && out.length < n; k++) { const iso = addDaysIso(hoje, k); const [y, m, d] = iso.split("-").map(Number); if ((s.dias || []).includes(new Date(y, m - 1, d).getDay()) && slotNaSemana(s, iso)) out.push(iso); }
+  return out;
+}
 function escalaDoMes(v, y, m) {
   if (!v || v.tipo !== "mensal" || !Array.isArray(v.escala) || v.escala.length === 0) return [];
   if (v.startMonth && v.startMonth > monthKeyOf(y, m)) return [];
   const out = [], n = new Date(y, m + 1, 0).getDate(), off = v.escalaOff || {};
   for (let d = 1; d <= n; d++) {
     const wd = new Date(y, m, d).getDay(), date = dateStr(y, m, d);
-    v.escala.forEach((s) => { if ((s.dias || []).includes(wd) && Number(s.horas) > 0) out.push({ id: "esc-" + v.id + "-" + s.id + "-" + date, slotId: s.id, vinculoId: v.id, date, day: d, turno: s.turno, hours: Number(s.horas), off: !!off[date] }); });
+    v.escala.forEach((s) => { if ((s.dias || []).includes(wd) && Number(s.horas) > 0 && slotNaSemana(s, date)) out.push({ id: "esc-" + v.id + "-" + s.id + "-" + date, slotId: s.id, vinculoId: v.id, date, day: d, turno: s.turno, hours: Number(s.horas), off: !!off[date] }); });
   }
   return out;
 }
@@ -3887,8 +4013,8 @@ function escalaDiasTxt(dias) {
   if (d.length === 7) return "Todos os dias";
   return d.map((x) => DIAS_SEM[x]).join(", ");
 }
-const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}`).join("  |  ");
-const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + (s.dias || []).length * (Number(s.horas) || 0), 0);
+const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}${slotCada(s) > 1 ? ` · a cada ${slotCada(s) * 7} dias` : ""}`).join("  |  ");
+const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + ((s.dias || []).length * (Number(s.horas) || 0)) / slotCada(s), 0);
 
 function EscalaEditor({ value, onChange }) {
   const list = value || [];
@@ -3896,7 +4022,7 @@ function EscalaEditor({ value, onChange }) {
   const add = (dias) => onChange([...list, { id: uid(), dias, turno: "manha", horas: 6 }]);
   return (
     <div className="escala-ed">
-      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Sem escala. Adicione os horários que se repetem toda semana, como “Seg a Sex de manhã”.</div>}
+      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Sem escala. Adicione os horários que se repetem, como “Seg a Sex de manhã” ou “fim de semana a cada 14 dias”.</div>}
       {list.map((s) => (
         <div key={s.id} className="escala-slot">
           <div className="chip-row" role="group" aria-label="Dias da semana">
@@ -3909,6 +4035,13 @@ function EscalaEditor({ value, onChange }) {
             <label>Horas por dia<input type="number" inputMode="decimal" min="0" step="0.5" value={s.horas} onChange={(e) => upd(s.id, { horas: e.target.value })} /></label>
             <button type="button" className="btn-icon" aria-label="Remover horário" onClick={() => onChange(list.filter((x) => x.id !== s.id))}><IconTrash size={15} /></button>
           </div>
+          <div className="escala-row rep">
+            <label>Repete<select data-rep value={slotCada(s)} onChange={(e) => { const c = Number(e.target.value); upd(s.id, c > 1 ? { cada: c, inicio: s.inicio || todayStr() } : { cada: 1 }); }}>
+              <option value={1}>Toda semana (a cada 7 dias)</option><option value={2}>A cada 14 dias</option><option value={3}>A cada 21 dias</option><option value={4}>A cada 28 dias</option>
+            </select></label>
+            {slotCada(s) > 1 && <label>Um dia em que você trabalha<input type="date" data-inicio value={s.inicio || ""} onChange={(e) => upd(s.id, { inicio: e.target.value || todayStr() })} /></label>}
+          </div>
+          {slotCada(s) > 1 && (() => { const px = escalaProximas(s, 4); return <div className="escala-prox" data-prox>{px.length ? "Próximos dias: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") : "Escolha os dias da semana acima."}</div>; })()}
         </div>
       ))}
       <div className="escala-add">
@@ -3916,7 +4049,7 @@ function EscalaEditor({ value, onChange }) {
         <button type="button" className="btn btn-ghost sm" onClick={() => add([6, 0])}><IconPlus size={14} /> Fim de semana</button>
         <button type="button" className="btn btn-ghost sm" onClick={() => add([])}><IconPlus size={14} /> Outros dias</button>
       </div>
-      {list.length > 0 && <div className="field-hint">Cerca de {fmtHoras(escalaHorasSemana(list))} por semana. Essas horas entram no Calendário e na rentabilidade do trabalho.</div>}
+      {list.length > 0 && <div className="field-hint">Cerca de {fmtHoras(escalaHorasSemana(list))} por semana{list.some((s) => slotCada(s) > 1) ? ", em média" : ""}. Essas horas entram no Calendário e na rentabilidade do trabalho.</div>}
     </div>
   );
 }
@@ -4361,6 +4494,8 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   const [hours, setHours] = useState("");
   const [showNewVinculo, setShowNewVinculo] = useState(false);
   const [prazoDias, setPrazoDias] = useState(0);
+  const [erro, setErro] = useState("");
+  useEffect(() => { setErro(""); setShowNewVinculo(false); }, [selectedDay]);
   const today = todayStr();
   const dayEntries = selectedDay ? (entriesByDay[selectedDay] || []) : [];
   const selectedVinculo = vinculoMap[vinculoId];
@@ -4379,13 +4514,13 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   const submit = () => {
     if (!vinculoId || !selectedVinculo) return;
     if (selectedVinculo.tipo === "plantao") {
-      if (!gross) return;
+      if (!(Number(gross) > 0)) { setErro("Informe o valor do plantão."); return; }
       addShift(selectedDay, vinculoId, gross, hours, prazoDias);
     } else {
-      if (!hours) return;
+      if (!(Number(hours) > 0)) { setErro("Informe quantas horas você trabalhou neste dia."); return; }
       addPresenca(selectedDay, vinculoId, hours);
     }
-    setGross(""); setHours("");
+    setGross(""); setHours(""); setErro("");
   };
 
   return (
@@ -4467,42 +4602,62 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
             );
           })}
 
-          {vinculos.length === 0 ? (
-            <div className="empty-state">
-              Cadastre um vínculo antes de lançar. <button className="subtle-link" style={{ display: "inline" }} onClick={() => setActiveTab("faturamento")}>Ir para Faturamento</button>
-            </div>
-          ) : (
-            <div className="form-grid" style={{ marginTop: 6 }}>
-              <div className="field">
-                <label>Vínculo</label>
-                <select value={vinculoId} onChange={(e) => setVinculoId(e.target.value)}>
-                  {vinculos.map((v) => <option key={v.id} value={v.id}>{v.nome} ({v.tipo === "mensal" ? "mensal" : "plantão"})</option>)}
-                </select>
-              </div>
-              {selectedVinculo && selectedVinculo.tipo === "plantao" && (
-                <div className="field"><label>Valor bruto (R$)</label><input type="number" inputMode="decimal" value={gross} onChange={(e) => setGross(e.target.value)} placeholder="0,00" /></div>
-              )}
-              {selectedVinculo && selectedVinculo.tipo === "plantao" && (
+          <div className="add-box" id="day-add">
+            {showNewVinculo ? (
+              <>
+                <div className="add-head"><b>Cadastrar novo local de trabalho</b><button type="button" className="link-btn" id="day-novo-cancel" onClick={() => setShowNewVinculo(false)}>Cancelar</button></div>
+                <p className="add-sub">Você faz isso uma vez só. Depois de salvar, o local entra na lista e você volta para lançar este dia.</p>
+                <VinculoForm onSubmit={(d) => { const id = addVinculo(d); setVinculoId(id); setShowNewVinculo(false); }} defaultStartMonth={monthKeyOf(viewYear, viewMonth)} />
+              </>
+            ) : vinculos.length === 0 ? (
+              <>
+                <div className="add-head"><b>Adicionar neste dia</b></div>
+                <p className="add-sub">Você ainda não cadastrou nenhum local de trabalho (hospital, clínica, UPA). Cadastre o primeiro para lançar plantões e horas.</p>
+                <button className="btn btn-primary" id="day-novo" onClick={() => setShowNewVinculo(true)}><IconPlus size={15} /> Cadastrar local de trabalho</button>
+              </>
+            ) : (
+              <>
+                <div className="add-head"><b>Adicionar neste dia</b></div>
                 <div className="field">
-                  <label>Pago em quanto tempo?</label>
-                  <PrazoPicker key={vinculoId + ":" + prazoDias} unit="dias" value={prazoDias} onChange={setPrazoDias} />
-                  {selectedDay && <div className="field-hint">Cairá no caixa em <b>{fmtDatePt(addDaysIso(dateStr(viewYear, viewMonth, selectedDay), prazoDias))}</b></div>}
+                  <label>Onde você trabalhou?</label>
+                  <select id="day-vinculo" value={vinculoId} onChange={(e) => { setVinculoId(e.target.value); setErro(""); }}>
+                    {vinculos.map((v) => <option key={v.id} value={v.id}>{v.nome} ({v.tipo === "mensal" ? "cargo fixo" : "plantão"})</option>)}
+                  </select>
+                  <button type="button" className="subtle-link" id="day-novo" onClick={() => { setShowNewVinculo(true); setErro(""); }}>Não está na lista? Cadastrar novo local</button>
                 </div>
-              )}
-              <div className="field">
-                <label>Horas trabalhadas</label>
-                <input type="number" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="12" />
-                <div className="preset-row">
-                  <button type="button" className="preset-btn" onClick={() => setHours(12)}>12h</button>
-                  <button type="button" className="preset-btn" onClick={() => setHours(24)}>24h</button>
+                {selectedVinculo && (
+                  <div className="add-tip" id="day-tip">
+                    {selectedVinculo.tipo === "plantao"
+                      ? "Plantão avulso: informe quanto vai receber por ele. O valor entra no faturamento."
+                      : "Cargo fixo: o salário já entra sozinho todo mês. Aqui você só anota as horas deste dia" + ((selectedVinculo.escala || []).length ? ", e elas substituem a escala fixa nesta data." : ".")}
+                  </div>
+                )}
+                <div className="form-grid" style={{ marginTop: 10 }}>
+                  {selectedVinculo && selectedVinculo.tipo === "plantao" && (
+                    <div className="field"><label>Valor do plantão (R$)</label><input type="number" inputMode="decimal" value={gross} onChange={(e) => { setGross(e.target.value); setErro(""); }} placeholder="0,00" /></div>
+                  )}
+                  {selectedVinculo && selectedVinculo.tipo === "plantao" && (
+                    <div className="field">
+                      <label>Quando você recebe?</label>
+                      <PrazoPicker key={vinculoId + ":" + prazoDias} unit="dias" value={prazoDias} onChange={setPrazoDias} />
+                      {selectedDay && <div className="field-hint">Cairá no caixa em <b>{fmtDatePt(addDaysIso(dateStr(viewYear, viewMonth, selectedDay), prazoDias))}</b></div>}
+                    </div>
+                  )}
+                  <div className="field">
+                    <label>{selectedVinculo && selectedVinculo.tipo === "plantao" ? "Horas trabalhadas (opcional)" : "Horas trabalhadas neste dia"}</label>
+                    <input type="number" inputMode="decimal" value={hours} onChange={(e) => { setHours(e.target.value); setErro(""); }} placeholder="12" />
+                    <div className="preset-row">
+                      <button type="button" className="preset-btn" onClick={() => setHours(6)}>6h</button>
+                      <button type="button" className="preset-btn" onClick={() => setHours(12)}>12h</button>
+                      <button type="button" className="preset-btn" onClick={() => setHours(24)}>24h</button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
-          {vinculos.length > 0 && <button className="btn btn-primary" onClick={submit}><IconPlus size={15} /> Adicionar lançamento</button>}
-
-          {!showNewVinculo ? <div style={{ marginTop: 10 }}><button className="subtle-link" onClick={() => setShowNewVinculo(true)}><IconPlus size={13} /> Novo vínculo rápido</button></div> :
-            <VinculoForm onSubmit={(d) => { const id = addVinculo(d); setVinculoId(id); setShowNewVinculo(false); }} defaultStartMonth={monthKeyOf(viewYear, viewMonth)} />}
+                {erro && <div className="note-bad" id="day-erro" style={{ marginBottom: 10 }}>{erro}</div>}
+                <button className="btn btn-primary" id="day-save" onClick={submit}><IconPlus size={15} /> {selectedVinculo && selectedVinculo.tipo === "mensal" ? "Salvar horas do dia" : "Salvar plantão"}</button>
+              </>
+            )}
+          </div>
         </div></div></div>
       )}
     </>
@@ -5106,6 +5261,68 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
 }
 
 
+// ---- Nota de corretagem (PDF no padrão SINACOR, usado pela maioria das corretoras) ----
+const NOTA_CLASSE = { ON: "3", PN: "4", PNA: "5", PNB: "6", PNC: "7", PND: "8", UNT: "11", CI: "11" };
+const notaNum = (t) => Number(String(t).replace(/\./g, "").replace(",", "."));
+const notaIso = (t) => { const m = String(t).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+const tickerValido = (t) => /^[A-Z]{4}\d{1,2}$/.test(String(t || ""));
+// Descobre o código de negociação a partir da "especificação do título" da nota
+function notaAtivo(specRaw) {
+  const spec = String(specRaw || "").toUpperCase().replace(/\s+/g, " ").trim();
+  const tk = spec.match(/(?:^|\s)([A-Z]{4}\d{1,2})F?(?=\s|$)/);
+  if (tk) return { ticker: tk[1], name: ASSET_NAME[tk[1]] || "", incerto: false };
+  const toks = stripAcc(spec).toUpperCase().split(" ").filter(Boolean);
+  let ci = -1;
+  for (let i = 1; i < toks.length; i++) if (NOTA_CLASSE[toks[i]]) { ci = i; break; }
+  const suf = ci > 0 ? NOTA_CLASSE[toks[ci]] : "";
+  const nomeT = (ci > 0 ? toks.slice(0, ci) : toks).filter((t) => !/^(FII|ETF|S\/A|SA)$/.test(t)).map((t) => t.replace(/[^A-Z0-9]/g, "")).filter(Boolean);
+  if (!nomeT.length) return { ticker: "", name: "", incerto: true };
+  const nn = nomeT.join(""), n1 = nomeT[0];
+  const cands = ASSET_DB.filter((a) => {
+    if (suf && !(a.t.endsWith(suf) && a.t.length === 4 + suf.length)) return false;
+    const dw = stripAcc(a.n).toUpperCase().split(/\s+/).map((t) => t.replace(/[^A-Z0-9]/g, "")).filter((t) => t && !NOTA_CLASSE[t]);
+    if (!dw.length) return false;
+    const dn = dw.join("");
+    return dn === nn || dn.startsWith(nn) || (dn.length >= 4 && nn.startsWith(dn)) || (n1.length >= 4 && dw.some((w) => w === n1 || w.startsWith(n1)));
+  });
+  if (cands.length === 1) return { ticker: cands[0].t, name: cands[0].n, incerto: true };
+  return { ticker: "", name: "", incerto: true };
+}
+function parseNotaCorretagem(lines) {
+  const RE = /(?:^|\s)([CV])\s+(VISTA|FRACION[AÁ]RIO)\s+(.+?)\s+(\d[\d.]*)\s+(\d[\d.]*,\d{2,8})\s+(\d[\d.]*,\d{2})\s+([DC])\s*$/i;
+  const OUTROS = /(?:^|\s)[CV]\s+(OP[CÇ][AÃ]O|TERMO|EXERC|FUTURO|LEIL[AÃ]O)/i;
+  const trades = []; let cur = null, outros = 0, ehNota = false;
+  (lines || []).forEach((raw, i) => {
+    const l = String(raw || "").replace(/\s+/g, " ").trim();
+    if (/nota de (corretagem|negocia)/i.test(l)) ehNota = true;
+    if (/data\s+preg[aã]o/i.test(l)) {
+      let d = notaIso(l);
+      for (let k = 1; !d && k <= 3 && i + k < lines.length; k++) d = notaIso(lines[i + k]);
+      if (d) cur = d;
+    }
+    const m = l.match(RE);
+    if (!m) { if (OUTROS.test(l)) outros++; return; }
+    const qty = notaNum(m[4]), price = notaNum(m[5]), amount = notaNum(m[6]);
+    if (!(qty > 0) || !(amount > 0)) return;
+    const spec = m[3].replace(/(\s+(?:[#@]+|[#@]?[DHXPYLTIBAC28][#@]?))+$/i, "").replace(/^\d{2}\/\d{2}\s+/, "").trim();
+    trades.push({ date: cur, spec, side: m[1].toUpperCase() === "C" ? "compra" : "venda", qty, price, amount });
+  });
+  const primeira = (trades.find((t) => t.date) || {}).date || null;
+  const groups = {};
+  trades.forEach((t) => {
+    const date = t.date || primeira || todayStr();
+    const k = [date, stripAcc(t.spec), t.side, t.price].join("|");
+    if (groups[k]) { groups[k].qty += t.qty; groups[k].amount = Math.round((groups[k].amount + t.amount) * 100) / 100; }
+    else groups[k] = { ...t, date, semData: !t.date && !primeira };
+  });
+  const rows = Object.values(groups).map((t) => {
+    const a = notaAtivo(t.spec);
+    return { kind: "trade", src: "neg", nota: true, date: t.date, semData: t.semData, ticker: a.ticker, spec: t.spec, name: a.name, incerto: a.incerto,
+      category: a.ticker ? b3Category(a.ticker, "", "") : "Ações", side: t.side, qty: t.qty, price: t.price, amount: t.amount };
+  });
+  return { rows, outros, ehNota: ehNota || rows.length > 0, datas: [...new Set(rows.map((r) => r.date))].sort() };
+}
+
 function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitImport, importLog, undoImport, goTab, commitB3, portfolio, investments }) {
   const [b3raw, setB3raw] = useState([]);
   const [b3info, setB3info] = useState(null);
@@ -5129,6 +5346,27 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
     const list = Array.from(files || []);
     if (!list.length) return;
     const today = new Date();
+    if (source === "nota") {
+      let rowsAll = [], outros = 0;
+      for (const f of list) {
+        try {
+          setBusy("Lendo " + f.name + "…");
+          const r = parseNotaCorretagem(await pdfToLines(await f.arrayBuffer(), pwd));
+          if (r.rows.length === 0) setError(r.ehNota ? `Li “${f.name}”, mas não achei compras ou vendas à vista nela.` : `Não reconheci “${f.name}” como nota de corretagem. Se o PDF for uma foto ou escaneado, o app não consegue ler.`);
+          rowsAll = rowsAll.concat(r.rows); outros += r.outros;
+        } catch (e) {
+          if (e && e.name === "PasswordException") { setPwdFile(f); setBusy(""); setError(pwd ? "Senha incorreta. Tente de novo." : "Esta nota tem senha. Digite abaixo (em geral, os primeiros dígitos do CPF)."); return; }
+          setError(`Não consegui ler “${f.name}”: ${e && e.message ? e.message : e}`);
+        }
+      }
+      setBusy(""); setPwdFile(null); setPassword("");
+      if (rowsAll.length) {
+        setB3raw((p) => p.concat(rowsAll));
+        setB3info((p) => ({ proventos: 0, eventos: [], outros: (p ? p.outros : 0) + outros, tipos: ["Nota de corretagem"], nota: true, notaOutros: (p && p.notaOutros ? p.notaOutros : 0) + outros }));
+        setLabel((l) => (l ? l + ", " : "") + list.map((f) => f.name).join(", "));
+      }
+      return;
+    }
     if (source === "b3") {
       let rowsAll = [], inf = { proventos: 0, eventos: [], outros: 0, tipos: [] };
       for (const f of list) {
@@ -5222,8 +5460,16 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
     const hasNeg = b3raw.some((r) => r.kind === "trade" && r.src === "neg");
     const posMap = {}; portfolio.positions.forEach((p) => { posMap[p.description] = p; });
     const manualTk = new Set(investments.filter((i) => !String(i.source || "").startsWith("b3")).map((i) => i.description));
-    const base = b3raw.map((r, idx) => {
+    const base = b3raw.map((r0, idx) => {
       const id = "b3:" + idx;
+      let r = r0;
+      if (r0.nota) {
+        // na nota, o código pode ser corrigido na revisão; sem código válido a linha não entra
+        const ed = edits[id] || {};
+        const tk = cleanTicker(ed.ticker !== undefined ? ed.ticker : r0.ticker);
+        r = { ...r0, ticker: tk, name: tk === r0.ticker ? r0.name : (ASSET_NAME[tk] || ""), category: tickerValido(tk) ? ((portfolio.positions.find((x) => x.isQty && x.description === tk) || {}).category || b3Category(tk, "", "")) : r0.category };
+        if (!tickerValido(tk)) return { ...r, id, key: "", action: "ignorar", semTicker: true, reason: "Digite o código do ativo (ex.: PETR4) para importar" };
+      }
       if (r.kind !== "trade") return { ...r, id };
       const key = `b3t:${r.date}|${r.ticker}|${r.side}|${r.qty}|${Number(r.amount).toFixed(2)}`;
       let action = "importar", reason = "";
@@ -5231,13 +5477,22 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
       else if (hasNeg && r.src === "mov" && r.category !== "Renda Fixa") { action = "ignorar"; reason = "Já vem na planilha de negociação"; }
       else if (r.category === "Renda Fixa" && portfolio.positions.some((x) => x.category === "Renda Fixa" && (stripAcc(x.description).includes(stripAcc(r.ticker)) || stripAcc(r.ticker).includes(stripAcc(x.description))))) { action = "ignorar"; reason = "Você já tem esse título na carteira"; }
       else if (manualTk.has(r.ticker)) reason = "Você já lançou este ativo à mão. Confira para não duplicar";
+      else if (r.nota && r.incerto && !(edits[id] && edits[id].ticker !== undefined)) reason = "Código deduzido pelo nome que está na nota. Confira";
       const row = { ...r, id, key, action, reason };
-      return edits[id] ? { ...row, ...edits[id] } : row;
+      return edits[id] ? { ...row, ...edits[id], ticker: row.ticker } : row;
     });
     const batchQty = {}; const batchRF = new Set();
     base.forEach((r) => { if (r.kind === "trade" && r.action === "importar" && r.category === "Renda Fixa") batchRF.add(r.ticker); });
     base.forEach((r) => { if (r.kind === "trade" && r.action === "importar" && r.qty > 0) batchQty[r.ticker] = (batchQty[r.ticker] || 0) + (r.side === "compra" ? r.qty : -r.qty); });
+    // preço médio depois das compras da nota: (custo atual + compras) / (quantidade atual + quantidade comprada)
+    const pmNota = {};
+    base.forEach((r) => { if (r.nota && r.action === "importar" && r.side === "compra" && r.qty > 0) { const g = pmNota[r.ticker] = pmNota[r.ticker] || { qty: 0, amount: 0 }; g.qty += r.qty; g.amount += r.amount; } });
     return base.map((r) => {
+      if (r.nota && r.action === "importar" && r.side === "compra" && pmNota[r.ticker]) {
+        const pos = portfolio.positions.find((x) => x.isQty && x.description === r.ticker), g = pmNota[r.ticker];
+        const novo = ((pos ? pos.cost : 0) + g.amount) / ((pos ? pos.qty : 0) + g.qty);
+        return { ...r, pmAntes: pos ? pos.avg : null, pmDepois: novo };
+      }
       if (r.kind !== "pos") return r;
       let row;
       if (r.category === "Renda Fixa") {
@@ -5257,12 +5512,13 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
     });
   }, [b3raw, edits, importedKeys, portfolio, investments]);
   const b3Options = (r) => {
+    if (r.semTicker) return [["ignorar", "Falta o código do ativo"]];
     if (r.kind === "trade") return [["importar", r.side === "compra" ? "Importar compra" : "Importar venda"], ["ignorar", "Ignorar"]];
     if (r.category === "Renda Fixa") return (r.target ? [["valor", "Atualizar valor atual"]] : []).concat([["criar", "Adicionar à carteira"], ["ignorar", "Ignorar"]]);
     return r.hasApp ? [["cotacao", "Só atualizar cotação"]].concat(r.diff ? [["ajustar", "Ajustar quantidade para a da B3"]] : []).concat([["ignorar", "Ignorar"]]) : [["criar", "Adicionar à carteira"], ["ignorar", "Ignorar"]];
   };
   const b3active = b3rows.filter((r) => r.action !== "ignorar");
-  const doImportB3 = () => { const entry = commitB3(b3rows, label || "Planilha B3"); setDone(entry); reset(); };
+  const doImportB3 = () => { const entry = commitB3(b3rows, label || (source === "nota" ? "Nota de corretagem" : "Planilha B3")); setDone(entry); reset(); };
 
   const setEdit = (id, patch) => setEdits((p) => ({ ...p, [id]: { ...(p[id] || {}), ...patch } }));
   const active = rows.filter((r) => r.action !== "ignorar");
@@ -5305,15 +5561,16 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
             <button className={`choice ${source === "extrato" ? "on" : ""}`} onClick={() => setSource("extrato")}><b>Extrato da conta</b><span>Entradas (pagamentos dos hospitais) e saídas (contas, PIX, boletos)</span></button>
             <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><span>Compras do cartão, cada uma vira uma despesa</span></button>
             <button className={`choice ${source === "b3" ? "on" : ""}`} onClick={() => setSource("b3")}><b>Planilha da B3</b><span>Sua carteira da Área do Investidor: ações, FIIs, ETFs e Tesouro</span></button>
+            <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><span>O PDF que a corretora envia: lança as compras e vendas do mês</span></button>
           </div>
 
           <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">2. Anexe o arquivo</h3></div>
           <button className="drop" onClick={() => fileRef.current && fileRef.current.click()}>
             <IconUpload size={26} color={TEAL} />
             <b>Escolher arquivo</b>
-            <span>{source === "b3" ? "Planilhas de Posição, Negociação ou Movimentação (Excel ou CSV). Pode escolher várias." : "OFX, CSV ou PDF baixados do app ou site do banco. Pode escolher vários."}</span>
+            <span>{source === "nota" ? "PDF da nota de corretagem (ou nota de negociação) da sua corretora. Pode escolher várias." : source === "b3" ? "Planilhas de Posição, Negociação ou Movimentação (Excel ou CSV). Pode escolher várias." : "OFX, CSV ou PDF baixados do app ou site do banco. Pode escolher vários."}</span>
           </button>
-          <input ref={fileRef} type="file" multiple accept={source === "b3" ? ".xlsx,.xls,.csv" : ".ofx,.ofc,.qfx,.csv,.txt,.pdf,application/pdf,text/csv"} style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+          <input ref={fileRef} type="file" multiple accept={source === "nota" ? ".pdf,application/pdf" : source === "b3" ? ".xlsx,.xls,.csv" : ".ofx,.ofc,.qfx,.csv,.txt,.pdf,application/pdf,text/csv"} style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
           {busy && <div className="field-hint" style={{ marginTop: 10 }}>{busy}</div>}
           {error && <div className="note-bad">{error}</div>}
           {pwdFile && (
@@ -5322,7 +5579,17 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
               <div className="field" style={{ display: "flex", alignItems: "flex-end" }}><button className="btn btn-primary" onClick={() => handleFiles([pwdFile], password)}>Abrir PDF</button></div>
             </div>
           )}
-          {source === "b3" ? (
+          {source === "nota" ? (
+          <div className="tips" id="nota-tips">
+            <b>Como funciona</b>
+            <span>1. Baixe a nota no app ou site da corretora (em geral em <b>Extratos</b> ou <b>Notas de corretagem</b>), ou use o PDF que chega por e-mail.</span>
+            <span>2. Anexe aqui. O app lê cada compra e venda de ações, FIIs e ETFs, com data, quantidade e preço.</span>
+            <span>O <b>preço médio</b> de cada ativo é recalculado com o preço de compra da nota, somando ao que você já tem na carteira.</span>
+            <span>3. Confira a lista e toque em Importar. Notas já importadas não entram de novo.</span>
+            <span>As taxas da nota (corretagem, emolumentos) não são somadas ao preço. Opções, termo e futuros ficam de fora.</span>
+            <span>O arquivo é lido no seu celular e não é enviado para lugar nenhum.</span>
+          </div>
+          ) : source === "b3" ? (
           <div className="tips">
             <b>Como baixar da B3</b>
             <span>1. Entre em <b>investidor.b3.com.br</b> com seu CPF e senha.</span>
@@ -5347,10 +5614,26 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
         <>
           <div className="kpi-row">
             <Kpi label="Compras e vendas" value={b3rows.filter((r) => r.kind === "trade" && r.action !== "ignorar").length} sub="lançamentos novos" />
-            <Kpi label="Posições" value={b3rows.filter((r) => r.kind === "pos").length} sub="ativos na planilha" />
-            <Kpi label="Cotações" value={b3rows.filter((r) => r.kind === "pos" && r.action !== "ignorar").length} tone="var(--teal)" sub="serão atualizadas" />
+            {b3info && b3info.nota && !b3rows.some((r) => r.kind === "pos") ? (
+              <>
+                <Kpi label="Compras" value={fmtBRL(b3rows.filter((r) => r.action !== "ignorar" && r.side === "compra").reduce((a, r) => a + r.amount, 0))} sub="total a importar" />
+                <Kpi label="Vendas" value={fmtBRL(b3rows.filter((r) => r.action !== "ignorar" && r.side === "venda").reduce((a, r) => a + r.amount, 0))} tone="var(--brick)" sub="total a importar" />
+              </>
+            ) : (
+              <>
+                <Kpi label="Posições" value={b3rows.filter((r) => r.kind === "pos").length} sub="ativos na planilha" />
+                <Kpi label="Cotações" value={b3rows.filter((r) => r.kind === "pos" && r.action !== "ignorar").length} tone="var(--teal)" sub="serão atualizadas" />
+              </>
+            )}
             <Kpi label="Ignorados" value={b3rows.filter((r) => r.action === "ignorar").length} />
           </div>
+          {b3info && b3info.nota && (
+            <div className="note-info" id="nota-aviso">
+              Confira o código de cada ativo antes de importar. As taxas da nota não entram no preço.
+              {b3rows.some((r) => r.semTicker) && <div style={{ marginTop: 4 }}>Em {b3rows.filter((r) => r.semTicker).length} linha(s) a nota traz só o nome da empresa. Digite o código para elas entrarem.</div>}
+              {b3info.notaOutros > 0 && <div style={{ marginTop: 4 }}>{b3info.notaOutros} operação(ões) de opções, termo ou futuros ficaram de fora.</div>}
+            </div>
+          )}
           {b3info && (b3info.proventos > 0 || b3info.eventos.length > 0) && (
             <div className="note-info">
               {b3info.proventos > 0 && <div>{b3info.proventos} provento(s) da planilha foram ignorados.</div>}
@@ -5367,15 +5650,18 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
                 <div key={r.id} className={`imp-row ${r.action === "ignorar" ? "off" : ""}`}>
                   <div className="imp-top">
                     <div className="imp-main">
-                      <div className="imp-desc">{r.kind === "trade" ? `${r.side === "compra" ? "Compra" : "Venda"} · ${r.ticker}` : r.ticker}</div>
+                      <div className="imp-desc">{r.kind === "trade" ? `${r.side === "compra" ? "Compra" : "Venda"} · ${r.ticker || r.spec}` : r.ticker}</div>
                       <div className="line-sub">
                         {r.kind === "trade" ? `${fmtDatePt(r.date)} · ${r.category}${r.qty > 0 ? ` · ${Number(r.qty)} x ${fmtBRL(r.price)}` : ""}` : `${r.category}${r.qty > 0 ? ` · ${Number(r.qty)} un. · fechamento ${fmtBRL(r.price)}` : ""}`}
+                        {r.nota && r.ticker ? " · na nota: " + r.spec : ""}
+                        {r.pmDepois ? <span className="pm-line" data-pm>{r.pmAntes ? <>Preço médio: {fmtBRL(r.pmAntes)} → <b>{fmtBRL(r.pmDepois)}</b></> : <>Preço médio inicial: <b>{fmtBRL(r.pmDepois)}</b></>}</span> : null}
                         {r.reason ? " · " + r.reason : ""}
                       </div>
                     </div>
                     <div className="mono imp-amt" style={{ color: r.kind === "trade" ? (r.side === "compra" ? "var(--text)" : "var(--brick)") : "var(--teal)" }}>{fmtBRL(r.kind === "trade" ? r.amount : r.value)}</div>
                   </div>
                   <div className="imp-ctrl">
+                    {r.nota && <input className={`tk-in ${r.semTicker ? "need" : ""}`} aria-label="Código do ativo" placeholder="Código (PETR4)" maxLength={7} value={(edits[r.id] && edits[r.id].ticker !== undefined) ? edits[r.id].ticker : r.ticker} onChange={(e) => setEdit(r.id, { ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} />}
                     <select value={r.action} onChange={(e) => setEdit(r.id, { action: e.target.value })}>
                       {b3Options(r).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
