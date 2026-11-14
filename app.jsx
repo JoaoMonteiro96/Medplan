@@ -1,6 +1,6 @@
 // Mediplan: código-fonte. O site usa a versão compilada (app.js), gerada por build.py.
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import * as ReactDOM from "react-dom/client";
 
 const STORAGE_KEY = "mediplan-data-v2";
@@ -788,7 +788,7 @@ function PerfBars({ items }) {
           <span className="perf-name">{i.label}</span>
           <div className="perf-track">
             <span className="perf-mid" />
-            <div className="perf-bar" style={{ width: `${(Math.abs(i.pct) / max) * 50}%`, background: i.pct >= 0 ? TEAL : BRICK, [i.pct >= 0 ? "left" : "right"]: "50%" }} />
+            <div className={`perf-bar ${i.pct >= 0 ? "" : "neg"}`} style={{ width: `${(Math.abs(i.pct) / max) * 50}%`, background: i.pct >= 0 ? TEAL : BRICK, [i.pct >= 0 ? "left" : "right"]: "50%" }} />
           </div>
           <span className="perf-val mono" style={{ color: i.pct >= 0 ? "var(--teal)" : "var(--brick)" }}>{i.pct >= 0 ? "+" : "−"}{Math.abs(i.pct).toFixed(1).replace(".", ",")}%</span>
         </div>
@@ -827,14 +827,80 @@ const PAGE_TITLES = {
   investimentos: ["Investimentos", "Carteira, distribuição e rentabilidade"],
   metas: ["Metas", "Acompanhe seus objetivos financeiros"],
   visao: ["Relatórios", "Comparativos e ganho por hora"],
+  contabilidade: ["Contabilidade", "Como a PJ paga os tributos"],
   backup: ["Configurações", "Conta, nuvem, tributação e backup"],
   importar: ["Importar", "Extrato, fatura do cartão e planilhas da B3"],
 };
-function Kpi({ label, value, sub, tone }) {
+const IconRefresh = (p) => <Ico {...p}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></Ico>;
+const prefersReducedMotion = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
+const fmtQty = (q) => Number(q || 0).toLocaleString("pt-BR", { maximumFractionDigits: Math.abs(Number(q)) < 1 ? 8 : 4 });
+// Ativos que a brapi.dev responde sem token (lista da documentação do serviço)
+const BRAPI_FREE = ["PETR4", "MGLU3", "VALE3", "ITUB4", "MXRF11", "HGLG11"];
+
+// Número que conta até o valor final ao aparecer ou mudar
+function CountUp({ value, format = fmtBRL, duration = 650 }) {
+  const target = Number(value) || 0;
+  const [shown, setShown] = useState(() => (prefersReducedMotion() ? target : 0));
+  const cur = useRef(prefersReducedMotion() ? target : 0);
+  useEffect(() => {
+    const from = cur.current, to = target;
+    const finish = () => { cur.current = to; setShown(to); };
+    if (from === to) return;
+    if (prefersReducedMotion() || document.hidden || typeof requestAnimationFrame !== "function") { finish(); return; }
+    let raf = 0, start = null;
+    const step = (ts) => {
+      if (start === null) start = ts;
+      const k = Math.min(1, (ts - start) / duration), e = 1 - Math.pow(1 - k, 3);
+      if (k >= 1) { finish(); return; }
+      cur.current = from + (to - from) * e; setShown(cur.current);
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    const guard = setTimeout(finish, duration + 500); // garante o valor final se a animação for pausada
+    return () => { cancelAnimationFrame(raf); clearTimeout(guard); };
+  }, [target]);
+  return format(shown);
+}
+
+// Barra de páginas no topo, com rolagem lateral e indicador que desliza até a página ativa
+const NAV_LABELS = { inicio: "Início", faturamento: "Faturamento", calendario: "Calendário", despesas: "Despesas", investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Configurações" };
+function NavStrip({ items, active, onPick }) {
+  const wrap = useRef(null);
+  const [ind, setInd] = useState(null);
+  const place = useCallback((smooth) => {
+    const w = wrap.current, el = w && w.querySelector('[data-tab="' + active + '"]');
+    if (!el) return;
+    setInd((p) => (p && p.left === el.offsetLeft && p.width === el.offsetWidth ? p : { left: el.offsetLeft, width: el.offsetWidth }));
+    const left = Math.max(0, el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2);
+    try { w.scrollTo({ left, behavior: smooth && !prefersReducedMotion() ? "smooth" : "auto" }); } catch (e) { w.scrollLeft = left; }
+  }, [active]);
+  const mounted = useRef(false);
+  useLayoutEffect(() => { place(mounted.current); mounted.current = true; }, [place]);
+  useEffect(() => {
+    const again = () => place(false);
+    window.addEventListener("resize", again);
+    const t = setTimeout(again, 400); // refaz a medida depois que a fonte carrega
+    return () => { window.removeEventListener("resize", again); clearTimeout(t); };
+  }, [place]);
+  return (
+    <nav className="navstrip" aria-label="Páginas">
+      <div className="ns-scroll" ref={wrap}>
+        {ind && <span className="ns-ind" style={{ transform: `translateX(${ind.left}px)`, width: ind.width }} />}
+        {items.map((t) => { const Ic = t.icon; return (
+          <button key={t.id} data-tab={t.id} className={`ns-tab ${active === t.id ? "active" : ""}`} aria-current={active === t.id ? "page" : undefined} onClick={() => onPick(t.id)}>
+            <Ic size={17} /><span>{NAV_LABELS[t.id] || t.long}</span>
+          </button>
+        ); })}
+      </div>
+    </nav>
+  );
+}
+
+function Kpi({ label, value, sub, tone, num, fmt }) {
   return (
     <div className="kpi-box">
       <div className="kpi-label">{label}</div>
-      <div className="kpi-value mono" style={tone ? { color: tone } : null}>{value}</div>
+      <div className="kpi-value mono" style={tone ? { color: tone } : null}>{num !== undefined ? <CountUp value={num} format={fmt} /> : value}</div>
       {sub ? <div className="kpi-sub">{sub}</div> : null}
     </div>
   );
@@ -957,17 +1023,19 @@ function MonthPicker({ year, setYear, viewYear, viewMonth, statsOf, onPick, onCl
                 </div>
                 <div className="mp-row"><span>Receitas</span><b className="mono" style={{ color: "var(--teal)" }}>{short(x.net)}</b></div>
                 <div className="mp-row"><span>Gastos</span><b className="mono" style={{ color: "var(--brick)" }}>{short(x.expTotal)}</b></div>
+                <div className="mp-row hr"><span>{x.workHours > 0 ? fmtHoras(x.workHours) : "Horas"}</span><b className="mono">{x.workHours > 0 ? "R$ " + Math.round(x.workHourly).toLocaleString("pt-BR") + "/h" : "—"}</b></div>
                 <div className="mp-row bal"><span>Saldo</span><b className="mono" style={{ color: bal >= 0 ? "var(--text)" : "var(--brick)" }}>{empty ? "—" : (bal >= 0 ? "+" : "−") + short(Math.abs(bal))}</b></div>
               </button>
             );
           })}
         </div>
-        <div className="mp-foot">Valores líquidos, no mês em que entram e saem do caixa. Toque num mês para abrir.</div>
+        <div className="mp-foot">Valores líquidos, no mês em que entram e saem do caixa. A linha de horas mostra o ganho líquido por hora trabalhada. Toque num mês para abrir.</div>
       </div>
     </div>
   );
 }
 
+const IconCalc = (p) => <Ico {...p}><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="12" x2="8.6" y2="12"/><line x1="12" y1="12" x2="12.1" y2="12"/><line x1="15.4" y1="12" x2="15.5" y2="12"/><line x1="8.5" y1="16" x2="8.6" y2="16"/><line x1="12" y1="16" x2="12.1" y2="16"/><line x1="15.4" y1="16" x2="15.5" y2="16"/></Ico>;
 const IconMore = (p) => <Ico {...p}><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></Ico>;
 const NAV_MAIN = [
   { id: "inicio", short: "Início", long: "Início", icon: IconHome },
@@ -979,6 +1047,7 @@ const NAV_MAIN = [
 const NAV_MORE = [
   { id: "metas", short: "Metas", long: "Metas", icon: IconTarget },
   { id: "visao", short: "Relatórios", long: "Relatórios", icon: IconPie },
+  { id: "contabilidade", short: "Contábil", long: "Contabilidade", icon: IconCalc },
   { id: "importar", short: "Importar", long: "Importar extrato", icon: IconUpload },
   { id: "backup", short: "Ajustes", long: "Configurações", icon: IconDownload },
 ];
@@ -1164,11 +1233,13 @@ function App() {
   const [cotacoes, setCotacoes] = useState({});
   const [brapiToken, setBrapiToken] = useState("");
   const [quoteStatus, setQuoteStatus] = useState("");
+  const [quoteRun, setQuoteRun] = useState({ busy: false, done: 0, total: 0, marks: {}, kind: "" });
   const [goals, setGoals] = useState([]);
   const [oneOffIncomes, setOneOffIncomes] = useState([]);
   const [importedKeys, setImportedKeys] = useState({});
   const [importLog, setImportLog] = useState([]);
   const [limits, setLimits] = useState({});
+  const [contab, setContab] = useState(CONTAB_DEFAULT);
   const [taxRateGeral, setTaxRateGeral] = useState(27.5);
   const [loaded, setLoaded] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -1179,8 +1250,13 @@ function App() {
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [activeTab, setActiveTab] = useState("inicio");
   const [selectedDay, setSelectedDay] = useState(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const goTab = (id) => { setActiveTab(id); setMoreOpen(false); try { window.scrollTo({ top: 0 }); } catch (e) {} };
+  const [navDir, setNavDir] = useState("fwd");
+  const goTab = (id) => {
+    const from = NAV_ALL.findIndex((x) => x.id === activeTab), to = NAV_ALL.findIndex((x) => x.id === id);
+    setNavDir(to >= from ? "fwd" : "back");
+    setActiveTab(id);
+    try { window.scrollTo({ top: 0 }); } catch (e) {}
+  };
   const [chartMonths, setChartMonths] = useState(12);
   const [quickOpen, setQuickOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(null);
@@ -1206,7 +1282,7 @@ function App() {
         setCotacoes(d.cotacoes || {});
         setBrapiToken(d.brapiToken || "");
         setGoals(d.goals || []);
-        setOneOffIncomes(d.oneOffIncomes || []); setImportedKeys(d.importedKeys || {}); setImportLog(d.importLog || []); setLimits(d.limits || {});
+        setOneOffIncomes(d.oneOffIncomes || []); setImportedKeys(d.importedKeys || {}); setImportLog(d.importLog || []); setLimits(d.limits || {}); setContab({ ...CONTAB_DEFAULT, ...(d.contab || {}) });
         setTaxRateGeral(d.taxRateGeral ?? 27.5);
       }
     } catch (e) { /* sem dados salvos ainda */ }
@@ -1218,13 +1294,13 @@ function App() {
     const t = setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, taxRateGeral, cotacoes, brapiToken, oneOffIncomes, importedKeys, importLog, limits
+          vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, taxRateGeral, cotacoes, brapiToken, oneOffIncomes, importedKeys, importLog, limits, contab
         }));
         setSaveError(false);
       } catch (e) { setSaveError(true); }
     }, 400);
     return () => clearTimeout(t);
-  }, [vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, taxRateGeral, cotacoes, brapiToken, oneOffIncomes, importedKeys, importLog, limits, loaded]);
+  }, [vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, taxRateGeral, cotacoes, brapiToken, oneOffIncomes, importedKeys, importLog, limits, contab, loaded]);
 
 
   // ================= sincronização com a nuvem =================
@@ -1243,12 +1319,12 @@ function App() {
   const settersRef = useRef(null);
   latestRef.current = {
     vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, oneOffIncomes,
-    settings: { taxRateGeral, cotacoes, brapiToken, importedKeys, importLog, limits },
+    settings: { taxRateGeral, cotacoes, brapiToken, importedKeys, importLog, limits, contab },
   };
   settersRef.current = {
     vinculos: setVinculos, shifts: setShifts, presencas: setPresencas, extraRecurringIncomes: setExtraRecurringIncomes, expenses: setExpenses,
     recurringExpenses: setRecurringExpenses, investments: setInvestments, goals: setGoals, oneOffIncomes: setOneOffIncomes,
-    settings: (st) => { setTaxRateGeral(st.taxRateGeral ?? 27.5); setCotacoes(st.cotacoes || {}); setBrapiToken(st.brapiToken || ""); setImportedKeys(st.importedKeys || {}); setImportLog(st.importLog || []); setLimits(st.limits || {}); },
+    settings: (st) => { setTaxRateGeral(st.taxRateGeral ?? 27.5); setCotacoes(st.cotacoes || {}); setBrapiToken(st.brapiToken || ""); setImportedKeys(st.importedKeys || {}); setImportLog(st.importLog || []); setLimits(st.limits || {}); setContab({ ...CONTAB_DEFAULT, ...(st.contab || {}) }); },
   };
   sessionRef.current = session;
 
@@ -1374,7 +1450,7 @@ function App() {
     if (!session || !pulledRef.current) return;
     const t = setTimeout(() => pushToCloud(), 1200);
     return () => clearTimeout(t);
-  }, [vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, oneOffIncomes, taxRateGeral, cotacoes, brapiToken, importedKeys, importLog, limits, session]);
+  }, [vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, oneOffIncomes, taxRateGeral, cotacoes, brapiToken, importedKeys, importLog, limits, contab, session]);
 
   // tenta de novo quando a internet volta e atualiza ao reabrir o app
   useEffect(() => {
@@ -1473,6 +1549,14 @@ function App() {
   };
 
   const monthKey = monthKeyOf(viewYear, viewMonth);
+  // Tributação pela contabilidade: a alíquota geral do app passa a ser a carga calculada na simulação
+  const contabCarga = useMemo(() => {
+    if (contab.modo !== "contab") return null;
+    const p = { receitaMes: numOf(contab.receitaMes), rbt12: numOf(contab.rbt12), proLabore: numOf(contab.proLabore), folha: numOf(contab.folha), issPct: numOf(contab.issPct), hospitalar: !!contab.hospitalar, contador: numOf(contab.contador) };
+    if (!(p.receitaMes > 0)) return null;
+    return Math.round((contab.regime === "presumido" ? calcPresumido(p) : calcSimples(p)).carga * 100) / 100;
+  }, [contab]);
+  useEffect(() => { if (loaded && contabCarga !== null && Number(taxRateGeral) !== contabCarga) setTaxRateGeral(contabCarga); }, [contabCarga, taxRateGeral, loaded]);
   const monthShifts = shifts.filter((s) => inMonth(s.date, viewYear, viewMonth));
   const monthPresencas = presencas.filter((p) => inMonth(p.date, viewYear, viewMonth));
   const monthIncomeItems = buildIncomeItems(viewYear, viewMonth);
@@ -1577,22 +1661,57 @@ function App() {
     tipo: d.tipo || "compra", qty: d.qty || 0, price: d.price || 0, amount: Number(d.amount) || 0 }]);
   const setCotacao = (key, val) => setCotacoes((prev) => ({ ...prev, [key]: val }));
   const refreshQuotes = async () => {
+    if (quoteRun.busy) return;
     const tickers = [...new Set(portfolio.positions.filter((p) => p.isQty && invCatMeta(p.category).kind === "ticker").map((p) => p.description))];
-    if (tickers.length === 0) { setQuoteStatus("Cadastre compras de ações, FIIs ou ETFs com quantidade para buscar cotações."); return; }
-    setQuoteStatus("Buscando cotações…");
-    let ok = 0, fail = [];
-    const next = {};
-    for (const t of tickers) {
-      try {
-        const url = "https://brapi.dev/api/quote/" + encodeURIComponent(t) + (brapiToken ? "?token=" + encodeURIComponent(brapiToken) : "");
-        const r = await fetch(url);
-        const j = await r.json();
-        const price = j && j.results && j.results[0] && j.results[0].regularMarketPrice;
-        if (price > 0) { next[t] = price; ok += 1; } else fail.push(t);
-      } catch (e) { fail.push(t); }
+    if (tickers.length === 0) {
+      setQuoteRun((r) => ({ ...r, marks: {}, kind: "warn" }));
+      setQuoteStatus("Não há ações, FIIs ou ETFs com quantidade para buscar. Lance a compra com quantidade e preço.");
+      return;
     }
-    setCotacoes((prev) => ({ ...prev, ...next }));
-    setQuoteStatus(`${ok} de ${tickers.length} cotações atualizadas` + (fail.length ? ` (sem retorno: ${fail.join(", ")}; digite manualmente ou use um token da brapi.dev)` : "") + ` às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`);
+    const token = (brapiToken || "").trim();
+    const next = {}, marks = {};
+    const okList = [], needToken = [], notFound = [], other = [];
+    let stop = "", netFails = 0; // stop: "notoken" | "token" | "limit" | "net"
+    setQuoteStatus("");
+    setQuoteRun({ busy: true, done: 0, total: tickers.length, marks: {}, kind: "" });
+    for (let k = 0; k < tickers.length; k++) {
+      const t = tickers[k];
+      if (stop === "notoken" && !BRAPI_FREE.includes(t)) { needToken.push(t); marks[t] = "token"; }
+      else if (stop && stop !== "notoken") { other.push(t); marks[t] = "fail"; }
+      else {
+        try {
+          const url = "https://brapi.dev/api/quote/" + encodeURIComponent(t) + (token ? "?token=" + encodeURIComponent(token) : "");
+          const r = await fetch(url, { cache: "no-store" });
+          let j = null;
+          try { j = await r.json(); } catch (e) { j = null; }
+          const price = Number(j && j.results && j.results[0] && j.results[0].regularMarketPrice);
+          if (r.ok && price > 0) { next[t] = Math.round(price * 100) / 100; marks[t] = "ok"; okList.push(t); netFails = 0; }
+          else if (r.status === 401 || (r.status === 403 && !token)) {
+            if (token) { stop = "token"; other.push(t); marks[t] = "fail"; }
+            else { stop = "notoken"; needToken.push(t); marks[t] = "token"; }
+          }
+          else if (r.status === 429) { stop = "limit"; other.push(t); marks[t] = "fail"; }
+          else if (r.status === 404 || r.ok) { notFound.push(t); marks[t] = "fail"; }
+          else { other.push(t); marks[t] = "fail"; }
+        } catch (e) {
+          other.push(t); marks[t] = "fail"; netFails += 1;
+          if (netFails >= 3 && okList.length === 0) stop = "net";
+        }
+      }
+      setQuoteRun((r) => ({ ...r, done: k + 1, marks: { ...marks } }));
+    }
+    if (okList.length) setCotacoes((prev) => ({ ...prev, ...next }));
+    const n = tickers.length;
+    const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const parts = [`${okList.length} de ${n} ${n === 1 ? "cotação atualizada" : "cotações atualizadas"} às ${hora}.`];
+    if (stop === "notoken") parts.push(`${needToken.length === 1 ? "1 ativo precisa" : needToken.length + " ativos precisam"} de um token gratuito da brapi.dev: sem token, o serviço só responde alguns ativos de teste. Cole o token abaixo e toque em Atualizar cotações de novo.`);
+    if (stop === "token") parts.push("A brapi recusou o token. Confira se ele foi colado inteiro e tente de novo.");
+    if (stop === "limit") parts.push("A brapi atingiu o limite de consultas. Espere alguns minutos e tente de novo.");
+    if (stop === "net") parts.push("Não consegui falar com a brapi. Confira a internet e tente de novo.");
+    if (notFound.length) parts.push(`Não encontrados: ${notFound.join(", ")}.`);
+    if ((!stop || stop === "notoken") && other.length) parts.push(`Sem resposta: ${other.join(", ")}.`);
+    setQuoteStatus(parts.join(" "));
+    setQuoteRun({ busy: false, done: n, total: n, marks, kind: okList.length === n ? "ok" : okList.length ? "warn" : "bad" });
   };
 
   const removeInvestment = (id) => setInvestments((prev) => prev.filter((i) => i.id !== id));
@@ -1638,6 +1757,40 @@ function App() {
     return Object.values(map).map((x) => ({ ...x, dias: x.dates.size })).sort((a, b) => b.hours - a.hours);
   }, [monthShifts, monthPresencas, vinculoMap]);
 
+  // Rentabilidade do trabalho pelo mês trabalhado: só entra na conta por hora a receita que tem horas lançadas
+  const workStats = (y, m) => {
+    const mk = monthKeyOf(y, m), by = {}, dias = new Set();
+    const slot = (id, v) => (by[id] = by[id] || { id, nome: v ? v.nome : "(vínculo removido)", cor: v ? v.cor : SLATE, net: 0, hours: 0, turnos: 0 });
+    let semHoras = 0, semHorasNet = 0;
+    shifts.forEach((s) => {
+      if (!inMonth(s.date, y, m)) return;
+      const v = vinculoMap[s.vinculoId], h = Number(s.hours || 0), net = netOf(s.gross, v ? v.taxOverride : null);
+      if (h <= 0) { semHoras += 1; semHorasNet += net; return; }
+      const o = slot(s.vinculoId || "?", v); o.net += net; o.hours += h; o.turnos += 1; dias.add(s.date);
+    });
+    presencas.forEach((p) => {
+      if (!inMonth(p.date, y, m)) return;
+      const h = Number(p.hours || 0); if (h <= 0) return;
+      const o = slot(p.vinculoId || "?", vinculoMap[p.vinculoId]); o.hours += h; o.turnos += 1; dias.add(p.date);
+    });
+    const mensalSemHoras = [];
+    vinculos.forEach((v) => {
+      if (v.tipo !== "mensal") return;
+      const o = by[v.id];
+      if (o && o.hours > 0) o.net += netOf(v.valorMensal, v.taxOverride);
+      else if (v.startMonth <= mk) mensalSemHoras.push(v.nome);
+    });
+    const byVinculo = Object.values(by).filter((o) => o.hours > 0).map((o) => ({ ...o, hourly: o.net / o.hours })).sort((a, b) => b.hourly - a.hourly);
+    const hours = byVinculo.reduce((a, o) => a + o.hours, 0), net = byVinculo.reduce((a, o) => a + o.net, 0);
+    return { hours, net, hourly: hours > 0 ? net / hours : 0, dias: dias.size, turnos: byVinculo.reduce((a, o) => a + o.turnos, 0), byVinculo, semHoras, semHorasNet, mensalSemHoras };
+  };
+  // Faturamento bruto pelo mês trabalhado (plantões e vínculos mensais), usado como sugestão na Contabilidade
+  const grossWorked = (y, m) => {
+    const mk = monthKeyOf(y, m);
+    return shifts.reduce((a, s) => a + (inMonth(s.date, y, m) ? Number(s.gross || 0) : 0), 0) +
+      vinculos.reduce((a, v) => a + (v.tipo === "mensal" && v.startMonth <= mk ? Number(v.valorMensal || 0) : 0), 0);
+  };
+
   const monthStats = (y, m) => {
     const inc = buildIncomeItems(y, m);
     const exp = buildExpenseItems(y, m);
@@ -1646,7 +1799,8 @@ function App() {
                 presencas.filter((p) => inMonth(p.date, y, m)).reduce((a, p) => a + Number(p.hours || 0), 0);
     const net = inc.reduce((a, i) => a + i.net, 0);
     const expTotal = exp.reduce((a, i) => a + i.amount, 0);
-    return { net, expTotal, invested: inv, hours: hrs, leftover: net - expTotal - inv, hourly: hrs > 0 ? net / hrs : 0 };
+    const w = workStats(y, m);
+    return { net, expTotal, invested: inv, hours: hrs, leftover: net - expTotal - inv, hourly: w.hourly, workHours: w.hours, workHourly: w.hourly };
   };
   const history12 = (() => {
     const arr = [];
@@ -1661,6 +1815,15 @@ function App() {
 
   const curStats = monthStats(viewYear, viewMonth);
   const prevStats = (() => { let m = viewMonth - 1, y = viewYear; if (m < 0) { m = 11; y -= 1; } return monthStats(y, m); })();
+  const monthBack = (k) => { let m = viewMonth - k, y = viewYear; while (m < 0) { m += 12; y -= 1; } return [y, m]; };
+  const workCur = workStats(viewYear, viewMonth);
+  const workPrev = workStats(...monthBack(1));
+  const workHistory = [5, 4, 3, 2, 1, 0].map((k) => { const [y, m] = monthBack(k); return { y, m, cur: k === 0, label: MONTHS_ABBR_PT[m], full: MONTHS_PT[m] + " " + y, ...workStats(y, m) }; });
+  const prevMonthName = MONTHS_PT[monthBack(1)[1]];
+  const contabApp = (() => {
+    const past = Array.from({ length: 12 }, (_, i) => grossWorked(...monthBack(i + 1)));
+    return { mesBruto: grossWorked(viewYear, viewMonth), mesLabel: MONTHS_PT[viewMonth].toLowerCase(), rbt12: past.reduce((a, v) => a + v, 0), meses: past.filter((v) => v > 0).length };
+  })();
 
   const investmentsHistory12 = (() => {
     const arr = [];
@@ -1727,15 +1890,22 @@ function App() {
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [scopedInvestments]);
 
-  const scopedHours = chartScope === "all" ? (shifts.reduce((a, s) => a + Number(s.hours || 0), 0) + presencas.reduce((a, p) => a + Number(p.hours || 0), 0)) : totalHoursMonth;
+  const workAll = (() => {
+    if (chartScope !== "all") return workCur;
+    const keys = new Set(); shifts.concat(presencas).forEach((x) => { if (x.date) keys.add(x.date.slice(0, 7)); });
+    let hours = 0, net = 0;
+    keys.forEach((k) => { const [yy, mm] = k.split("-").map(Number); const w = workStats(yy, mm - 1); hours += w.hours; net += w.net; });
+    return { hours, net, hourly: hours > 0 ? net / hours : 0 };
+  })();
+  const scopedHours = workAll.hours;
   const scopedNet = chartScope === "all" ? totalRecebidoAllTime : totalNet;
   const scopedExpensesTotal = chartScope === "all" ? totalPagoAllTime : totalExpensesMonth;
   const scopedInvested = chartScope === "all" ? totalInvestedAllTime : totalInvestedMonth;
-  const hourlyRate = scopedHours > 0 ? scopedNet / scopedHours : 0;
+  const hourlyRate = workAll.hourly;
   const leftover = scopedNet - scopedExpensesTotal - scopedInvested;
 
   const downloadBackup = () => {
-    const data = JSON.stringify({ vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, taxRateGeral, cotacoes, brapiToken, oneOffIncomes, importedKeys, importLog, limits }, null, 2);
+    const data = JSON.stringify({ vinculos, shifts, presencas, extraRecurringIncomes, expenses, recurringExpenses, investments, goals, taxRateGeral, cotacoes, brapiToken, oneOffIncomes, importedKeys, importLog, limits, contab }, null, 2);
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `mediplan-backup-${todayStr()}.json`;
@@ -1752,7 +1922,7 @@ function App() {
         setRecurringExpenses(d.recurringExpenses || []); setInvestments(d.investments || []);
         setCotacoes(d.cotacoes || {}); setBrapiToken(d.brapiToken || "");
         setGoals(d.goals || []);
-        setOneOffIncomes(d.oneOffIncomes || []); setImportedKeys(d.importedKeys || {}); setImportLog(d.importLog || []); setLimits(d.limits || {});
+        setOneOffIncomes(d.oneOffIncomes || []); setImportedKeys(d.importedKeys || {}); setImportLog(d.importLog || []); setLimits(d.limits || {}); setContab({ ...CONTAB_DEFAULT, ...(d.contab || {}) });
         setTaxRateGeral(d.taxRateGeral ?? 27.5);
       } catch (e) { alert("Não foi possível ler esse arquivo de backup."); }
     };
@@ -2824,55 +2994,195 @@ function App() {
         .mp-row.bal { border-top: 1px dashed var(--border); margin-top: 3px; padding-top: 3px; } .mp-row.bal span { color: var(--text); font-weight: 600; }
         .mp-foot { font-size: 12px; color: var(--text-dim); margin-top: 12px; text-align: center; }
         @media (max-width: 720px) { .mp-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; } .mp-cell { padding: 8px; } .mp-cell.sel { padding: 7px; } .mp-top b { font-size: 12.5px; } .mp-row { font-size: 10.5px; } .mp-row b { font-size: 11px; } .mp-totals b { font-size: 12.5px; } .month-pill .mp-open { min-width: 92px; font-size: 12.5px; padding: 0 6px; } }
+
+        /* ================= v11: barra de páginas no topo, transições e animações ================= */
+        .sidebar, .bottom-nav { display: none !important; }
+        .main { margin-left: 0 !important; min-height: 100vh; overflow-x: clip; }
+        .topwrap { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,0.94); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding-top: env(safe-area-inset-top); }
+        .topbar2 { position: static; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: none; max-width: 1180px; margin: 0 auto; padding: 14px 32px 6px; }
+        .tb-logo { display: flex; }
+        .navstrip { max-width: 1180px; margin: 0 auto; padding: 0 22px; }
+        .ns-scroll { position: relative; display: flex; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 4px 10px 10px;
+          -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+        .ns-scroll::-webkit-scrollbar { display: none; }
+        .ns-tab { position: relative; z-index: 1; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border: none; background: none; border-radius: 999px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-dim); cursor: pointer; white-space: nowrap; transition: color .22s ease, transform .15s ease; }
+        .ns-tab:hover { color: var(--text); } .ns-tab:active { transform: scale(.95); } .ns-tab.active { color: #fff; }
+        .ns-tab:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        .ns-ind { position: absolute; left: 0; top: 4px; height: 38px; border-radius: 999px; background: #0F172A; box-shadow: 0 4px 12px rgba(15,23,42,0.22); pointer-events: none; transition: transform .34s cubic-bezier(.3,.9,.3,1), width .34s cubic-bezier(.3,.9,.3,1); }
+        .page { margin: 0 auto; padding-top: 20px; }
+        .footnote { margin: 28px auto 0; text-align: center; }
+        .fab2 { display: none; }
+
+        @keyframes pgFwd { from { opacity: 0; transform: translateX(26px); } }
+        @keyframes pgBack { from { opacity: 0; transform: translateX(-26px); } }
+        @keyframes riseIn { from { opacity: 0; transform: translateY(14px); } }
+        @keyframes growX { from { transform: scaleX(0); } }
+        @keyframes sheetUp { from { opacity: 0; transform: translateY(48px); } }
+        @keyframes popIn { from { opacity: 0; transform: scale(.5); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .pg-fwd { animation: pgFwd .34s cubic-bezier(.2,.8,.2,1) backwards; }
+        .pg-back { animation: pgBack .34s cubic-bezier(.2,.8,.2,1) backwards; }
+        .pg .card, .pg .kpi-box, .pg .day-panel, .pg .asset-card, .pg .ag-head, .pg .quick-row > button { animation: riseIn .46s cubic-bezier(.2,.8,.2,1) backwards; }
+        .pg > div > :nth-child(2), .kpi-row > :nth-child(2), .grid-2 > :nth-child(2), .dash-grid > :nth-child(2), .asset-grid > :nth-child(2), .quick-row > :nth-child(2) { animation-delay: .05s; }
+        .pg > div > :nth-child(3), .kpi-row > :nth-child(3), .dash-grid > :nth-child(3), .asset-grid > :nth-child(3), .quick-row > :nth-child(3) { animation-delay: .10s; }
+        .pg > div > :nth-child(4), .kpi-row > :nth-child(4), .dash-grid > :nth-child(4), .asset-grid > :nth-child(4), .quick-row > :nth-child(4) { animation-delay: .15s; }
+        .pg > div > :nth-child(5), .dash-grid > :nth-child(5), .asset-grid > :nth-child(5) { animation-delay: .20s; }
+        .pg > div > :nth-child(n+6), .dash-grid > :nth-child(n+6), .asset-grid > :nth-child(n+6) { animation-delay: .24s; }
+        .tbl tbody tr { animation: fadeIn .4s ease backwards; }
+        .tbl tbody tr:nth-child(2) { animation-delay: .03s; } .tbl tbody tr:nth-child(3) { animation-delay: .06s; } .tbl tbody tr:nth-child(4) { animation-delay: .09s; } .tbl tbody tr:nth-child(5) { animation-delay: .12s; } .tbl tbody tr:nth-child(n+6) { animation-delay: .15s; }
+        .progress-fill, .perf-bar, .ac-weight i { transform-origin: left center; animation: growX .7s cubic-bezier(.2,.8,.2,1) .12s backwards; }
+        .perf-bar.neg { transform-origin: right center; }
+        .sheet-backdrop { animation: fadeIn .2s ease both; } .sheet { animation: sheetUp .32s cubic-bezier(.2,.9,.3,1) backwards; }
+        .btn, .chip, .subtab, .seg-btn, .tipo-btn, .sheet-item, .mp-cell, .btn-icon, .month-pill button, .badge { transition: transform .12s ease, background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease; }
+        .btn:active, .chip:active, .seg-btn:active, .tipo-btn:active, .sheet-item:active, .mp-cell:active { transform: scale(.97); }
+        .btn:disabled { opacity: .6; cursor: default; }
+        .kpi-box, .asset-card { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+        @media (hover: hover) { .kpi-box:hover, .asset-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,0.07); } }
+        .spin { animation: spin .8s linear infinite; }
+
+        /* ---- investimentos: cotações e cartões de ativos ---- */
+        .quote-btn { min-height: 36px; padding: 6px 12px; font-size: 12.5px; }
+        .quote-track { height: 5px; margin: 2px 0 10px; } .quote-fill { height: 100%; border-radius: 999px; background: var(--teal); transition: width .25s ease; }
+        .quote-msg { font-size: 13px; line-height: 1.5; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface-3); color: #334155; animation: riseIn .3s ease backwards; }
+        .quote-msg.ok { background: #F0FDF4; color: #166534; } .quote-msg.warn { background: #FFFBEB; color: #92400E; } .quote-msg.bad { background: #FEF2F2; color: #991B1B; }
+        .token-box { border: 1px solid #FDE68A; background: #FFFBEB; border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #78350F; line-height: 1.5; }
+        .token-box b { display: block; font-size: 13.5px; } .token-box p { margin: 4px 0 6px; } .token-box ol { margin: 0; padding-left: 18px; } .token-box a { color: #92400E; font-weight: 700; }
+        .token-box label { color: #78350F; } .token-box input { background: #fff; }
+        .asset-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+        .sort-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--text-dim); margin-left: auto; }
+        .sort-pick select { font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; min-height: 36px; }
+        .asset-group { margin-bottom: 8px; }
+        .ag-head { display: flex; align-items: center; gap: 10px; padding: 10px 4px 10px; }
+        .ag-name { min-width: 0; } .ag-head b { display: block; font-size: 14.5px; } .ag-head small { display: block; font-size: 12px; color: var(--text-dim); margin-top: 1px; }
+        .ag-right { margin-left: auto; text-align: right; flex-shrink: 0; } .ag-right small { font-weight: 600; }
+        .asset-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 10px; }
+        @media (min-width: 900px) { .asset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+        .asset-card { background: #fff; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,0.03); }
+        .asset-card.open { border-color: #CBD5E1; }
+        .ac-top { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 12px 10px 14px; background: none; border: none; text-align: left; cursor: pointer; font-family: inherit; color: inherit; }
+        .ac-top:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; border-radius: 16px; }
+        .ac-id { flex: 1; min-width: 0; } .ac-id b { display: block; font-size: 15px; } .ac-id > span { display: block; font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ac-val { text-align: right; flex-shrink: 0; } .ac-val b { display: block; font-size: 15px; margin-bottom: 3px; }
+        .pill.flat { background: var(--surface-3); color: var(--text-dim); }
+        .ac-chev { color: #94A3B8; display: inline-flex; transition: transform .25s ease; } .asset-card.open .ac-chev { transform: rotate(180deg); }
+        .ac-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 14px 12px; align-items: end; }
+        .ac-stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .ac-stat > span { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 3px; white-space: nowrap; }
+        .ac-stat b { display: block; font-size: 13px; font-weight: 600; line-height: 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ac-input { width: 100%; min-width: 0; text-align: left; height: 30px; padding: 4px 8px; border-radius: 8px; font-size: 13px; }
+        .ac-weight { height: 4px; background: var(--surface-3); margin: 0 14px; border-radius: 999px; overflow: hidden; } .ac-weight i { display: block; height: 100%; border-radius: 999px; }
+        .ac-foot { display: flex; justify-content: space-between; gap: 8px; padding: 6px 14px 12px; font-size: 11.5px; color: var(--text-dim); }
+        .qmark { font-weight: 700; } .qmark.ok { color: #15803D; } .qmark.token { color: #B45309; } .qmark.fail { color: #B91C1C; }
+        .ac-more { border-top: 1px solid var(--border); background: var(--surface-2); padding: 6px 14px 14px; animation: riseIn .3s ease backwards; }
+        .ac-hist-title { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 4px; }
+        .ac-hist { display: grid; grid-template-columns: 78px 1fr auto; column-gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .ac-hist .ah-kind { font-weight: 700; font-size: 12px; } .ac-hist .ah-qty { grid-column: 1 / 3; font-size: 12px; color: var(--text-dim); } .ac-hist b { grid-row: 1; grid-column: 3; }
+        .ac-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+        .pos-preview { border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; animation: riseIn .3s ease backwards; }
+        .pp-title { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+        .pp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .pp-grid span { display: block; font-size: 11.5px; color: var(--text-dim); } .pp-grid b { font-size: 14px; }
+        .pp-after { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 13px; line-height: 1.5; }
+
+        @media (max-width: 720px) {
+          .topbar2 { padding: 10px 14px 4px; background: none; border-bottom: none; }
+          .navstrip { padding: 0 4px; } .ns-scroll { padding: 4px 10px 8px; } .ns-tab { height: 36px; padding: 0 12px; font-size: 13px; } .ns-ind { height: 36px; }
+          .page { padding-top: 14px; } .main { padding-bottom: 96px; }
+          .fab2 { display: flex; position: fixed; right: 16px; bottom: calc(18px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 50%; border: none; background: var(--teal); box-shadow: 0 8px 20px rgba(22,163,74,0.4); align-items: center; justify-content: center; cursor: pointer; z-index: 45; animation: popIn .4s cubic-bezier(.3,1.4,.5,1) .25s backwards; transition: transform .15s ease; }
+          .fab2:active { transform: scale(.92); }
+          .ac-top { gap: 10px; } .asset-tools .sort-pick { margin-left: 0; }
+          .ac-stats { grid-template-columns: minmax(0, .8fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px; } .ac-stats.three { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.2fr); }
+          .ac-stat b { font-size: 12.5px; letter-spacing: -0.01em; } .ac-input { padding: 4px 6px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+        }
+
+        /* ================= v12: rentabilidade por hora e contabilidade ================= */
+        .wr-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 14px; align-items: stretch; }
+        .wr-main { background: #F0FDF4; border-radius: 14px; padding: 14px 16px; } .wr-main > span { display: block; font-size: 12.5px; color: #166534; font-weight: 600; }
+        .wr-main > b { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 2px 0 6px; color: #14532D; }
+        .wr-cmp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .wr-cmp small, .wr-none { font-size: 12px; color: #3F6B50; }
+        .wr-side { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+        .wr-side > div { background: var(--surface-2); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+        .wr-side span { display: block; font-size: 12px; color: var(--text-dim); } .wr-side b { display: block; font-size: 17px; font-weight: 700; margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .wr-side small { display: block; font-size: 11.5px; color: var(--text-dim); }
+        .wr-sub { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; margin: 18px 0 8px; }
+        .wr-vin { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 10px; row-gap: 6px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .wr-vn b { display: block; font-size: 14px; } .wr-vn small, .wr-vr small { display: block; font-size: 12px; color: var(--text-dim); } .wr-vr { text-align: right; } .wr-vr b { font-size: 15px; }
+        .wr-vbar { grid-column: 1 / -1; height: 6px; }
+        .wr-hist { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: end; }
+        .wr-col { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; padding: 4px 0; cursor: pointer; font-family: inherit; color: var(--text-dim); min-width: 0; border-radius: 10px; }
+        .wr-col:hover { background: var(--surface-2); } .wr-colv { font-size: 12px; font-weight: 700; color: var(--text); }
+        .wr-bar { width: 100%; max-width: 44px; height: 84px; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 8px; overflow: hidden; }
+        .wr-bar i { display: block; width: 100%; background: #86EFAC; border-radius: 8px; transform-origin: bottom; animation: barGrow .6s cubic-bezier(.2,.8,.2,1) backwards; } .wr-col.cur .wr-bar i { background: var(--teal); }
+        .wr-coll { font-size: 11.5px; font-weight: 600; } .wr-col.cur .wr-coll { color: var(--text); } .wr-colh { font-size: 10.5px; min-height: 14px; }
+        .wr-note, .note-warn { background: #FFFBEB; border: 1px solid #FDE68A; color: #78350F; border-radius: 12px; padding: 10px 14px; font-size: 13px; line-height: 1.5; margin: 12px 0 0; }
+        .note-warn { margin: 0 0 16px; }
+        .mp-row.hr { border-top: 1px dashed var(--border); margin-top: 3px; padding-top: 3px; }
+
+        .regime-desc { font-size: 13.5px; line-height: 1.55; color: #475569; margin: 2px 0 14px; } .regime-desc b { color: var(--text); }
+        #contab-form .segmented, #contab-modo .segmented { display: flex; } #contab-form .seg-btn, #contab-modo .seg-btn { flex: 1; }
+        #contab-form .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } #contab-form .link-btn { text-align: left; font-size: 12.5px; padding: 6px 0 0; }
+        .ct-check { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; margin: 4px 0 10px; cursor: pointer; } .ct-check input { margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; } .ct-check small { display: block; font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+        .ct-steps { margin: 0; padding: 0; list-style: none; counter-reset: st; }
+        .ct-steps li { counter-increment: st; position: relative; padding: 0 0 16px 40px; } .ct-steps li:last-child { padding-bottom: 0; }
+        .ct-steps li::before { content: counter(st); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); color: #475569; font-weight: 700; font-size: 12.5px; display: flex; align-items: center; justify-content: center; }
+        .ct-steps li::after { content: ""; position: absolute; left: 12.5px; top: 30px; bottom: 4px; width: 1px; background: var(--border); } .ct-steps li:last-child::after { display: none; }
+        .ct-steps b { display: block; font-size: 14.5px; margin-bottom: 2px; } .ct-steps span { display: block; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; overflow-wrap: anywhere; }
+        .fr-track { position: relative; height: 8px; background: var(--surface-3); border-radius: 999px; margin: 10px 0 20px; }
+        .fr-track i { display: block; height: 100%; border-radius: 999px; transform-origin: left center; animation: growX .7s cubic-bezier(.2,.8,.2,1) .12s backwards; }
+        .fr-track em { position: absolute; top: -4px; width: 2px; height: 16px; background: #0F172A; font-style: normal; font-size: 11px; font-weight: 700; color: #0F172A; text-indent: -10px; line-height: 50px; white-space: nowrap; }
+        .tax-group { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; padding: 14px 0 6px; border-bottom: 1px solid var(--border); } .tax-group b { color: var(--text); font-size: 13px; }
+        .tax-row { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .tax-l { min-width: 0; } .tax-l b { display: block; font-size: 14.5px; } .tax-l small, .tax-r small { display: block; font-size: 12px; color: var(--text-dim); line-height: 1.45; margin-top: 2px; } .tax-l .tax-pay { color: #475569; }
+        .tax-r { text-align: right; flex-shrink: 0; } .tax-r b { font-size: 15px; }
+        .tax-total { display: flex; justify-content: space-between; padding: 14px 0 4px; font-size: 15px; font-weight: 700; } .tax-total b { font-size: 17px; }
+        .cmp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .cmp-col { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px 6px; min-width: 0; } .cmp-col.sel { border-color: #94A3B8; } .cmp-col.best { background: #F0FDF4; border-color: #BBF7D0; }
+        .cmp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; min-height: 26px; } .cmp-head b { font-size: 14.5px; }
+        .cmp-col .kv-line { font-size: 13px; } .cmp-col .kv-line:last-child { border-bottom: none; } .kv-line.total { font-weight: 700; } .kv-line.total span { color: var(--text); }
+        .notes { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #475569; } .notes li { margin-bottom: 4px; }
+        @media (max-width: 720px) {
+          .wr-top { grid-template-columns: 1fr; } .wr-side { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .wr-side > div { padding: 10px 12px; } .wr-side > div:last-child { grid-column: 1 / -1; } .wr-side b { font-size: 16px; }
+          .wr-main > b { font-size: 28px; } .wr-bar { height: 70px; }
+          #contab-form .form-grid { grid-template-columns: 1fr; } .cmp-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
 
-      <aside className="sidebar">
-        <div className="sb-brand"><div className="brand-icon"><IconLogo size={18} /></div><span>Mediplan</span></div>
-        <button className="sb-new" onClick={() => setQuickOpen(true)}><IconPlus size={17} color="#fff" /><span>Novo lançamento</span></button>
-        <nav className="sb-nav">
-          {[["Principal", ["inicio", "faturamento", "calendario", "despesas"]], ["Patrimônio", ["investimentos", "metas", "visao"]], ["Ferramentas", ["importar", "backup"]]].map(([g, ids]) => (
-            <div key={g}>
-              <div className="sb-group">{g}</div>
-              {ids.map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = t.icon; return (
-                <button key={id} className={`sb-item ${activeTab === id ? "active" : ""}`} onClick={() => goTab(id)} title={t.long}><Ic size={18} /><span>{t.long}</span></button>
-              ); })}
-            </div>
-          ))}
-        </nav>
-        <button className={`sb-foot cloud-foot ${cloud.status}`} onClick={() => goTab("backup")}><i />{cloudLabel}</button>
-      </aside>
-
       <div className="main">
-      <header className="topbar2">
-        <div className="tb-left">
-          <div className="tb-logo"><IconLogo size={15} /></div>
-          <div>
-            <h1 className="tb-title">{(PAGE_TITLES[activeTab] || [""])[0]}<button className={`cloud-dot ${cloud.status}`} title={cloudLabel} aria-label={cloudLabel} onClick={() => goTab("backup")} /></h1>
-            <p className="tb-sub">{(PAGE_TITLES[activeTab] || ["", ""])[1]}</p>
+      <div className="topwrap">
+        <header className="topbar2">
+          <div className="tb-left">
+            <div className="tb-logo"><IconLogo size={15} /></div>
+            <div>
+              <h1 className="tb-title">{(PAGE_TITLES[activeTab] || [""])[0]}<button className={`cloud-dot ${cloud.status}`} title={cloudLabel} aria-label={cloudLabel} onClick={() => goTab("backup")} /></h1>
+              <p className="tb-sub">{(PAGE_TITLES[activeTab] || ["", ""])[1]}</p>
+            </div>
           </div>
-        </div>
-        <div className="tb-right">
-          <div className="month-pill">
-            <button onClick={() => changeMonth(-1)} aria-label="Mês anterior"><IconChevronLeft size={17} /></button>
-            <button className="mp-open" onClick={() => setPickerYear(viewYear)} aria-label="Ver todos os meses">{MONTHS_PT[viewMonth]} {viewYear}</button>
-            <button onClick={() => changeMonth(1)} aria-label="Próximo mês"><IconChevronRight size={17} /></button>
+          <div className="tb-right">
+            <div className="month-pill">
+              <button onClick={() => changeMonth(-1)} aria-label="Mês anterior"><IconChevronLeft size={17} /></button>
+              <button className="mp-open" onClick={() => setPickerYear(viewYear)} aria-label="Ver todos os meses">{MONTHS_PT[viewMonth]} {viewYear}</button>
+              <button onClick={() => changeMonth(1)} aria-label="Próximo mês"><IconChevronRight size={17} /></button>
+            </div>
+            <button className="btn btn-primary tb-new" onClick={() => setQuickOpen(true)}><IconPlus size={16} color="#fff" /> Novo</button>
           </div>
-          <button className="btn btn-primary tb-new" onClick={() => setQuickOpen(true)}><IconPlus size={16} color="#fff" /> Novo</button>
-        </div>
-      </header>
+        </header>
+        <NavStrip items={NAV_ALL} active={activeTab} onPick={goTab} />
+      </div>
 
       <div className="page">
-      <div className="panel">
+      <div key={activeTab} className={`panel pg pg-${navDir}`}>
         {activeTab === "inicio" && (
           <DashboardTab
             viewMonth={viewMonth} viewYear={viewYear}
             patrimonioTotal={patrimonioTotal} saldoRealizado={saldoRealizado} totalInvestedAllTime={totalInvestedAllTime}
             totalNet={totalNet} totalPendingExpenses={totalPendingExpenses} alerts={alerts}
             history12={history12} goals={goals} generateMonthlyReport={generateMonthlyReport}
-            setActiveTab={setActiveTab} curStats={curStats} prevStats={prevStats} portfolio={portfolio}
+            setActiveTab={goTab} curStats={curStats} prevStats={prevStats} portfolio={portfolio}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} quickGo={quickGo}
             setup={{ vinculos: vinculos.length, shifts: shifts.length, expenses: expenses.length + recurringExpenses.length, investments: investments.length }}
             monthExpenseItems={monthExpenseItems} limits={limits} monthShiftsCount={monthShifts.length} insights={insights}
+            workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
         {activeTab === "faturamento" && (
@@ -2884,6 +3194,7 @@ function App() {
             extraRecurringIncomes={extraRecurringIncomes} addExtraRecurringIncome={addExtraRecurringIncome} removeExtraRecurringIncome={removeExtraRecurringIncome} updateExtraPrazo={updateExtraPrazo}
             netByVinculo={netByVinculo} gainScope={gainScope} setGainScope={setGainScope} history12={history12}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth}
+            workCard={<WorkRateCard cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} goMonth={goMonth} />}
           />
         )}
         {activeTab === "calendario" && (
@@ -2892,7 +3203,7 @@ function App() {
             viewYear={viewYear} viewMonth={viewMonth} vinculos={vinculos} addVinculo={addVinculo}
             addShift={addShift} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
             addPresenca={addPresenca} removePresenca={removePresenca}
-            vinculoMap={vinculoMap} netOf={netOf} setActiveTab={setActiveTab}
+            vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab}
           />
         )}
         {activeTab === "despesas" && (
@@ -2904,7 +3215,7 @@ function App() {
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment}
-            setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus}
+            setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun}
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} />
         )}
         {activeTab === "metas" && (
@@ -2914,13 +3225,16 @@ function App() {
           <OverviewTab chartScope={chartScope} setChartScope={setChartScope} expensesByDesc={expensesByDesc} investByCategory={investByCategory}
             hourlyRate={hourlyRate} leftover={leftover} scopedHours={scopedHours} history12={history12} insights={insights} />
         )}
+        {activeTab === "contabilidade" && (
+          <ContabTab contab={contab} setContab={setContab} app={contabApp} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} />
+        )}
         {activeTab === "importar" && (
           <ImportTab buildExpenseItems={buildExpenseItems} buildIncomeItems={buildIncomeItems} importedKeys={importedKeys}
             commitImport={commitImport} importLog={importLog} undoImport={undoImport} goTab={goTab}
             commitB3={commitB3} portfolio={portfolio} investments={investments} />
         )}
         {activeTab === "backup" && (
-          <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
+          <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
             posicaoCard={<PosicaoInicialCard investments={investments} onToggle={setPosicaoInicial} />}
             wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
             cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
@@ -2944,26 +3258,7 @@ function App() {
         </div>
       )}
 
-      <nav className="bottom-nav">
-        {[["inicio", "Início", IconHome], ["faturamento", "Receitas", IconReceipt]].map(([id, l, Ic]) => (
-          <button key={id} className={`bn-btn ${activeTab === id ? "active" : ""}`} onClick={() => goTab(id)}><Ic size={21} /><span>{l}</span></button>
-        ))}
-        <button className="bn-center" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
-        {[["despesas", "Despesas", IconWallet]].map(([id, l, Ic]) => (
-          <button key={id} className={`bn-btn ${activeTab === id ? "active" : ""}`} onClick={() => goTab(id)}><Ic size={21} /><span>{l}</span></button>
-        ))}
-        <button className={`bn-btn ${["calendario", "investimentos", "metas", "visao", "importar", "backup"].includes(activeTab) || moreOpen ? "active" : ""}`} onClick={() => setMoreOpen((v) => !v)}><IconMore size={21} /><span>Mais</span></button>
-      </nav>
-      {moreOpen && (
-        <div className="sheet-backdrop" onClick={() => setMoreOpen(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            {["calendario", "investimentos", "metas", "visao", "importar", "backup"].map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = t.icon; return (
-              <button key={id} className={`sheet-item ${activeTab === id ? "active" : ""}`} onClick={() => goTab(id)}><span className="sheet-ico"><Ic size={18} /></span>{t.long}</button>
-            ); })}
-          </div>
-        </div>
-      )}
+      <button className="fab2" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
 
       <div className="footnote">
         {session ? `Conectado como ${session.user.email}. Seus dados ficam salvos na nuvem e neste aparelho.` : "Os dados ficam salvos neste aparelho. Para usar em mais de um aparelho, conecte a nuvem em Configurações."}
@@ -3115,7 +3410,7 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
 function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
-  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth
+  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard
 }) {
   const [manage, setManage] = useState(vinculos.length === 0);
   const sorted = [...monthIncomeItems].sort((a, b) => a.tipo === b.tipo ? 0 : (a.tipo === "plantao" ? -1 : 1));
@@ -3132,6 +3427,8 @@ function FaturamentoTab({
       </div>
 
       <div className="note-info">O valor aparece no mês em que cai no caixa. Se uma empresa paga depois, ajuste o prazo em “Vínculos e receitas fixas”, no fim da página.</div>
+
+      {workCard}
 
       <div className="grid-2">
         <div className="card">
@@ -3299,7 +3596,7 @@ function PosicaoInicialCard({ investments, onToggle }) {
   );
 }
 
-function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard }) {
+function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto }) {
   return (
     <div>
       {cloudCard}
@@ -3307,9 +3604,10 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
         <div className="day-panel-title"><span>Configurações gerais</span></div>
         <div className="tax-box" style={{ marginBottom: 0 }}>
           <span className="tax-box-label">Tributação geral (usada quando um vínculo não tem taxa própria)</span>
-          <input type="number" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value)} step="0.1" />
+          <input id="cfg-tax" type="number" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value)} step="0.1" disabled={!!contabAuto} />
           <span className="tax-box-label">%</span>
         </div>
+        {contabAuto && <div className="field-hint">Calculada pela aba Contabilidade. Para digitar uma porcentagem, escolha “Porcentagem fixa” lá.</div>}
       </div>
 
       <div className="day-panel">
@@ -3332,7 +3630,403 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
   );
 }
 
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights }) {
+// ---- Contabilidade: regras de 2026 usadas na simulação de tributos da PJ ----
+// Simples Nacional (LC 123/2006): [limite da receita em 12 meses, alíquota nominal %, parcela a deduzir]
+const SIMPLES_III = [[180000, 6, 0], [360000, 11.2, 9360], [720000, 13.5, 17640], [1800000, 16, 35640], [3600000, 21, 125640], [4800000, 33, 648000]];
+const SIMPLES_V = [[180000, 15.5, 0], [360000, 18, 4500], [720000, 19.5, 9900], [1800000, 20.5, 17100], [3600000, 23, 62100], [4800000, 30.5, 540000]];
+const FATOR_R_MIN = 0.28;
+const INSS_TETO_2026 = 8475.55, SALARIO_MINIMO_2026 = 1621;
+// IRRF mensal 2026: [limite da base, alíquota %, parcela a deduzir]
+const IRRF_2026 = [[2428.8, 0, 0], [2826.65, 7.5, 182.16], [3751.05, 15, 394.16], [4664.68, 22.5, 675.49], [Infinity, 27.5, 908.73]];
+const IRRF_SIMPLIFICADO = 607.2;
+const DIVIDENDO_LIMITE_MES = 50000;
+const PRESUMIDO_LIMITE_ANO = 5000000; // LC 224/2025: presunção 10% maior sobre a receita acima deste valor
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+function simplesFaixa(rbt12, tabela) {
+  const r = Math.max(0, Number(rbt12) || 0);
+  let i = tabela.findIndex((f) => r <= f[0]);
+  if (i < 0) i = tabela.length - 1;
+  const [limite, nominal, deduz] = tabela[i];
+  const efetiva = r > 0 ? ((r * nominal) / 100 - deduz) / r * 100 : nominal;
+  return { faixa: i + 1, limite, nominal, deduz, efetiva, acimaDoLimite: r > 4800000 };
+}
+
+// IRRF sobre o pró-labore, com o desconto simplificado quando ele é maior e a redução da Lei 15.270/2025
+function irrfMensal2026(bruto, inss) {
+  const b = Math.max(0, Number(bruto) || 0);
+  const base = Math.max(0, b - Math.max(Number(inss) || 0, IRRF_SIMPLIFICADO));
+  const linha = IRRF_2026.find((f) => base <= f[0]);
+  const imposto = Math.max(0, (base * linha[1]) / 100 - linha[2]);
+  let reducao = 0;
+  if (b <= 5000) reducao = Math.min(312.89, imposto);
+  else if (b <= 7350) reducao = Math.min(imposto, Math.max(0, 978.62 - 0.133145 * b));
+  return r2(Math.max(0, imposto - reducao));
+}
+
+function socioRetencoes(proLabore) {
+  const pl = Math.max(0, Number(proLabore) || 0);
+  const inss = r2(Math.min(pl, INSS_TETO_2026) * 0.11);
+  return { inss, irrf: irrfMensal2026(pl, inss) };
+}
+
+// p: { receitaMes, rbt12, proLabore, folha, issPct, hospitalar, contador }
+function calcSimples(p, anexoForcado) {
+  const receita = Math.max(0, Number(p.receitaMes) || 0);
+  const rbt12 = Number(p.rbt12) > 0 ? Number(p.rbt12) : receita * 12;
+  const pl = Math.max(0, Number(p.proLabore) || 0), folha = Math.max(0, Number(p.folha) || 0);
+  const fgts = r2(folha * 0.08);
+  const folha12 = (pl + folha + fgts) * 12;
+  const fatorR = rbt12 > 0 ? folha12 / rbt12 : 0;
+  const anexo = anexoForcado || (fatorR >= FATOR_R_MIN ? "III" : "V");
+  const fx = simplesFaixa(rbt12, anexo === "III" ? SIMPLES_III : SIMPLES_V);
+  const das = r2((receita * fx.efetiva) / 100);
+  const s = socioRetencoes(pl);
+  const itens = [
+    { id: "das", nome: "DAS do Simples Nacional", quem: "empresa", base: receita, aliq: fx.efetiva, valor: das, guia: "DAS, uma guia única", venc: "dia 20 do mês seguinte", obs: "Reúne IRPJ, CSLL, PIS, Cofins, INSS patronal e ISS." },
+  ];
+  if (fgts > 0) itens.push({ id: "fgts", nome: "FGTS dos funcionários", quem: "empresa", base: folha, aliq: 8, valor: fgts, guia: "FGTS Digital", venc: "dia 20 do mês seguinte" });
+  itens.push({ id: "inss", nome: "INSS do sócio", quem: "socio", base: Math.min(pl, INSS_TETO_2026), aliq: 11, valor: s.inss, guia: "DARF da DCTFWeb, descontado do pró-labore", venc: "em geral, dia 20 do mês seguinte", obs: pl > INSS_TETO_2026 ? "Limitado ao teto do INSS." : "" });
+  itens.push({ id: "irrf", nome: "IRRF do pró-labore", quem: "socio", base: pl, aliq: pl > 0 ? (s.irrf / pl) * 100 : 0, valor: s.irrf, guia: "DARF da DCTFWeb, descontado do pró-labore", venc: "em geral, dia 20 do mês seguinte", obs: "Tabela progressiva de 2026, com a redução para pró-labore de até R$ 7.350." });
+  return fechar({ regime: "simples", receita, rbt12, pl, folha, fatorR, folha12, anexo, faixa: fx, itens }, p);
+}
+
+function calcPresumido(p) {
+  const receita = Math.max(0, Number(p.receitaMes) || 0);
+  const rbt12 = Number(p.rbt12) > 0 ? Number(p.rbt12) : receita * 12;
+  const pl = Math.max(0, Number(p.proLabore) || 0), folha = Math.max(0, Number(p.folha) || 0);
+  const iss = Math.max(0, Number(p.issPct) || 0);
+  const excedente = rbt12 > PRESUMIDO_LIMITE_ANO ? (rbt12 - PRESUMIDO_LIMITE_ANO) / rbt12 : 0; // parte da receita acima de R$ 5 milhões no ano
+  const presIR = (p.hospitalar ? 8 : 32) * (1 + 0.1 * excedente), presCS = (p.hospitalar ? 12 : 32) * (1 + 0.1 * excedente);
+  const baseIR = (receita * presIR) / 100, baseCS = (receita * presCS) / 100;
+  const irpj = r2(baseIR * 0.15), adicional = r2(Math.max(0, baseIR - 20000) * 0.1), csll = r2(baseCS * 0.09);
+  const pis = r2(receita * 0.0065), cofins = r2(receita * 0.03), issV = r2((receita * iss) / 100);
+  const cpp = r2((pl + folha) * 0.2), fgts = r2(folha * 0.08);
+  const s = socioRetencoes(pl);
+  const tri = "trimestral: último dia útil do mês seguinte ao trimestre";
+  const itens = [
+    { id: "irpj", nome: "IRPJ", quem: "empresa", base: baseIR, aliq: 15, valor: irpj, guia: "DARF", venc: tri, obs: `15% sobre ${fmtPct(presIR)} do faturamento (lucro presumido).` },
+  ];
+  if (adicional > 0) itens.push({ id: "adicional", nome: "Adicional de IRPJ", quem: "empresa", base: baseIR - 20000, aliq: 10, valor: adicional, guia: "DARF", venc: tri, obs: "10% sobre o lucro presumido acima de R$ 20 mil por mês (R$ 60 mil no trimestre)." });
+  itens.push({ id: "csll", nome: "CSLL", quem: "empresa", base: baseCS, aliq: 9, valor: csll, guia: "DARF", venc: tri, obs: `9% sobre ${fmtPct(presCS)} do faturamento.` });
+  itens.push({ id: "pis", nome: "PIS", quem: "empresa", base: receita, aliq: 0.65, valor: pis, guia: "DARF", venc: "dia 25 do mês seguinte" });
+  itens.push({ id: "cofins", nome: "Cofins", quem: "empresa", base: receita, aliq: 3, valor: cofins, guia: "DARF", venc: "dia 25 do mês seguinte" });
+  itens.push({ id: "iss", nome: "ISS", quem: "empresa", base: receita, aliq: iss, valor: issV, guia: "guia da prefeitura", venc: "varia conforme o município", obs: "A alíquota vai de 2% a 5%, conforme a cidade." });
+  itens.push({ id: "cpp", nome: "INSS patronal", quem: "empresa", base: pl + folha, aliq: 20, valor: cpp, guia: "DARF da DCTFWeb", venc: "em geral, dia 20 do mês seguinte", obs: "20% sobre o pró-labore e os salários." });
+  if (fgts > 0) itens.push({ id: "fgts", nome: "FGTS dos funcionários", quem: "empresa", base: folha, aliq: 8, valor: fgts, guia: "FGTS Digital", venc: "dia 20 do mês seguinte" });
+  itens.push({ id: "inss", nome: "INSS do sócio", quem: "socio", base: Math.min(pl, INSS_TETO_2026), aliq: 11, valor: s.inss, guia: "DARF da DCTFWeb, descontado do pró-labore", venc: "em geral, dia 20 do mês seguinte", obs: pl > INSS_TETO_2026 ? "Limitado ao teto do INSS." : "" });
+  itens.push({ id: "irrf", nome: "IRRF do pró-labore", quem: "socio", base: pl, aliq: pl > 0 ? (s.irrf / pl) * 100 : 0, valor: s.irrf, guia: "DARF da DCTFWeb, descontado do pró-labore", venc: "em geral, dia 20 do mês seguinte", obs: "Tabela progressiva de 2026, com a redução para pró-labore de até R$ 7.350." });
+  return fechar({ regime: "presumido", receita, rbt12, pl, folha, presIR, presCS, excedente, itens }, p);
+}
+
+function fmtPct(n) { return (Math.round(n * 100) / 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%"; }
+
+function fechar(r, p) {
+  const soma = (q) => r2(r.itens.filter((i) => i.quem === q).reduce((a, i) => a + i.valor, 0));
+  const empresa = soma("empresa"), socio = soma("socio"), total = r2(empresa + socio);
+  const contador = Math.max(0, Number(p.contador) || 0);
+  const lucro = r2(r.receita - empresa - r.pl - r.folha - contador);
+  const liquidoSocio = r2(r.pl - socio + Math.max(0, lucro));
+  return { ...r, empresa, socio, total, contador, lucro, liquidoSocio,
+    carga: r.receita > 0 ? (total / r.receita) * 100 : 0, cargaEmpresa: r.receita > 0 ? (empresa / r.receita) * 100 : 0,
+    retencaoLucros: lucro > DIVIDENDO_LIMITE_MES ? r2(lucro * 0.1) : 0 };
+}
+
+// Pró-labore mensal que leva o Fator R a 28%, mantendo os salários informados
+function proLaboreParaFatorR(p) {
+  const receita = Math.max(0, Number(p.receitaMes) || 0);
+  const rbt12 = Number(p.rbt12) > 0 ? Number(p.rbt12) : receita * 12;
+  const folha = Math.max(0, Number(p.folha) || 0);
+  const alvo = Math.round(((FATOR_R_MIN * rbt12) / 12 - folha * 1.08) * 1e6) / 1e6; // evita erro de ponto flutuante antes de arredondar para cima
+  return Math.max(0, Math.ceil(alvo * 100) / 100);
+}
+
+const fmtHoras = (h) => (Math.round((Number(h) || 0) * 10) / 10).toLocaleString("pt-BR") + "h";
+const CONTAB_DEFAULT = { modo: "fixa", regime: "simples", receitaMes: "", rbt12: "", proLabore: "", folha: "", issPct: "5", hospitalar: false, contador: "" };
+
+// Rentabilidade do trabalho: horas do mês e ganho líquido por hora, pelo mês trabalhado
+function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCalendar, onDetails, goMonth }) {
+  const tot = history.reduce((a, h) => ({ net: a.net + h.net, hours: a.hours + h.hours }), { net: 0, hours: 0 });
+  const media = tot.hours > 0 ? tot.net / tot.hours : 0;
+  const mesesComHoras = history.filter((h) => h.hours > 0).length;
+  const maxHist = Math.max(1, ...history.map((h) => h.hourly));
+  const maxVin = Math.max(1, ...cur.byVinculo.map((v) => v.hourly));
+  const dH = cur.hours - prev.hours;
+  return (
+    <div className="card work-card" id={compact ? "work-card-home" : "work-card"}>
+      <div className="card-head">
+        <h3 className="card-title">Rentabilidade do trabalho</h3>
+        {compact ? <button className="link-btn" onClick={onDetails}>ver por vínculo</button> : <span className="card-note">pelo mês trabalhado</span>}
+      </div>
+      {cur.hours <= 0 ? (
+        <div className="empty-state" style={{ padding: "6px 0 2px" }}>
+          Ainda não há horas lançadas em {monthName.toLowerCase()}. Informe as horas de cada plantão no Calendário para ver quanto você ganha por hora.
+          <div style={{ marginTop: 10 }}><button className="btn btn-ghost sm" onClick={onCalendar}>Abrir o Calendário</button></div>
+        </div>
+      ) : (
+        <>
+          <div className="wr-top">
+            <div className="wr-main">
+              <span>Ganho líquido por hora</span>
+              <b className="mono"><CountUp value={cur.hourly} /></b>
+              {prev.hours > 0 ? <div className="wr-cmp"><Delta now={cur.hourly} prev={prev.hourly} /><small>{prevName}: {fmtBRL(prev.hourly)}</small></div> : <small className="wr-none">Sem horas no mês anterior para comparar.</small>}
+            </div>
+            <div className="wr-side">
+              <div><span>Horas trabalhadas</span><b className="mono">{fmtHoras(cur.hours)}</b><small>{prev.hours > 0 ? (dH === 0 ? "igual ao mês anterior" : `${dH > 0 ? "+" : "−"}${fmtHoras(Math.abs(dH))} que em ${prevName.toLowerCase()}`) : `em ${cur.dias} ${cur.dias === 1 ? "dia" : "dias"}`}</small></div>
+              <div><span>Recebido por esse trabalho</span><b className="mono">{fmtBRL(cur.net)}</b><small>líquido, {cur.turnos} {cur.turnos === 1 ? "lançamento" : "lançamentos"}</small></div>
+              <div><span>Média de {history.length} meses</span><b className="mono">{mesesComHoras > 1 ? fmtBRL(media) : "—"}</b><small>{mesesComHoras > 1 ? (cur.hourly >= media ? "este mês ficou acima" : "este mês ficou abaixo") : "precisa de mais meses"}</small></div>
+            </div>
+          </div>
+          {!compact && (
+            <>
+              <div className="wr-sub">Por vínculo</div>
+              {cur.byVinculo.map((v, i) => (
+                <div key={v.id} className="wr-vin">
+                  <span className="legend-dot" style={{ background: v.cor }} />
+                  <div className="wr-vn"><b>{v.nome}</b><small>{fmtHoras(v.hours)} · {fmtBRL(v.net)} líquidos{i === 0 && cur.byVinculo.length > 1 ? " · melhor valor por hora" : ""}</small></div>
+                  <div className="wr-vr"><b className="mono">{fmtBRL(v.hourly)}</b><small>por hora</small></div>
+                  <div className="progress-track wr-vbar"><div className="progress-fill" style={{ width: `${(v.hourly / maxVin) * 100}%`, background: v.cor }} /></div>
+                </div>
+              ))}
+              <div className="wr-sub">Ganho por hora nos últimos {history.length} meses</div>
+              <div className="wr-hist">
+                {history.map((h) => (
+                  <button key={h.y + "-" + h.m} className={`wr-col ${h.cur ? "cur" : ""}`} onClick={() => goMonth(h.y, h.m)} aria-label={`${h.full}: ${h.hours > 0 ? fmtBRL(h.hourly) + " por hora, " + fmtHoras(h.hours) : "sem horas"}`}>
+                    <span className="wr-colv mono">{h.hours > 0 ? Math.round(h.hourly).toLocaleString("pt-BR") : "—"}</span>
+                    <span className="wr-bar"><i style={{ height: `${h.hours > 0 ? Math.max(4, (h.hourly / maxHist) * 100) : 0}%` }} /></span>
+                    <span className="wr-coll">{h.label}</span>
+                    <span className="wr-colh mono">{h.hours > 0 ? fmtHoras(h.hours) : ""}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {cur.semHoras > 0 && <div className="wr-note">{cur.semHoras} {cur.semHoras === 1 ? "plantão sem horas ficou" : "plantões sem horas ficaram"} fora da conta ({fmtBRL(cur.semHorasNet)}). Informe as horas no Calendário para incluir.</div>}
+          {!compact && cur.mensalSemHoras.length > 0 && <div className="wr-note">Sem horas lançadas em {monthName.toLowerCase()}: {cur.mensalSemHoras.join(", ")}. Lance as presenças no Calendário para incluir {cur.mensalSemHoras.length === 1 ? "esse vínculo" : "esses vínculos"}.</div>}
+          {!compact && <div className="field-hint">A conta divide o valor líquido dos plantões e dos vínculos com horas lançadas pelas horas trabalhadas no mês, mesmo que o pagamento caia depois.</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Contabilidade: como a PJ paga os tributos no Simples Nacional e no Lucro Presumido
+function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
+  const set = (k, v) => setContab((p) => ({ ...p, [k]: v }));
+  const setApplied = () => {};
+  const usaContab = contab.modo === "contab";
+  const p = { receitaMes: numOf(contab.receitaMes), rbt12: numOf(contab.rbt12), proLabore: numOf(contab.proLabore), folha: numOf(contab.folha), issPct: numOf(contab.issPct), hospitalar: !!contab.hospitalar, contador: numOf(contab.contador) };
+  const simples = calcSimples(p), presumido = calcPresumido(p);
+  const isS = contab.regime !== "presumido";
+  const res = isS ? simples : presumido;
+  const has = p.receitaMes > 0;
+  const pct = (n, d = 2) => (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
+  const plAlvo = proLaboreParaFatorR(p);
+  const alt = simples.anexo === "V" ? calcSimples({ ...p, proLabore: Math.max(plAlvo, p.proLabore) }) : calcSimples(p, "V");
+  const ganhoFatorR = simples.anexo === "V" ? simples.total - alt.total : alt.total - simples.total;
+  const dif = Math.abs(simples.total - presumido.total);
+  const menor = simples.total <= presumido.total ? "simples" : "presumido";
+  const num = (k, label, hint, extra) => (
+    <div className="field">
+      <label htmlFor={"ct-" + k}>{label}</label>
+      <input id={"ct-" + k} type="number" inputMode="decimal" value={contab[k]} onChange={(e) => { set(k, e.target.value); setApplied(null); }} placeholder="0,00" />
+      {extra}
+      {hint && <div className="field-hint">{hint}</div>}
+    </div>
+  );
+  const linha = (i) => (
+    <div key={i.id} className="tax-row" data-tax={i.id}>
+      <div className="tax-l">
+        <b>{i.nome}</b>
+        <small className="mono">{fmtBRL(i.base)} × {pct(i.aliq)}</small>
+        {i.obs ? <small>{i.obs}</small> : null}
+        <small className="tax-pay">{i.guia} · {i.venc}</small>
+      </div>
+      <div className="tax-r"><b className="mono">{fmtBRL(i.valor)}</b><small>{pct(res.receita > 0 ? (i.valor / res.receita) * 100 : 0)} do faturamento</small></div>
+    </div>
+  );
+  const col = (r, nome, id) => (
+    <div className={`cmp-col ${menor === id ? "best" : ""} ${contab.regime === id || (id === "simples" && isS) ? "sel" : ""}`} data-regime={id}>
+      <div className="cmp-head"><b>{nome}</b>{menor === id && dif >= 0.01 ? <span className="badge badge-paid" style={{ cursor: "default" }}>menor carga</span> : null}</div>
+      <div className="kv-line"><span>Tributos da empresa</span><b className="mono">{fmtBRL(r.empresa)}</b></div>
+      <div className="kv-line"><span>Descontos do sócio</span><b className="mono">{fmtBRL(r.socio)}</b></div>
+      <div className="kv-line total"><span>Total no mês</span><b className="mono">{fmtBRL(r.total)}</b></div>
+      <div className="kv-line"><span>Carga sobre o faturamento</span><b className="mono">{pct(r.carga)}</b></div>
+      <div className="kv-line"><span>Sobra para o sócio</span><b className="mono">{fmtBRL(r.liquidoSocio)}</b></div>
+    </div>
+  );
+  const modoCard = (
+    <div className="card" id="contab-modo">
+      <div className="card-head"><h3 className="card-title">Como informar a tributação</h3></div>
+      <div className="segmented" role="group" aria-label="Forma de informar a tributação">
+        <button className={`seg-btn ${!usaContab ? "active" : ""}`} onClick={() => set("modo", "fixa")}>Porcentagem fixa</button>
+        <button className={`seg-btn ${usaContab ? "active" : ""}`} onClick={() => set("modo", "contab")}>Calcular pela contabilidade</button>
+      </div>
+      {!usaContab ? (
+        <>
+          <p className="regime-desc">Você informa uma porcentagem única, e o app desconta esse valor de cada plantão e vínculo sem alíquota própria.</p>
+          <div className="field" style={{ maxWidth: 260 }}>
+            <label htmlFor="ct-fixa">Tributação geral (%)</label>
+            <input id="ct-fixa" type="number" inputMode="decimal" step="0.1" min="0" max="100" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value === "" ? "" : Math.min(100, Math.max(0, Number(e.target.value))))} />
+          </div>
+          <div className="field-hint">Use a porcentagem que seu contador informou ou a que você costuma pagar. Para ver como ela é formada no Simples Nacional ou no Lucro Presumido, escolha “Calcular pela contabilidade”.</div>
+        </>
+      ) : (
+        <>
+          <p className="regime-desc" style={{ marginBottom: 6 }}>O app calcula a carga a partir do regime e dos dados da empresa, e usa esse resultado como tributação geral.</p>
+          <div className={`quote-msg ${has ? "ok" : "warn"}`} role="status" style={{ marginBottom: 0 }}>
+            {has ? `Tributação geral em uso: ${pct(res.carga)}, calculada pela simulação abaixo.` : `Informe o faturamento do mês para o cálculo começar. Até lá, o app continua usando ${pct(Number(taxRateGeral) || 0)}.`}
+          </div>
+        </>
+      )}
+    </div>
+  );
+  if (!usaContab) return <div>{modoCard}</div>;
+  return (
+    <div>
+      {modoCard}
+      <div className="note-info">Simulação com as regras de 2026, para entender como o imposto da PJ é formado. Os valores são estimativas e não substituem o contador.</div>
+
+      <div className="card" id="contab-form">
+        <div className="card-head"><h3 className="card-title">Regime e dados da empresa</h3></div>
+        <div className="segmented" role="group" aria-label="Regime tributário">
+          <button className={`seg-btn ${isS ? "active" : ""}`} onClick={() => { set("regime", "simples"); setApplied(null); }}>Simples Nacional</button>
+          <button className={`seg-btn ${!isS ? "active" : ""}`} onClick={() => { set("regime", "presumido"); setApplied(null); }}>Lucro Presumido</button>
+        </div>
+        <p className="regime-desc">
+          {isS
+            ? "No Simples, a empresa paga uma guia única por mês, o DAS. A alíquota depende do faturamento dos últimos 12 meses e do Fator R, que compara a folha (pró-labore e salários) com o faturamento."
+            : "No Lucro Presumido, cada tributo tem a sua guia. O governo presume que uma parte fixa do faturamento é lucro (32% para serviços) e cobra IRPJ e CSLL sobre ela, além de PIS, Cofins, ISS e INSS patronal."}
+        </p>
+        <div className="form-grid">
+          {num("receitaMes", "Faturamento bruto do mês (R$)", null,
+            app.mesBruto > 0 ? <button type="button" className="link-btn" onClick={() => { set("receitaMes", String(r2(app.mesBruto))); setApplied(null); }}>Usar {fmtBRL(app.mesBruto)} de {app.mesLabel}, lançados no app</button> : null)}
+          {num("rbt12", "Faturamento dos últimos 12 meses (R$)", "Em branco, a simulação usa 12 vezes o faturamento do mês.",
+            app.rbt12 > 0 ? <button type="button" className="link-btn" onClick={() => { set("rbt12", String(r2(app.rbt12))); setApplied(null); }}>Usar {fmtBRL(app.rbt12)} do app ({app.meses} de 12 meses com dados)</button> : null)}
+          {num("proLabore", "Pró-labore mensal (R$)", "É a remuneração do sócio pelo trabalho. O restante sai como distribuição de lucros.")}
+          {num("folha", "Salários de funcionários (R$ por mês)", "Deixe em branco se não tiver funcionários.")}
+          {!isS && num("issPct", "ISS da sua cidade (%)", "Varia de 2% a 5%, conforme o município.")}
+          {num("contador", "Honorários do contador (R$ por mês)", "Opcional. Não é tributo, mas reduz a sobra.")}
+        </div>
+        {!isS && (
+          <label className="ct-check">
+            <input type="checkbox" checked={!!contab.hospitalar} onChange={(e) => { set("hospitalar", e.target.checked); setApplied(null); }} />
+            <span>Minha empresa tem equiparação hospitalar (lucro presumido de 8% no IRPJ e 12% na CSLL)<small>Vale só para serviços hospitalares de sociedade empresária que segue as normas da Anvisa. Consultas não entram. Confirme com o contador.</small></span>
+          </label>
+        )}
+        {app.mesBruto > 0 && <div className="field-hint">O faturamento sugerido soma todos os vínculos lançados no app. Ajuste se algum deles não for recebido pela PJ.</div>}
+      </div>
+
+      {!has ? (
+        <div className="card"><div className="empty-state">Informe o faturamento do mês para ver quanto a empresa paga e como cada tributo é calculado.</div></div>
+      ) : (
+        <>
+          <div className="kpi-row">
+            <Kpi label="Tributos no mês" num={res.total} sub={isS ? "Simples Nacional" : "Lucro Presumido"} />
+            <Kpi label="Carga sobre o faturamento" num={res.carga} fmt={(n) => pct(n)} tone="var(--brick)" sub={pct(res.cargaEmpresa) + " pela empresa"} />
+            <Kpi label="Lucro disponível na PJ" num={res.lucro} tone={res.lucro >= 0 ? "var(--teal)" : "var(--brick)"} sub="depois de tributos e pró-labore" />
+            <Kpi label="Sobra para o sócio" num={res.liquidoSocio} sub="pró-labore líquido + lucro" />
+          </div>
+
+          {p.proLabore <= 0 && <div className="note-warn">Sócio que trabalha na empresa precisa retirar pró-labore. O valor mínimo é o salário mínimo, de {fmtBRL(SALARIO_MINIMO_2026)}.</div>}
+          {p.proLabore > 0 && p.proLabore < SALARIO_MINIMO_2026 && <div className="note-warn">O pró-labore informado está abaixo do salário mínimo, de {fmtBRL(SALARIO_MINIMO_2026)}.</div>}
+          {isS && simples.faixa.acimaDoLimite && <div className="note-warn">O faturamento de 12 meses passa de R$ 4,8 milhões, o limite do Simples Nacional. Acima dele, a empresa precisa de outro regime.</div>}
+          {!isS && presumido.excedente > 0 && <div className="note-warn">Como o faturamento anual passa de R$ 5 milhões, a simulação aplica o acréscimo de 10% no lucro presumido sobre o excedente (LC 224/2025). Essa regra está em discussão na Justiça.</div>}
+
+          {isS && (
+            <div className="card" id="contab-passos">
+              <div className="card-head"><h3 className="card-title">Como o DAS é calculado</h3><span className="card-note">Anexo {simples.anexo}</span></div>
+              <ol className="ct-steps">
+                <li>
+                  <b>Fator R: {pct(simples.fatorR * 100)}</b>
+                  <span className="mono">{fmtBRL(simples.folha12)} de folha em 12 meses ÷ {fmtBRL(simples.rbt12)} de faturamento</span>
+                  <div className="fr-track"><i style={{ width: `${Math.min(100, (simples.fatorR / 0.5) * 100)}%`, background: simples.fatorR >= FATOR_R_MIN ? "var(--teal)" : "var(--gold)" }} /><em style={{ left: "56%" }}>28%</em></div>
+                  <span>{simples.fatorR >= FATOR_R_MIN ? "Com 28% ou mais, serviços médicos são tributados pelo Anexo III, de alíquotas menores." : "Abaixo de 28%, serviços médicos são tributados pelo Anexo V, de alíquotas maiores."}</span>
+                </li>
+                <li>
+                  <b>{simples.faixa.faixa}ª faixa do Anexo {simples.anexo}</b>
+                  <span>Faturamento de 12 meses de até {fmtBRL(simples.faixa.limite)}: alíquota nominal de {pct(simples.faixa.nominal, 1)} e parcela a deduzir de {fmtBRL(simples.faixa.deduz)}.</span>
+                </li>
+                <li>
+                  <b>Alíquota efetiva: {pct(simples.faixa.efetiva)}</b>
+                  <span className="mono">({fmtBRL(simples.rbt12)} × {pct(simples.faixa.nominal, 1)} − {fmtBRL(simples.faixa.deduz)}) ÷ {fmtBRL(simples.rbt12)}</span>
+                </li>
+                <li>
+                  <b>DAS do mês: {fmtBRL(simples.itens[0].valor)}</b>
+                  <span className="mono">{fmtBRL(simples.receita)} × {pct(simples.faixa.efetiva)}</span>
+                </li>
+              </ol>
+            </div>
+          )}
+
+          {isS && (
+            <div className="card" id="contab-fator">
+              <div className="card-head"><h3 className="card-title">Fator R e pró-labore</h3></div>
+              {simples.anexo === "V" ? (
+                <>
+                  <p className="regime-desc" style={{ marginTop: 0 }}>Para chegar a 28% e passar ao Anexo III, o pró-labore precisaria ser de <b className="mono">{fmtBRL(Math.max(plAlvo, p.proLabore))}</b> por mês, mantendo o faturamento atual.</p>
+                  <div className="cmp-grid">
+                    <div className="cmp-col"><div className="cmp-head"><b>Hoje (Anexo V)</b></div><div className="kv-line"><span>DAS</span><b className="mono">{fmtBRL(simples.itens[0].valor)}</b></div><div className="kv-line"><span>INSS e IRRF do sócio</span><b className="mono">{fmtBRL(simples.socio)}</b></div><div className="kv-line total"><span>Total</span><b className="mono">{fmtBRL(simples.total)}</b></div></div>
+                    <div className="cmp-col"><div className="cmp-head"><b>Com esse pró-labore (Anexo III)</b></div><div className="kv-line"><span>DAS</span><b className="mono">{fmtBRL(alt.itens[0].valor)}</b></div><div className="kv-line"><span>INSS e IRRF do sócio</span><b className="mono">{fmtBRL(alt.socio)}</b></div><div className="kv-line total"><span>Total</span><b className="mono">{fmtBRL(alt.total)}</b></div></div>
+                  </div>
+                  <div className={`quote-msg ${ganhoFatorR > 0 ? "ok" : "warn"}`} style={{ marginTop: 12, marginBottom: 0 }}>
+                    {ganhoFatorR > 0
+                      ? `Nesta simulação, o total cairia ${fmtBRL(ganhoFatorR)} por mês (${fmtBRL(ganhoFatorR * 12)} por ano). O DAS diminui, mas o INSS e o IRRF sobre o pró-labore aumentam.`
+                      : `Nesta simulação, subir o pró-labore não reduz o total: o INSS e o IRRF a mais superam a economia no DAS em ${fmtBRL(Math.abs(ganhoFatorR))} por mês.`}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="regime-desc" style={{ marginTop: 0 }}>O Fator R está em {pct(simples.fatorR * 100)}, então a empresa fica no Anexo III. O pró-labore mínimo para manter os 28% é de <b className="mono">{fmtBRL(plAlvo)}</b> por mês.</p>
+                  <div className="quote-msg ok" style={{ marginBottom: 0 }}>Se o Fator R caísse abaixo de 28%, o DAS passaria de {fmtBRL(simples.itens[0].valor)} para {fmtBRL(alt.itens[0].valor)} por mês, pelo Anexo V.</div>
+                </>
+              )}
+              <div className="field-hint" style={{ marginTop: 10 }}>O cálculo oficial usa a folha e o faturamento dos 12 meses anteriores. Aqui, a folha é o pró-labore e os salários atuais multiplicados por 12.</div>
+            </div>
+          )}
+
+          <div className="card" id="contab-tributos">
+            <div className="card-head"><h3 className="card-title">Tributo por tributo</h3><span className="card-note">{isS ? "Simples Nacional" : "Lucro Presumido"}</span></div>
+            <div className="tax-group">Pagos pela empresa<b className="mono">{fmtBRL(res.empresa)}</b></div>
+            {res.itens.filter((i) => i.quem === "empresa").map(linha)}
+            <div className="tax-group">Descontados do pró-labore do sócio<b className="mono">{fmtBRL(res.socio)}</b></div>
+            {res.itens.filter((i) => i.quem === "socio").map(linha)}
+            <div className="tax-total"><span>Total no mês</span><b className="mono">{fmtBRL(res.total)}</b></div>
+            {!isS && <div className="field-hint">IRPJ e CSLL são apurados por trimestre. Aqui aparecem divididos por mês, para você reservar o valor.</div>}
+            {res.retencaoLucros > 0 && (
+              <div className="note-warn" style={{ marginTop: 12, marginBottom: 0 }}>
+                O lucro disponível passa de R$ 50 mil no mês. Desde 2026, lucros pagos acima desse valor a um mesmo sócio têm retenção de 10% de imposto de renda sobre o total, cerca de {fmtBRL(res.retencaoLucros)} neste caso (Lei 15.270/2025). {isS ? "Para empresas do Simples, essa retenção é discutida. " : ""}O valor não está somado ao total acima.
+              </div>
+            )}
+          </div>
+
+          <div className="card" id="contab-comparar">
+            <div className="card-head"><h3 className="card-title">Comparação entre os regimes</h3><span className="card-note">mesmos dados</span></div>
+            <div className="cmp-grid">{col(simples, "Simples Nacional", "simples")}{col(presumido, "Lucro Presumido", "presumido")}</div>
+            <div className="quote-msg" style={{ marginTop: 12, marginBottom: 0 }}>
+              {dif < 0.01 ? "Nesta simulação, os dois regimes dão o mesmo total." : `Nesta simulação, o ${menor === "simples" ? "Simples Nacional" : "Lucro Presumido"} paga ${fmtBRL(dif)} a menos por mês (${fmtBRL(dif * 12)} por ano).`} Em regra, o regime só pode ser trocado na virada do ano, e a escolha depende de fatores que o simulador não cobre. O Lucro Real não entra na comparação.
+            </div>
+          </div>
+
+        </>
+      )}
+
+      <div className="card" id="contab-notas">
+        <div className="card-head"><h3 className="card-title">O que a simulação considera</h3></div>
+        <ul className="notes">
+          <li>Regras de 2026: tabelas dos Anexos III e V do Simples, tabela mensal do IRRF e teto do INSS de {fmtBRL(INSS_TETO_2026)}.</li>
+          <li>O sócio paga 11% de INSS sobre o pró-labore, até o teto. Quem já contribui pelo teto em outro vínculo pode ter desconto menor.</li>
+          <li>No Lucro Presumido, o lucro que passa de R$ 20 mil por mês paga adicional de 10% de IRPJ.</li>
+          <li>Ficam de fora: ISS fixo de sociedade de profissionais, retenções feitas na nota fiscal, encargos de terceiros sobre salários, dependentes no IRRF e os novos tributos da reforma tributária (CBS e IBS).</li>
+          <li>Outras formas existem, como o Lucro Real e o recebimento como pessoa física, e não entram na simulação.</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur }) {
   const todayIso = todayStr();
   const h = new Date().getHours();
   const hello = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
@@ -3381,7 +4075,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
 
       <div className="balance-card">
         <div className="bc-top">Saldo em caixa</div>
-        <div className="bc-value mono" style={saldoRealizado < 0 ? { color: "var(--brick)" } : null}>{fmtBRL(saldoRealizado)}</div>
+        <div className="bc-value mono" style={saldoRealizado < 0 ? { color: "var(--brick)" } : null}><CountUp value={saldoRealizado} /></div>
         <div className="bc-sub">Patrimônio total <b className="mono">{fmtBRL(patrimonioTotal)}</b> · investido <b className="mono">{fmtBRL(portfolio.totalValue || totalInvestedAllTime)}</b></div>
         <div className="bc-flows">
           <div className="flow"><span className="flow-ico in"><IconArrowIn size={18} /></span><div><span>Receitas do mês</span><b className="mono">{fmtBRL(curStats.net)}</b><Delta now={curStats.net} prev={prevStats.net} /></div></div>
@@ -3389,6 +4083,8 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           <div className="flow"><span className="flow-ico inv"><IconTrending size={18} /></span><div><span>Investido no mês</span><b className="mono">{fmtBRL(curStats.invested)}</b></div></div>
         </div>
       </div>
+
+      {workCard}
 
       <div className="card">
         <div className="card-head"><h3 className="card-title">Insights do mês</h3>{insights.length > 4 && <button className="link-btn" onClick={() => setActiveTab("visao")}>ver todos ({insights.length})</button>}</div>
@@ -3433,8 +4129,8 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           <div className="card-head"><h3 className="card-title">Seu mês de trabalho</h3><button className="link-btn" onClick={() => setActiveTab("calendario")}>abrir agenda</button></div>
           <div className="work-grid">
             <div><span>Plantões</span><b className="mono">{monthShiftsCount}</b></div>
-            <div><span>Horas</span><b className="mono">{curStats.hours.toFixed(0)}h</b></div>
-            <div><span>Ganho por hora</span><b className="mono">{fmtBRL(curStats.hourly)}</b></div>
+            <div><span>Dias trabalhados</span><b className="mono">{workCur.dias}</b></div>
+            <div><span>Horas por semana</span><b className="mono">{fmtHoras(curStats.hours / (new Date(viewYear, viewMonth + 1, 0).getDate() / 7))}</b></div>
             <div><span>A receber</span><b className="mono">{fmtBRL(totalNet)}</b></div>
           </div>
         </div>
@@ -3873,11 +4569,14 @@ function AssetInput({ value, onChange, onPick, options, placeholder, showAllOnEm
 }
 
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment,
-  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal }) {
+  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal }) {
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
   useEffect(() => { if (openSignal) { setShowForm(true); setTab("resumo"); } }, [openSignal]);
   const [catFilter, setCatFilter] = useState("todas");
+  const [sortBy, setSortBy] = useState("valor");
+  const [openKey, setOpenKey] = useState(null);
+  const formRef = useRef(null);
   const todayIso = todayStr();
 
   // ----- formulário -----
@@ -3934,15 +4633,31 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const presentCats = classes.map((c) => c.nome);
   const perf = positions.filter((p) => p.cost > 0 && p.cotacao > 0).map((p) => ({ label: p.description, pct: p.profitPct })).sort((a, b) => b.pct - a.pct);
   const topPos = positions.slice(0, 8).map((p) => ({ name: p.description, value: p.value }));
-  const grouped = presentCats.filter((c) => catFilter === "todas" || c === catFilter).map((c) => ({ cat: c, items: positions.filter((p) => p.category === c) }));
+  const sorters = {
+    valor: (a, b) => b.value - a.value,
+    alta: (a, b) => b.profitPct - a.profitPct,
+    baixa: (a, b) => a.profitPct - b.profitPct,
+    az: (a, b) => a.description.localeCompare(b.description),
+  };
+  const grouped = presentCats.filter((c) => catFilter === "todas" || c === catFilter).map((c) => ({ cat: c, items: positions.filter((p) => p.category === c).sort(sorters[sortBy] || sorters.valor) }));
+  const tickerCount = positions.filter((p) => p.isQty && p.meta.kind === "ticker").length;
+  // posição que o lançamento em preenchimento vai alterar, para mostrar o efeito antes de salvar
+  const held = needsDesc && description.trim() ? positions.find((p) => p.category === category && p.description.toUpperCase() === description.trim().toUpperCase()) : null;
+  const startTrade = (p, kind) => {
+    setTipo(kind); setCategory(p.category); setScope("ativo"); setEntry(p.isQty ? "qtd" : "valor");
+    setDescription(p.description); setAssetName(p.assetName || ""); setQty(""); setAmount("");
+    setPrice(p.isQty && p.cotacao > 0 ? String(p.cotacao) : "");
+    setShowForm(true);
+    setTimeout(() => { try { formRef.current.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" }); } catch (e) {} }, 60);
+  };
 
   return (
     <div>
       <div className="kpi-row">
-        <Kpi label="Total investido" value={fmtBRL(totalCost)} sub="custo das posições" />
-        <Kpi label="Patrimônio atual" value={fmtBRL(totalValue)} sub={positions.length + " posição(ões)"} />
-        <Kpi label="Variação" value={sgn(profit) + " " + fmtBRL(Math.abs(profit))} tone={profit >= 0 ? "var(--teal)" : "var(--brick)"} sub={signPct(profitPct) + " sobre o custo"} />
-        <Kpi label="Rentabilidade" value={signPct(returnPct)} tone={returnPct >= 0 ? "var(--teal)" : "var(--brick)"} sub="considera vendas" />
+        <Kpi label="Total investido" num={totalCost} sub="custo das posições" />
+        <Kpi label="Patrimônio atual" num={totalValue} sub={positions.length + " posição(ões)"} />
+        <Kpi label="Variação" num={profit} fmt={(n) => sgn(n) + " " + fmtBRL(Math.abs(n))} tone={profit >= 0 ? "var(--teal)" : "var(--brick)"} sub={signPct(profitPct) + " sobre o custo"} />
+        <Kpi label="Rentabilidade" num={returnPct} fmt={signPct} tone={returnPct >= 0 ? "var(--teal)" : "var(--brick)"} sub="considera vendas" />
       </div>
 
       <div className="subtabs-row">
@@ -3955,7 +4670,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
       </div>
 
       {showForm && (
-        <div className="card">
+        <div className="card" ref={formRef}>
           <div className="card-head"><h3 className="card-title">Novo lançamento</h3></div>
           <div className="tipo-toggle">
             <button className={`tipo-btn buy ${tipo === "compra" ? "active" : ""}`} onClick={() => setTipo("compra")}>Compra / aporte</button>
@@ -4005,6 +4720,43 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             )}
             <div className="field"><label>Data</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
+          {held && (() => {
+            const q = numOf(qty), pr = numOf(price);
+            const buying = tipo !== "venda";
+            const newQty = held.qty + q, newAvg = newQty > 0 ? (held.cost + q * pr) / newQty : 0;
+            const sellQty = Math.min(q, held.qty), sellResult = (pr - held.avg) * sellQty;
+            return (
+              <div className="pos-preview">
+                <div className="pp-title">Sua posição em {held.description}</div>
+                <div className="pp-grid">
+                  {held.isQty ? (
+                    <>
+                      <div><span>Você tem</span><b className="mono">{fmtQty(held.qty)}</b></div>
+                      <div><span>Preço médio</span><b className="mono">{fmtBRL(held.avg)}</b></div>
+                      <div><span>Cotação</span><b className="mono">{held.cotacao > 0 ? fmtBRL(held.cotacao) : "—"}</b></div>
+                    </>
+                  ) : (
+                    <>
+                      <div><span>Investido</span><b className="mono">{fmtBRL(held.cost)}</b></div>
+                      <div><span>Valor atual</span><b className="mono">{held.cotacao > 0 ? fmtBRL(held.value) : "—"}</b></div>
+                    </>
+                  )}
+                </div>
+                {useQty && held.isQty && held.cotacao > 0 && !price && (
+                  <button type="button" className="btn btn-ghost sm" style={{ marginTop: 10 }} onClick={() => setPrice(String(held.cotacao))}>Usar a cotação atual ({fmtBRL(held.cotacao)})</button>
+                )}
+                {useQty && held.isQty && q > 0 && pr > 0 && buying && (
+                  <div className="pp-after">Depois desta compra: <b className="mono">{fmtQty(newQty)}</b> no total, com preço médio de <b className="mono">{fmtBRL(newAvg)}</b>.</div>
+                )}
+                {useQty && held.isQty && q > 0 && pr > 0 && !buying && (
+                  <div className="pp-after">
+                    {q > held.qty + 0.0000001 ? `Você só tem ${fmtQty(held.qty)}. A venda será limitada a essa quantidade. ` : ""}
+                    Resultado desta venda: <b className="mono" style={{ color: sellResult >= 0 ? "var(--teal)" : "var(--brick)" }}>{sellResult >= 0 ? "+" : "−"} {fmtBRL(Math.abs(sellResult))}</b>. Restam <b className="mono">{fmtQty(held.qty - sellQty)}</b>.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {formTotal > 0 && <div className="total-line">Total do lançamento: <b className="mono">{fmtBRL(formTotal)}</b></div>}
           <button className="btn btn-primary" onClick={submit}>Salvar {tipo === "venda" ? "venda" : "compra"}</button>
         </div>
@@ -4032,58 +4784,147 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
         </div>
       )}
 
-      {/* ---------- ATIVOS (tabela) ---------- */}
+      {/* ---------- ATIVOS (cartões) ---------- */}
       {tab === "ativos" && (
-        <div className="card flush">
-          <div className="card-head pad">
-            <h3 className="card-title">Meus ativos</h3>
-            <button className="btn btn-ghost" style={{ minHeight: 32, padding: "5px 12px", fontSize: 12.5 }} onClick={refreshQuotes}>Atualizar cotações</button>
-          </div>
-          <div className="pad-x">
-            {presentCats.length > 1 && (
-              <div className="chip-row" style={{ marginBottom: 10 }}>
-                <button className={`chip ${catFilter === "todas" ? "active" : ""}`} onClick={() => setCatFilter("todas")}>Todas</button>
-                {presentCats.map((c) => <button key={c} className={`chip ${catFilter === c ? "active" : ""}`} onClick={() => setCatFilter(c)}>{c}</button>)}
+        <div>
+          <div className="card" id="quotes-card">
+            <div className="card-head">
+              <h3 className="card-title">Meus ativos</h3>
+              <button className="btn btn-ghost quote-btn" disabled={quoteRun.busy} onClick={refreshQuotes}>
+                <span className={quoteRun.busy ? "spin" : ""} style={{ display: "inline-flex" }}><IconRefresh size={15} /></span>
+                {quoteRun.busy ? `Buscando ${quoteRun.done} de ${quoteRun.total}` : "Atualizar cotações"}
+              </button>
+            </div>
+            {quoteRun.busy && <div className="progress-track quote-track"><div className="quote-fill" style={{ width: `${quoteRun.total ? (quoteRun.done / quoteRun.total) * 100 : 0}%` }} /></div>}
+            {quoteStatus && !quoteRun.busy && <div className={`quote-msg ${quoteRun.kind}`} role="status">{quoteStatus}</div>}
+            {!brapiToken ? (
+              <div className="token-box">
+                <b>Para atualizar todos os ativos, cole um token gratuito da brapi.dev.</b>
+                <p>Sem token, o serviço só responde alguns ativos de teste, como PETR4 e VALE3. Por isso os outros preços não mudam.</p>
+                <ol>
+                  <li>Crie uma conta grátis em <a href="https://brapi.dev" target="_blank" rel="noopener noreferrer">brapi.dev</a>.</li>
+                  <li>Copie o token no painel da sua conta.</li>
+                  <li>Cole no campo abaixo e toque em Atualizar cotações.</li>
+                </ol>
+                <div className="field" style={{ margin: "10px 0 0" }}>
+                  <label htmlFor="brapi-token">Token da brapi.dev</label>
+                  <input id="brapi-token" value={brapiToken} onChange={(e) => setBrapiToken(e.target.value.trim())} placeholder="cole seu token aqui" autoComplete="off" />
+                </div>
+              </div>
+            ) : (
+              <details className="cfg">
+                <summary>Token da brapi.dev configurado</summary>
+                <div className="field" style={{ margin: "8px 0" }}>
+                  <label htmlFor="brapi-token">Token da brapi.dev</label>
+                  <input id="brapi-token" value={brapiToken} onChange={(e) => setBrapiToken(e.target.value.trim())} placeholder="cole seu token aqui" autoComplete="off" />
+                </div>
+              </details>
+            )}
+            <div className="field-hint" style={{ marginTop: 8 }}>A busca automática vale para {tickerCount} {tickerCount === 1 ? "ativo" : "ativos"} entre ações, FIIs e ETFs. Para Tesouro, renda fixa e outros, digite o valor atual no cartão do ativo.</div>
+            {positions.length > 0 && (
+              <div className="asset-tools">
+                {presentCats.length > 1 && (
+                  <div className="chip-row">
+                    <button className={`chip ${catFilter === "todas" ? "active" : ""}`} onClick={() => setCatFilter("todas")}>Todas</button>
+                    {presentCats.map((c) => <button key={c} className={`chip ${catFilter === c ? "active" : ""}`} onClick={() => setCatFilter(c)}>{c}</button>)}
+                  </div>
+                )}
+                <label className="sort-pick">Ordenar por
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                    <option value="valor">Maior valor</option>
+                    <option value="alta">Maior alta</option>
+                    <option value="baixa">Maior queda</option>
+                    <option value="az">Nome (A a Z)</option>
+                  </select>
+                </label>
               </div>
             )}
-            <details className="cfg">
-              <summary>Cotação automática (opcional)</summary>
-              <div className="field" style={{ margin: "8px 0" }}>
-                <label>Token brapi.dev</label>
-                <input value={brapiToken} onChange={(e) => setBrapiToken(e.target.value.trim())} placeholder="cole seu token aqui" autoComplete="off" />
-              </div>
-            </details>
-            {quoteStatus && <div className="field-hint" style={{ marginBottom: 8 }}>{quoteStatus}</div>}
           </div>
-          {positions.length === 0 ? <div className="empty-state">Nenhuma posição ainda. Toque em “Novo lançamento”.</div> : (
-            <div className="table-wrap">
-              <table className="tbl">
-                <thead><tr><th>Ativo</th><th className="num hide-sm">Qtd.</th><th className="num hide-sm">Preço médio</th><th className="num hide-sm">Cotação / valor atual</th><th className="num">Patrimônio</th><th className="num hide-sm">Variação</th><th className="num hide-sm">% carteira</th></tr></thead>
-                <tbody>
-                  {grouped.map((g) => {
-                    const sub = g.items.reduce((a, p) => a + p.value, 0);
+
+          {positions.length === 0 ? <div className="card"><div className="empty-state">Nenhuma posição ainda. Toque em “Novo lançamento”.</div></div> : grouped.map((g) => {
+            const sub = g.items.reduce((a, p) => a + p.value, 0);
+            const subProfit = sub - g.items.reduce((a, p) => a + p.cost, 0);
+            return (
+              <section key={g.cat} className="asset-group">
+                <div className="ag-head">
+                  <span className="legend-dot" style={{ background: invCatMeta(g.cat).color, display: "inline-block", flexShrink: 0 }} />
+                  <div className="ag-name"><b>{g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)} da carteira</small></div>
+                  <div className="ag-right"><b className="mono">{fmtBRL(sub)}</b><small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</small></div>
+                </div>
+                <div className="asset-grid">
+                  {g.items.map((p) => {
+                    const open = openKey === p.key;
+                    const hasQuote = p.cotacao > 0;
+                    const mark = quoteRun.marks[p.description];
+                    const weight = totalValue > 0 ? (p.value / totalValue) * 100 : 0;
+                    const hist = open ? investments.filter((i) => i.description === p.description && (i.category || "Outro") === p.category).sort((a, b) => (b.date || "").localeCompare(a.date || "")) : [];
+                    const quoteInput = (
+                      <input className="cell-input ac-input" type="number" inputMode="decimal" aria-label={(p.isQty ? "Cotação de " : "Valor atual de ") + p.description}
+                        value={cotacoes[p.description] ?? ""} placeholder={p.isQty ? p.avg.toFixed(2) : p.cost.toFixed(2)} onChange={(e) => setCotacao(p.description, e.target.value)} />
+                    );
                     return (
-                      <React.Fragment key={g.cat}>
-                        <tr className="group"><td colSpan="1" className="grp-name"><span className="legend-dot" style={{ background: invCatMeta(g.cat).color, display: "inline-block", marginRight: 8 }} />{g.cat}</td><td className="hide-sm" colSpan="3" /><td className="num mono">{fmtBRL(sub)}</td><td className="hide-sm" /><td className="num hide-sm mono">{pctOf(sub)}</td></tr>
-                        {g.items.map((p) => (
-                          <tr key={p.key}>
-                            <td><span className="asset-cell"><span className="tile sm" style={{ background: p.meta.color + "1f", color: p.meta.color }}>{initialsOf(p.description)}</span><span><b>{p.description}</b><span className="cell-sub">{p.assetName || p.category}</span><input className="cell-input show-sm" type="number" inputMode="decimal" value={cotacoes[p.description] ?? ""} placeholder={p.isQty ? "cotação " + p.avg.toFixed(2) : "valor atual"} onChange={(e) => setCotacao(p.description, e.target.value)} /></span></span></td>
-                            <td className="num mono hide-sm">{p.isQty ? Number(p.qty.toFixed(4)) : "—"}</td>
-                            <td className="num mono hide-sm">{p.isQty ? fmtBRL(p.avg) : "—"}</td>
-                            <td className="num hide-sm"><input className="cell-input" type="number" inputMode="decimal" value={cotacoes[p.description] ?? ""} placeholder={p.isQty ? p.avg.toFixed(2) : p.cost.toFixed(2)} onChange={(e) => setCotacao(p.description, e.target.value)} /></td>
-                            <td className="num"><span className="mono">{fmtBRL(p.value)}</span><span className={`pill show-sm ${p.profit >= 0 ? "up" : "down"}`} style={{ marginTop: 4 }}>{signPct(p.profitPct)}</span></td>
-                            <td className="num hide-sm"><span className={`pill ${p.profit >= 0 ? "up" : "down"}`}>{signPct(p.profitPct)}</span></td>
-                            <td className="num mono hide-sm">{pctOf(p.value)}</td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
+                      <article key={p.key} className={`asset-card ${open ? "open" : ""}`} data-asset={p.description}>
+                        <button className="ac-top" aria-expanded={open} onClick={() => setOpenKey(open ? null : p.key)}>
+                          <span className="tile sm" style={{ background: p.meta.color + "1f", color: p.meta.color }}>{initialsOf(p.description)}</span>
+                          <span className="ac-id"><b>{p.description}</b><span>{p.assetName || p.category}</span></span>
+                          <span className="ac-val">
+                            <b className="mono">{fmtBRL(p.value)}</b>
+                            {hasQuote ? <span className={`pill ${p.profit >= 0 ? "up" : "down"}`}>{signPct(p.profitPct)}</span> : <span className="pill flat">sem cotação</span>}
+                          </span>
+                          <span className="ac-chev"><IconChevronDown size={18} /></span>
+                        </button>
+                        <div className={`ac-stats ${p.isQty ? "" : "three"}`}>
+                          {p.isQty ? (
+                            <>
+                              <div className="ac-stat"><span>Quantidade</span><b className="mono" title={fmtQty(p.qty)}>{fmtQty(p.qty)}</b></div>
+                              <div className="ac-stat"><span>Preço médio</span><b className="mono" title={fmtBRL(p.avg)}>{fmtBRL(p.avg)}</b></div>
+                              <div className="ac-stat"><span>Cotação (R$)</span>{quoteInput}</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="ac-stat"><span>Investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
+                              <div className="ac-stat"><span>Valor atual (R$)</span>{quoteInput}</div>
+                            </>
+                          )}
+                          <div className="ac-stat"><span>Resultado</span><b className="mono" style={hasQuote ? { color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" } : null}>{hasQuote ? sgn(p.profit) + " " + fmtBRL(Math.abs(p.profit)) : "—"}</b></div>
+                        </div>
+                        <div className="ac-weight"><i style={{ width: `${Math.min(100, Math.max(weight, 1))}%`, background: p.meta.color }} /></div>
+                        <div className="ac-foot">
+                          <span>{pctOf(p.value)} da carteira</span>
+                          {mark && <span className={`qmark ${mark}`}>{mark === "ok" ? "cotação atualizada" : mark === "token" ? "precisa de token" : "sem retorno"}</span>}
+                        </div>
+                        {open && (
+                          <div className="ac-more">
+                            {p.isQty && <div className="kv-line"><span>Quantidade</span><b className="mono">{fmtQty(p.qty)}</b></div>}
+                            {p.isQty && <div className="kv-line"><span>Preço médio</span><b className="mono">{fmtBRL(p.avg)}</b></div>}
+                            <div className="kv-line"><span>Total investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
+                            <div className="kv-line"><span>Valor atual</span><b className="mono">{fmtBRL(p.value)}</b></div>
+                            {Math.abs(p.realized) > 0.005 && <div className="kv-line"><span>Resultado de vendas</span><b className="mono" style={{ color: p.realized >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(p.realized)} {fmtBRL(Math.abs(p.realized))}</b></div>}
+                            <div className="ac-hist-title">{hist.length} {hist.length === 1 ? "lançamento" : "lançamentos"}</div>
+                            {hist.map((i) => {
+                              const sell = i.tipo === "venda" || Number(i.amount) < 0;
+                              return (
+                                <div key={i.id} className="ac-hist">
+                                  <span className="ah-date">{fmtDatePt(i.date)}</span>
+                                  <span className="ah-kind" style={{ color: i.posicaoInicial ? "var(--text-dim)" : sell ? "var(--brick)" : "var(--teal)" }}>{i.posicaoInicial ? "Posição inicial" : sell ? "Venda" : "Compra"}</span>
+                                  <span className="ah-qty mono">{i.qty > 0 ? `${fmtQty(i.qty)} × ${fmtBRL(i.price)}` : ""}</span>
+                                  <b className="mono">{fmtBRL(Math.abs(i.amount))}</b>
+                                </div>
+                              );
+                            })}
+                            <div className="ac-actions">
+                              <button className="btn btn-primary sm" onClick={() => startTrade(p, "compra")}>Comprar mais</button>
+                              <button className="btn btn-ghost sm" onClick={() => startTrade(p, "venda")}>Vender</button>
+                            </div>
+                          </div>
+                        )}
+                      </article>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="table-note">Para lançamentos sem quantidade (ex.: “Ações (geral)” ou renda fixa), digite na coluna Cotação o valor atual total.</div>
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
 
