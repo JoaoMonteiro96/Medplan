@@ -1209,8 +1209,9 @@ const NAV_ALL = NAV_MAIN.concat(NAV_MORE);
 
 // ================= Nuvem (Supabase) =================
 const SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
-// Projeto padrão (opcional). Também dá para conectar pela tela Configurações, sem mexer no código.
-const CLOUD_DEFAULT = { url: "", key: "" };
+// Projeto padrão: quem abre o link já encontra a tela de criar conta, sem precisar colar endereço e chave.
+// A chave "publishable" é pública por natureza; quem protege os dados é a regra do banco (cada conta só lê e grava as próprias linhas).
+const CLOUD_DEFAULT = { url: "https://hhqxkizvcgnohklztkef.supabase.co", key: "sb_publishable_-UA-2TWP5dNL3NLhMjdRhQ_LcT7DWRV" };
 const CLOUD_CFG_KEY = "mediplan-cloud-config";
 const CLOUD_SKIP_KEY = "mediplan-cloud-skip";
 const OWNER_KEY = "mediplan-owner";
