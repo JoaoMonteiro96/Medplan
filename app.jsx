@@ -827,7 +827,7 @@ const PAGE_TITLES = {
   investimentos: ["Investimentos", "Carteira, distribuição e rentabilidade"],
   metas: ["Metas", "Acompanhe seus objetivos financeiros"],
   visao: ["Relatórios", "Comparativos e ganho por hora"],
-  contabilidade: ["Contabilidade", "Como a PJ paga os tributos"],
+  contabilidade: ["Contabilidade", "Quanto a sua PJ paga de imposto"],
   backup: ["Configurações", "Conta, nuvem, tributação e backup"],
   importar: ["Importar", "Extrato, fatura do cartão e planilhas da B3"],
 };
@@ -1582,8 +1582,13 @@ function App() {
     const map = {};
     monthShifts.forEach((s) => { const d = Number(s.date.split("-")[2]); (map[d] = map[d] || []).push({ ...s, _kind: "plantao" }); });
     monthPresencas.forEach((p) => { const d = Number(p.date.split("-")[2]); (map[d] = map[d] || []).push({ ...p, _kind: "presenca" }); });
+    // escala fixa dos vínculos mensais; uma presença lançada no dia substitui a escala daquele vínculo
+    vinculos.forEach((v) => escalaDoMes(v, viewYear, viewMonth).forEach((e) => {
+      if (monthPresencas.some((p) => p.vinculoId === v.id && p.date === e.date)) return;
+      (map[e.day] = map[e.day] || []).push({ ...e, hours: e.off ? 0 : e.hours, previsto: e.hours, _kind: "escala" });
+    }));
     return map;
-  }, [monthShifts, monthPresencas]);
+  }, [monthShifts, monthPresencas, vinculos, viewYear, viewMonth]);
 
   const goMonth = (y, m) => { setViewYear(y); setViewMonth(m); setSelectedDay(null); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} };
   const quickGo = (kind) => {
@@ -1609,6 +1614,7 @@ function App() {
       v.diaRecebimento = Number(data.diaRecebimento) || 5;
       v.startMonth = data.startMonth || monthKey;
       v.recebidoMonths = {};
+      if (Array.isArray(data.escala) && data.escala.length) v.escala = data.escala;
     }
     setVinculos((prev) => [...prev, v]);
     return v.id;
@@ -1621,6 +1627,13 @@ function App() {
   const updateVinculoPrazo = (id, val) => setVinculos((prev) => prev.map((v) => v.id === id ? (v.tipo === "mensal" ? { ...v, prazoMeses: Number(val) || 0 } : { ...v, prazoPadrao: Number(val) || 0 }) : v));
   const updateExtraPrazo = (id, val) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, prazoMeses: Number(val) || 0 } : e));
   const updateShiftPrazo = (id, val) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, prazoDias: Number(val) || 0, payDate: addDaysIso(s.date, Number(val) || 0) } : s));
+  const updateVinculoEscala = (id, escala) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, escala } : v));
+  const toggleEscalaOff = (id, date) => setVinculos((prev) => prev.map((v) => {
+    if (v.id !== id) return v;
+    const off = { ...(v.escalaOff || {}) };
+    if (off[date]) delete off[date]; else off[date] = true;
+    return { ...v, escalaOff: off };
+  }));
   const updateVinculoTax = (id, val) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, taxOverride: val === "" ? null : Number(val) } : v));
   const toggleVinculoMensalRecebido = (id, mk) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, recebidoMonths: { ...v.recebidoMonths, [mk]: !(v.recebidoMonths && v.recebidoMonths[mk]) } } : v));
 
@@ -1776,6 +1789,11 @@ function App() {
     const mensalSemHoras = [];
     vinculos.forEach((v) => {
       if (v.tipo !== "mensal") return;
+      // horas da escala fixa, menos os dias marcados como não trabalhados e os que têm presença lançada
+      escalaDoMes(v, y, m).forEach((e) => {
+        if (e.off || presencas.some((p) => p.vinculoId === v.id && p.date === e.date && Number(p.hours) > 0)) return;
+        const s = slot(v.id, v); s.hours += e.hours; s.turnos += 1; dias.add(e.date);
+      });
       const o = by[v.id];
       if (o && o.hours > 0) o.net += netOf(v.valorMensal, v.taxOverride);
       else if (v.startMonth <= mk) mensalSemHoras.push(v.nome);
@@ -1800,7 +1818,7 @@ function App() {
     const net = inc.reduce((a, i) => a + i.net, 0);
     const expTotal = exp.reduce((a, i) => a + i.amount, 0);
     const w = workStats(y, m);
-    return { net, expTotal, invested: inv, hours: hrs, leftover: net - expTotal - inv, hourly: w.hourly, workHours: w.hours, workHourly: w.hourly };
+    return { net, expTotal, invested: inv, hours: Math.max(hrs, w.hours), leftover: net - expTotal - inv, hourly: w.hourly, workHours: w.hours, workHourly: w.hourly };
   };
   const history12 = (() => {
     const arr = [];
@@ -1893,6 +1911,8 @@ function App() {
   const workAll = (() => {
     if (chartScope !== "all") return workCur;
     const keys = new Set(); shifts.concat(presencas).forEach((x) => { if (x.date) keys.add(x.date.slice(0, 7)); });
+    const fim = monthKeyOf(new Date().getFullYear(), new Date().getMonth());
+    vinculos.forEach((v) => { if (v.tipo !== "mensal" || !(v.escala || []).length || !v.startMonth) return; for (let k = v.startMonth, n = 0; k <= fim && n < 240; k = shiftMonthKey(k, 1), n++) keys.add(k); });
     let hours = 0, net = 0;
     keys.forEach((k) => { const [yy, mm] = k.split("-").map(Number); const w = workStats(yy, mm - 1); hours += w.hours; net += w.net; });
     return { hours, net, hourly: hours > 0 ? net / hours : 0 };
@@ -1954,7 +1974,7 @@ function App() {
           const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += netOf(x.gross, v.taxOverride); o.h += Number(x.hours);
         });
         vinculos.filter((v) => v.tipo === "mensal" && v.startMonth <= monthKeyOf(y, m)).forEach((v) => {
-          const h = presencas.filter((p) => p.vinculoId === v.id && inMonth(p.date, y, m)).reduce((a, p) => a + Number(p.hours || 0), 0);
+          const h = (workStats(y, m).byVinculo.find((o) => o.id === v.id) || { hours: 0 }).hours;
           if (h <= 0) return;
           const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += netOf(v.valorMensal, v.taxOverride); o.h += h;
         });
@@ -3146,6 +3166,27 @@ function App() {
           .wr-main > b { font-size: 28px; } .wr-bar { height: 70px; }
           #contab-form .form-grid { grid-template-columns: 1fr; } .cmp-grid { grid-template-columns: 1fr; }
         }
+
+        /* ================= v14: escala fixa e contabilidade simples ================= */
+        .chip.sm { padding: 6px 10px; font-size: 12px; }
+        .escala-ed { margin-top: 6px; } .escala-slot { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+        .escala-row { display: flex; align-items: flex-end; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        .escala-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-dim); flex: 1; min-width: 110px; }
+        .escala-row select, .escala-row input { font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); min-height: 38px; width: 100%; }
+        .escala-add { display: flex; gap: 8px; flex-wrap: wrap; }
+        .escala-line { padding: 4px 0 12px 19px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text-dim); }
+        .escala-line .subtle-link { padding: 2px 0; }
+        .cal-dot.esc { border-radius: 2px; } .cal-dot.off { opacity: .3; }
+        .stub-card.off { opacity: .7; } .stub-card.off .stub-hospital { text-decoration: line-through; }
+        .ct-q { margin-bottom: 18px; } .ct-q > b { display: block; font-size: 15px; margin-bottom: 8px; } .ct-q .field { max-width: 360px; }
+        .ct-mais { margin: 0; } .ct-mais summary { font-size: 13px; color: #475569; }
+        .ct-frase { font-size: 17px; line-height: 1.45; margin: 0 0 14px; color: var(--text); } .ct-frase b { font-weight: 700; white-space: nowrap; }
+        .ct-bar { display: flex; height: 16px; border-radius: 999px; overflow: hidden; background: var(--surface-3); gap: 2px; } .ct-bar i { display: block; height: 100%; transform-origin: left center; animation: growX .7s cubic-bezier(.2,.8,.2,1) .12s backwards; }
+        .ct-leg { margin-top: 10px; } .ct-leg > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; } .ct-leg > div:last-child { border-bottom: none; font-weight: 700; }
+        .ct-leg span { display: inline-flex; align-items: center; gap: 8px; } .ct-leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+        .ct-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .ct-item > div b { display: block; font-size: 14.5px; } .ct-item small { display: block; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; margin-top: 2px; } .ct-item > b { font-size: 15px; flex-shrink: 0; }
+        .ct-details > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: #475569; list-style-position: inside; } .ct-details[open] > summary { margin-bottom: 8px; }
       `}</style>
 
       <div className="main">
@@ -3190,7 +3231,7 @@ function App() {
             expanded={expanded} toggleSection={toggleSection} viewMonth={viewMonth} monthKey={monthKey}
             monthIncomeItems={monthIncomeItems}
             totalGross={totalGross} totalNet={totalNet}
-            vinculos={vinculos} addVinculo={addVinculo} removeVinculo={removeVinculo} updateVinculoTax={updateVinculoTax} updateVinculoPrazo={updateVinculoPrazo}
+            vinculos={vinculos} addVinculo={addVinculo} removeVinculo={removeVinculo} updateVinculoTax={updateVinculoTax} updateVinculoPrazo={updateVinculoPrazo} updateVinculoEscala={updateVinculoEscala}
             extraRecurringIncomes={extraRecurringIncomes} addExtraRecurringIncome={addExtraRecurringIncome} removeExtraRecurringIncome={removeExtraRecurringIncome} updateExtraPrazo={updateExtraPrazo}
             netByVinculo={netByVinculo} gainScope={gainScope} setGainScope={setGainScope} history12={history12}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth}
@@ -3202,7 +3243,7 @@ function App() {
             cells={cells} entriesByDay={entriesByDay} selectedDay={selectedDay} setSelectedDay={setSelectedDay}
             viewYear={viewYear} viewMonth={viewMonth} vinculos={vinculos} addVinculo={addVinculo}
             addShift={addShift} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
-            addPresenca={addPresenca} removePresenca={removePresenca}
+            addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff}
             vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab}
           />
         )}
@@ -3292,11 +3333,12 @@ function VinculoForm({ onSubmit, defaultStartMonth }) {
   const [diaRecebimento, setDiaRecebimento] = useState(5);
   const [prazoPadrao, setPrazoPadrao] = useState(0);
   const [prazoMeses, setPrazoMeses] = useState(0);
+  const [escala, setEscala] = useState([]);
 
   const submit = () => {
     if (!nome) return;
-    onSubmit({ nome, cor, tipo, taxOverride, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, startMonth: defaultStartMonth });
-    setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0);
+    onSubmit({ nome, cor, tipo, taxOverride, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, startMonth: defaultStartMonth });
+    setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0); setEscala([]);
   };
 
   return (
@@ -3315,6 +3357,7 @@ function VinculoForm({ onSubmit, defaultStartMonth }) {
           <>
             <div className="field"><label>Valor mensal bruto (R$)</label><input type="number" value={valorMensal} onChange={(e) => setValorMensal(e.target.value)} placeholder="0,00" /></div>
             <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}><label>Escala fixa da semana (opcional)</label><EscalaEditor value={escala} onChange={setEscala} /></div>
           </>
         )}
         <div className="field" style={{ gridColumn: "1 / -1" }}>
@@ -3330,15 +3373,17 @@ function VinculoForm({ onSubmit, defaultStartMonth }) {
   );
 }
 
-function VinculoManager({ vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, monthKey }) {
+function VinculoManager({ vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, monthKey }) {
   const [showForm, setShowForm] = useState(vinculos.length === 0);
+  const [editEscala, setEditEscala] = useState(null);
   return (
     <div>
       {vinculos.length === 0 ? (
         <div className="empty-state">Nenhum vínculo cadastrado ainda. Crie o primeiro para começar a lançar plantões ou renda mensal fixa.</div>
       ) : (
         vinculos.map((v) => (
-          <div className="vinculo-row" key={v.id}>
+          <React.Fragment key={v.id}>
+          <div className="vinculo-row" style={v.tipo === "mensal" ? { borderBottom: "none" } : null}>
             <div className="vinculo-left">
               <span className="color-dot" style={{ background: v.cor }} />
               <span className="hospital-name">{v.nome}</span>
@@ -3355,6 +3400,14 @@ function VinculoManager({ vinculos, addVinculo, removeVinculo, updateVinculoTax,
               <button className="btn-icon" onClick={() => { if (window.confirm(`Remover o vínculo "${v.nome}"? Os lançamentos associados também serão removidos.`)) removeVinculo(v.id); }}><IconTrash size={15} /></button>
             </div>
           </div>
+          {v.tipo === "mensal" && (
+            <div className="escala-line" data-escala={v.nome}>
+              <span>{(v.escala || []).length ? "Escala fixa: " + escalaResumo(v) : "Sem escala fixa. As horas deste vínculo não entram na rentabilidade."}</span>{" "}
+              <button className="subtle-link" onClick={() => setEditEscala(editEscala === v.id ? null : v.id)}>{editEscala === v.id ? "Fechar" : (v.escala || []).length ? "Editar escala" : "Definir escala"}</button>
+              {editEscala === v.id && <EscalaEditor value={v.escala || []} onChange={(e) => updateVinculoEscala(v.id, e)} />}
+            </div>
+          )}
+          </React.Fragment>
         ))
       )}
       {showForm ? <VinculoForm onSubmit={(d) => { addVinculo(d); setShowForm(false); }} defaultStartMonth={monthKey} />
@@ -3409,7 +3462,7 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
 
 function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
-  vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
+  vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
   netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard
 }) {
   const [manage, setManage] = useState(vinculos.length === 0);
@@ -3474,7 +3527,7 @@ function FaturamentoTab({
         {manage && (
           <>
             <div className="sub-heading" style={{ marginTop: 0 }}>Vínculos de trabalho</div>
-            <VinculoManager vinculos={vinculos} addVinculo={addVinculo} removeVinculo={removeVinculo} updateVinculoTax={updateVinculoTax} updateVinculoPrazo={updateVinculoPrazo} monthKey={monthKey} />
+            <VinculoManager vinculos={vinculos} addVinculo={addVinculo} removeVinculo={removeVinculo} updateVinculoTax={updateVinculoTax} updateVinculoPrazo={updateVinculoPrazo} updateVinculoEscala={updateVinculoEscala} monthKey={monthKey} />
             <div className="sub-heading">Outras receitas recorrentes</div>
             <ExtraIncomeManager extraRecurringIncomes={extraRecurringIncomes} addExtraRecurringIncome={addExtraRecurringIncome} removeExtraRecurringIncome={removeExtraRecurringIncome} updateExtraPrazo={updateExtraPrazo} monthKey={monthKey} />
           </>
@@ -3803,7 +3856,7 @@ function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCale
             </>
           )}
           {cur.semHoras > 0 && <div className="wr-note">{cur.semHoras} {cur.semHoras === 1 ? "plantão sem horas ficou" : "plantões sem horas ficaram"} fora da conta ({fmtBRL(cur.semHorasNet)}). Informe as horas no Calendário para incluir.</div>}
-          {!compact && cur.mensalSemHoras.length > 0 && <div className="wr-note">Sem horas lançadas em {monthName.toLowerCase()}: {cur.mensalSemHoras.join(", ")}. Lance as presenças no Calendário para incluir {cur.mensalSemHoras.length === 1 ? "esse vínculo" : "esses vínculos"}.</div>}
+          {!compact && cur.mensalSemHoras.length > 0 && <div className="wr-note">Sem horas lançadas em {monthName.toLowerCase()}: {cur.mensalSemHoras.join(", ")}. Defina a escala fixa em “Vínculos e receitas fixas”, no fim desta página, ou lance as horas no Calendário.</div>}
           {!compact && <div className="field-hint">A conta divide o valor líquido dos plantões e dos vínculos com horas lançadas pelas horas trabalhadas no mês, mesmo que o pagamento caia depois.</div>}
         </>
       )}
@@ -3811,15 +3864,71 @@ function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCale
   );
 }
 
-// Contabilidade: como a PJ paga os tributos no Simples Nacional e no Lucro Presumido
+// ---- Escala fixa de vínculos mensais (diarismo, meio turno): gera horas e aparece no calendário ----
+const TURNOS = { manha: "Manhã", tarde: "Tarde", noite: "Noite", dia: "Dia todo" };
+const DIAS_SEM = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const ORDEM_SEM = [1, 2, 3, 4, 5, 6, 0];
+function escalaDoMes(v, y, m) {
+  if (!v || v.tipo !== "mensal" || !Array.isArray(v.escala) || v.escala.length === 0) return [];
+  if (v.startMonth && v.startMonth > monthKeyOf(y, m)) return [];
+  const out = [], n = new Date(y, m + 1, 0).getDate(), off = v.escalaOff || {};
+  for (let d = 1; d <= n; d++) {
+    const wd = new Date(y, m, d).getDay(), date = dateStr(y, m, d);
+    v.escala.forEach((s) => { if ((s.dias || []).includes(wd) && Number(s.horas) > 0) out.push({ id: "esc-" + v.id + "-" + s.id + "-" + date, slotId: s.id, vinculoId: v.id, date, day: d, turno: s.turno, hours: Number(s.horas), off: !!off[date] }); });
+  }
+  return out;
+}
+function escalaDiasTxt(dias) {
+  const d = ORDEM_SEM.filter((x) => (dias || []).includes(x));
+  if (d.length === 0) return "sem dias";
+  const key = d.join(",");
+  if (key === "1,2,3,4,5") return "Seg a Sex";
+  if (key === "6,0") return "Sáb e Dom";
+  if (d.length === 7) return "Todos os dias";
+  return d.map((x) => DIAS_SEM[x]).join(", ");
+}
+const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}`).join("  |  ");
+const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + (s.dias || []).length * (Number(s.horas) || 0), 0);
+
+function EscalaEditor({ value, onChange }) {
+  const list = value || [];
+  const upd = (id, patch) => onChange(list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const add = (dias) => onChange([...list, { id: uid(), dias, turno: "manha", horas: 6 }]);
+  return (
+    <div className="escala-ed">
+      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Sem escala. Adicione os horários que se repetem toda semana, como “Seg a Sex de manhã”.</div>}
+      {list.map((s) => (
+        <div key={s.id} className="escala-slot">
+          <div className="chip-row" role="group" aria-label="Dias da semana">
+            {ORDEM_SEM.map((d) => { const on = (s.dias || []).includes(d); return (
+              <button key={d} type="button" className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { dias: on ? s.dias.filter((x) => x !== d) : [...(s.dias || []), d] })}>{DIAS_SEM[d]}</button>
+            ); })}
+          </div>
+          <div className="escala-row">
+            <label>Turno<select value={s.turno} onChange={(e) => upd(s.id, { turno: e.target.value })}>{Object.keys(TURNOS).map((k) => <option key={k} value={k}>{TURNOS[k]}</option>)}</select></label>
+            <label>Horas por dia<input type="number" inputMode="decimal" min="0" step="0.5" value={s.horas} onChange={(e) => upd(s.id, { horas: e.target.value })} /></label>
+            <button type="button" className="btn-icon" aria-label="Remover horário" onClick={() => onChange(list.filter((x) => x.id !== s.id))}><IconTrash size={15} /></button>
+          </div>
+        </div>
+      ))}
+      <div className="escala-add">
+        <button type="button" className="btn btn-ghost sm" onClick={() => add([1, 2, 3, 4, 5])}><IconPlus size={14} /> Seg a Sex</button>
+        <button type="button" className="btn btn-ghost sm" onClick={() => add([6, 0])}><IconPlus size={14} /> Fim de semana</button>
+        <button type="button" className="btn btn-ghost sm" onClick={() => add([])}><IconPlus size={14} /> Outros dias</button>
+      </div>
+      {list.length > 0 && <div className="field-hint">Cerca de {fmtHoras(escalaHorasSemana(list))} por semana. Essas horas entram no Calendário e na rentabilidade do trabalho.</div>}
+    </div>
+  );
+}
+
+// Contabilidade: porcentagem fixa ou cálculo simples dos impostos da PJ, com a conta detalhada à parte
 function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   const set = (k, v) => setContab((p) => ({ ...p, [k]: v }));
-  const setApplied = () => {};
   const usaContab = contab.modo === "contab";
   const p = { receitaMes: numOf(contab.receitaMes), rbt12: numOf(contab.rbt12), proLabore: numOf(contab.proLabore), folha: numOf(contab.folha), issPct: numOf(contab.issPct), hospitalar: !!contab.hospitalar, contador: numOf(contab.contador) };
   const simples = calcSimples(p), presumido = calcPresumido(p);
   const isS = contab.regime !== "presumido";
-  const res = isS ? simples : presumido;
+  const res = isS ? simples : presumido, outro = isS ? presumido : simples;
   const has = p.receitaMes > 0;
   const pct = (n, d = 2) => (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
   const plAlvo = proLaboreParaFatorR(p);
@@ -3827,14 +3936,31 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   const ganhoFatorR = simples.anexo === "V" ? simples.total - alt.total : alt.total - simples.total;
   const dif = Math.abs(simples.total - presumido.total);
   const menor = simples.total <= presumido.total ? "simples" : "presumido";
+  const val = (id) => (res.itens.find((i) => i.id === id) || { valor: 0 }).valor;
   const num = (k, label, hint, extra) => (
     <div className="field">
       <label htmlFor={"ct-" + k}>{label}</label>
-      <input id={"ct-" + k} type="number" inputMode="decimal" value={contab[k]} onChange={(e) => { set(k, e.target.value); setApplied(null); }} placeholder="0,00" />
+      <input id={"ct-" + k} type="number" inputMode="decimal" value={contab[k]} onChange={(e) => set(k, e.target.value)} placeholder="0,00" />
       {extra}
       {hint && <div className="field-hint">{hint}</div>}
     </div>
   );
+  // lista em linguagem simples: o que é pago, quando e quanto
+  const simplesLista = (isS
+    ? [["DAS", "A guia única da empresa no Simples. Vence todo dia 20.", val("das")]]
+    : [["Imposto sobre o lucro (IRPJ e CSLL)", "Pago a cada 3 meses. Aqui aparece a parte de um mês, para você reservar.", val("irpj") + val("adicional") + val("csll")],
+       ["PIS e Cofins", "Pagos todo mês, até o dia 25.", val("pis") + val("cofins")],
+       ["ISS", "Imposto da prefeitura sobre o serviço.", val("iss")],
+       ["INSS da empresa", "20% sobre o seu pró-labore e os salários.", val("cpp")]]
+  ).concat([
+    ["FGTS dos funcionários", "8% sobre os salários.", val("fgts")],
+    ["INSS do sócio", "Conta para a sua aposentadoria. Sai do seu pró-labore.", val("inss")],
+    ["Imposto de renda do pró-labore", "Também sai do seu pró-labore.", val("irrf")],
+  ]).filter((x) => x[2] > 0.004);
+  const outros = res.folha + res.contador;
+  const fica = Math.max(0, res.liquidoSocio);
+  const partes = [["Impostos", res.total, "var(--brick)"], ["Funcionários e contador", outros, "#94A3B8"], ["Fica com você", fica, "var(--teal)"]].filter((x) => x[1] > 0.004);
+  const somaPartes = partes.reduce((a, x) => a + x[1], 0) || 1;
   const linha = (i) => (
     <div key={i.id} className="tax-row" data-tax={i.id}>
       <div className="tax-l">
@@ -3847,7 +3973,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
     </div>
   );
   const col = (r, nome, id) => (
-    <div className={`cmp-col ${menor === id ? "best" : ""} ${contab.regime === id || (id === "simples" && isS) ? "sel" : ""}`} data-regime={id}>
+    <div className={`cmp-col ${menor === id ? "best" : ""} ${(id === "simples") === isS ? "sel" : ""}`} data-regime={id}>
       <div className="cmp-head"><b>{nome}</b>{menor === id && dif >= 0.01 ? <span className="badge badge-paid" style={{ cursor: "default" }}>menor carga</span> : null}</div>
       <div className="kv-line"><span>Tributos da empresa</span><b className="mono">{fmtBRL(r.empresa)}</b></div>
       <div className="kv-line"><span>Descontos do sócio</span><b className="mono">{fmtBRL(r.socio)}</b></div>
@@ -3858,27 +3984,22 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   );
   const modoCard = (
     <div className="card" id="contab-modo">
-      <div className="card-head"><h3 className="card-title">Como informar a tributação</h3></div>
-      <div className="segmented" role="group" aria-label="Forma de informar a tributação">
+      <div className="card-head"><h3 className="card-title">Como informar o imposto</h3></div>
+      <div className="segmented" role="group" aria-label="Forma de informar o imposto">
         <button className={`seg-btn ${!usaContab ? "active" : ""}`} onClick={() => set("modo", "fixa")}>Porcentagem fixa</button>
-        <button className={`seg-btn ${usaContab ? "active" : ""}`} onClick={() => set("modo", "contab")}>Calcular pela contabilidade</button>
+        <button className={`seg-btn ${usaContab ? "active" : ""}`} onClick={() => set("modo", "contab")}>Calcular para mim</button>
       </div>
       {!usaContab ? (
         <>
           <p className="regime-desc">Você informa uma porcentagem única, e o app desconta esse valor de cada plantão e vínculo sem alíquota própria.</p>
           <div className="field" style={{ maxWidth: 260 }}>
-            <label htmlFor="ct-fixa">Tributação geral (%)</label>
+            <label htmlFor="ct-fixa">Imposto sobre o que você recebe (%)</label>
             <input id="ct-fixa" type="number" inputMode="decimal" step="0.1" min="0" max="100" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value === "" ? "" : Math.min(100, Math.max(0, Number(e.target.value))))} />
           </div>
-          <div className="field-hint">Use a porcentagem que seu contador informou ou a que você costuma pagar. Para ver como ela é formada no Simples Nacional ou no Lucro Presumido, escolha “Calcular pela contabilidade”.</div>
+          <div className="field-hint">Use a porcentagem que o seu contador informou. Se quiser que o app estime esse número a partir do faturamento da empresa, escolha “Calcular para mim”.</div>
         </>
       ) : (
-        <>
-          <p className="regime-desc" style={{ marginBottom: 6 }}>O app calcula a carga a partir do regime e dos dados da empresa, e usa esse resultado como tributação geral.</p>
-          <div className={`quote-msg ${has ? "ok" : "warn"}`} role="status" style={{ marginBottom: 0 }}>
-            {has ? `Tributação geral em uso: ${pct(res.carga)}, calculada pela simulação abaixo.` : `Informe o faturamento do mês para o cálculo começar. Até lá, o app continua usando ${pct(Number(taxRateGeral) || 0)}.`}
-          </div>
-        </>
+        <p className="regime-desc" style={{ marginBottom: 0 }}>Responda às 3 perguntas abaixo. O app estima os impostos da empresa e passa a usar esse resultado para calcular o valor líquido dos seus plantões.</p>
       )}
     </div>
   );
@@ -3886,142 +4007,139 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   return (
     <div>
       {modoCard}
-      <div className="note-info">Simulação com as regras de 2026, para entender como o imposto da PJ é formado. Os valores são estimativas e não substituem o contador.</div>
 
       <div className="card" id="contab-form">
-        <div className="card-head"><h3 className="card-title">Regime e dados da empresa</h3></div>
-        <div className="segmented" role="group" aria-label="Regime tributário">
-          <button className={`seg-btn ${isS ? "active" : ""}`} onClick={() => { set("regime", "simples"); setApplied(null); }}>Simples Nacional</button>
-          <button className={`seg-btn ${!isS ? "active" : ""}`} onClick={() => { set("regime", "presumido"); setApplied(null); }}>Lucro Presumido</button>
+        <div className="card-head"><h3 className="card-title">Sobre a sua empresa</h3></div>
+        <div className="ct-q">
+          <b>1. Como a empresa paga imposto?</b>
+          <div className="segmented" role="group" aria-label="Regime tributário">
+            <button className={`seg-btn ${isS ? "active" : ""}`} onClick={() => set("regime", "simples")}>Simples Nacional</button>
+            <button className={`seg-btn ${!isS ? "active" : ""}`} onClick={() => set("regime", "presumido")}>Lucro Presumido</button>
+          </div>
+          <div className="field-hint" style={{ marginTop: 0 }}>{isS ? "No Simples, a empresa paga uma guia única por mês, o DAS." : "No Lucro Presumido, a empresa paga vários impostos separados, com alíquotas fixas."} Se não souber qual é o seu, pergunte ao contador.</div>
         </div>
-        <p className="regime-desc">
-          {isS
-            ? "No Simples, a empresa paga uma guia única por mês, o DAS. A alíquota depende do faturamento dos últimos 12 meses e do Fator R, que compara a folha (pró-labore e salários) com o faturamento."
-            : "No Lucro Presumido, cada tributo tem a sua guia. O governo presume que uma parte fixa do faturamento é lucro (32% para serviços) e cobra IRPJ e CSLL sobre ela, além de PIS, Cofins, ISS e INSS patronal."}
-        </p>
-        <div className="form-grid">
-          {num("receitaMes", "Faturamento bruto do mês (R$)", null,
-            app.mesBruto > 0 ? <button type="button" className="link-btn" onClick={() => { set("receitaMes", String(r2(app.mesBruto))); setApplied(null); }}>Usar {fmtBRL(app.mesBruto)} de {app.mesLabel}, lançados no app</button> : null)}
-          {num("rbt12", "Faturamento dos últimos 12 meses (R$)", "Em branco, a simulação usa 12 vezes o faturamento do mês.",
-            app.rbt12 > 0 ? <button type="button" className="link-btn" onClick={() => { set("rbt12", String(r2(app.rbt12))); setApplied(null); }}>Usar {fmtBRL(app.rbt12)} do app ({app.meses} de 12 meses com dados)</button> : null)}
-          {num("proLabore", "Pró-labore mensal (R$)", "É a remuneração do sócio pelo trabalho. O restante sai como distribuição de lucros.")}
-          {num("folha", "Salários de funcionários (R$ por mês)", "Deixe em branco se não tiver funcionários.")}
-          {!isS && num("issPct", "ISS da sua cidade (%)", "Varia de 2% a 5%, conforme o município.")}
-          {num("contador", "Honorários do contador (R$ por mês)", "Opcional. Não é tributo, mas reduz a sobra.")}
+        <div className="ct-q">
+          <b>2. Quanto a empresa recebe por mês?</b>
+          {num("receitaMes", "Valor total das notas do mês (R$)", null,
+            app.mesBruto > 0 ? <button type="button" className="link-btn" onClick={() => set("receitaMes", String(r2(app.mesBruto)))}>Usar {fmtBRL(app.mesBruto)} de {app.mesLabel}, lançados no app</button> : null)}
         </div>
-        {!isS && (
-          <label className="ct-check">
-            <input type="checkbox" checked={!!contab.hospitalar} onChange={(e) => { set("hospitalar", e.target.checked); setApplied(null); }} />
-            <span>Minha empresa tem equiparação hospitalar (lucro presumido de 8% no IRPJ e 12% na CSLL)<small>Vale só para serviços hospitalares de sociedade empresária que segue as normas da Anvisa. Consultas não entram. Confirme com o contador.</small></span>
-          </label>
-        )}
-        {app.mesBruto > 0 && <div className="field-hint">O faturamento sugerido soma todos os vínculos lançados no app. Ajuste se algum deles não for recebido pela PJ.</div>}
+        <div className="ct-q">
+          <b>3. Quanto você retira de pró-labore por mês?</b>
+          {num("proLabore", "Pró-labore (R$)", "É o seu “salário” como sócio, definido com o contador. O resto do que sobra na empresa você retira como lucro.")}
+        </div>
+        <details className="cfg ct-mais">
+          <summary>Mais opções (não são obrigatórias)</summary>
+          <div className="form-grid" style={{ marginTop: 10 }}>
+            {num("rbt12", "Faturamento dos últimos 12 meses (R$)", "Em branco, o app usa 12 vezes o valor do mês.",
+              app.rbt12 > 0 ? <button type="button" className="link-btn" onClick={() => set("rbt12", String(r2(app.rbt12)))}>Usar {fmtBRL(app.rbt12)} do app ({app.meses} de 12 meses com dados)</button> : null)}
+            {num("folha", "Salários de funcionários (R$ por mês)", "Deixe em branco se não tiver funcionários.")}
+            {!isS && num("issPct", "ISS da sua cidade (%)", "Varia de 2% a 5%, conforme o município.")}
+            {num("contador", "Mensalidade do contador (R$)", "Não é imposto, mas reduz o que sobra.")}
+          </div>
+          {!isS && (
+            <label className="ct-check">
+              <input type="checkbox" checked={!!contab.hospitalar} onChange={(e) => set("hospitalar", e.target.checked)} />
+              <span>Minha empresa tem equiparação hospitalar<small>Reduz o imposto sobre o lucro. Vale só para serviços hospitalares de empresas que cumprem regras específicas; consultas não entram. Confirme com o contador.</small></span>
+            </label>
+          )}
+        </details>
       </div>
 
       {!has ? (
-        <div className="card"><div className="empty-state">Informe o faturamento do mês para ver quanto a empresa paga e como cada tributo é calculado.</div></div>
+        <div className="card"><div className="empty-state">Informe quanto a empresa recebe por mês para ver o resultado. Até lá, o app continua usando {pct(Number(taxRateGeral) || 0)}.</div></div>
       ) : (
         <>
-          <div className="kpi-row">
-            <Kpi label="Tributos no mês" num={res.total} sub={isS ? "Simples Nacional" : "Lucro Presumido"} />
-            <Kpi label="Carga sobre o faturamento" num={res.carga} fmt={(n) => pct(n)} tone="var(--brick)" sub={pct(res.cargaEmpresa) + " pela empresa"} />
-            <Kpi label="Lucro disponível na PJ" num={res.lucro} tone={res.lucro >= 0 ? "var(--teal)" : "var(--brick)"} sub="depois de tributos e pró-labore" />
-            <Kpi label="Sobra para o sócio" num={res.liquidoSocio} sub="pró-labore líquido + lucro" />
+          <div className="card" id="contab-resumo">
+            <div className="card-head"><h3 className="card-title">Resultado</h3><span className="card-note">estimativa por mês</span></div>
+            <p className="ct-frase">De cada <b>R$ 100</b> que a empresa recebe, cerca de <b style={{ color: "var(--brick)" }}>{fmtBRL(res.carga)}</b> vão para impostos.</p>
+            <div className="ct-bar" role="img" aria-label={partes.map((x) => `${x[0]}: ${fmtBRL(x[1])}`).join("; ")}>
+              {partes.map((x) => <i key={x[0]} style={{ width: `${(x[1] / somaPartes) * 100}%`, background: x[2] }} />)}
+            </div>
+            <div className="ct-leg">
+              {partes.map((x) => <div key={x[0]}><span><i style={{ background: x[2] }} />{x[0]}</span><b className="mono">{fmtBRL(x[1])}</b></div>)}
+            </div>
+            <div className="quote-msg ok" role="status" style={{ margin: "14px 0 0" }}>O app passou a usar {pct(res.carga)} como imposto dos seus plantões e vínculos.</div>
           </div>
 
-          {p.proLabore <= 0 && <div className="note-warn">Sócio que trabalha na empresa precisa retirar pró-labore. O valor mínimo é o salário mínimo, de {fmtBRL(SALARIO_MINIMO_2026)}.</div>}
+          {p.proLabore <= 0 && <div className="note-warn">Informe o pró-labore. Sócio que trabalha na empresa precisa retirar pelo menos um salário mínimo ({fmtBRL(SALARIO_MINIMO_2026)}).</div>}
           {p.proLabore > 0 && p.proLabore < SALARIO_MINIMO_2026 && <div className="note-warn">O pró-labore informado está abaixo do salário mínimo, de {fmtBRL(SALARIO_MINIMO_2026)}.</div>}
-          {isS && simples.faixa.acimaDoLimite && <div className="note-warn">O faturamento de 12 meses passa de R$ 4,8 milhões, o limite do Simples Nacional. Acima dele, a empresa precisa de outro regime.</div>}
-          {!isS && presumido.excedente > 0 && <div className="note-warn">Como o faturamento anual passa de R$ 5 milhões, a simulação aplica o acréscimo de 10% no lucro presumido sobre o excedente (LC 224/2025). Essa regra está em discussão na Justiça.</div>}
+          {isS && simples.faixa.acimaDoLimite && <div className="note-warn">O faturamento de 12 meses passa de R$ 4,8 milhões, o limite do Simples Nacional.</div>}
+
+          <div className="card" id="contab-lista">
+            <div className="card-head"><h3 className="card-title">O que é pago todo mês</h3></div>
+            {simplesLista.map((x) => (
+              <div key={x[0]} className="ct-item"><div><b>{x[0]}</b><small>{x[1]}</small></div><b className="mono">{fmtBRL(x[2])}</b></div>
+            ))}
+            <div className="tax-total"><span>Total de impostos</span><b className="mono">{fmtBRL(res.total)}</b></div>
+            {res.retencaoLucros > 0 && <div className="note-warn" style={{ marginTop: 12, marginBottom: 0 }}>O lucro do mês passa de R$ 50 mil. Desde 2026, retiradas de lucro acima desse valor podem ter 10% de imposto de renda retido, cerca de {fmtBRL(res.retencaoLucros)} neste caso. Esse valor não está somado acima. Fale com o contador.</div>}
+          </div>
 
           {isS && (
-            <div className="card" id="contab-passos">
-              <div className="card-head"><h3 className="card-title">Como o DAS é calculado</h3><span className="card-note">Anexo {simples.anexo}</span></div>
-              <ol className="ct-steps">
-                <li>
-                  <b>Fator R: {pct(simples.fatorR * 100)}</b>
-                  <span className="mono">{fmtBRL(simples.folha12)} de folha em 12 meses ÷ {fmtBRL(simples.rbt12)} de faturamento</span>
-                  <div className="fr-track"><i style={{ width: `${Math.min(100, (simples.fatorR / 0.5) * 100)}%`, background: simples.fatorR >= FATOR_R_MIN ? "var(--teal)" : "var(--gold)" }} /><em style={{ left: "56%" }}>28%</em></div>
-                  <span>{simples.fatorR >= FATOR_R_MIN ? "Com 28% ou mais, serviços médicos são tributados pelo Anexo III, de alíquotas menores." : "Abaixo de 28%, serviços médicos são tributados pelo Anexo V, de alíquotas maiores."}</span>
-                </li>
-                <li>
-                  <b>{simples.faixa.faixa}ª faixa do Anexo {simples.anexo}</b>
-                  <span>Faturamento de 12 meses de até {fmtBRL(simples.faixa.limite)}: alíquota nominal de {pct(simples.faixa.nominal, 1)} e parcela a deduzir de {fmtBRL(simples.faixa.deduz)}.</span>
-                </li>
-                <li>
-                  <b>Alíquota efetiva: {pct(simples.faixa.efetiva)}</b>
-                  <span className="mono">({fmtBRL(simples.rbt12)} × {pct(simples.faixa.nominal, 1)} − {fmtBRL(simples.faixa.deduz)}) ÷ {fmtBRL(simples.rbt12)}</span>
-                </li>
-                <li>
-                  <b>DAS do mês: {fmtBRL(simples.itens[0].valor)}</b>
-                  <span className="mono">{fmtBRL(simples.receita)} × {pct(simples.faixa.efetiva)}</span>
-                </li>
-              </ol>
-            </div>
-          )}
-
-          {isS && (
-            <div className="card" id="contab-fator">
-              <div className="card-head"><h3 className="card-title">Fator R e pró-labore</h3></div>
+            <div className="card" id="contab-dica">
+              <div className="card-head"><h3 className="card-title">Dá para pagar menos?</h3></div>
               {simples.anexo === "V" ? (
-                <>
-                  <p className="regime-desc" style={{ marginTop: 0 }}>Para chegar a 28% e passar ao Anexo III, o pró-labore precisaria ser de <b className="mono">{fmtBRL(Math.max(plAlvo, p.proLabore))}</b> por mês, mantendo o faturamento atual.</p>
-                  <div className="cmp-grid">
-                    <div className="cmp-col"><div className="cmp-head"><b>Hoje (Anexo V)</b></div><div className="kv-line"><span>DAS</span><b className="mono">{fmtBRL(simples.itens[0].valor)}</b></div><div className="kv-line"><span>INSS e IRRF do sócio</span><b className="mono">{fmtBRL(simples.socio)}</b></div><div className="kv-line total"><span>Total</span><b className="mono">{fmtBRL(simples.total)}</b></div></div>
-                    <div className="cmp-col"><div className="cmp-head"><b>Com esse pró-labore (Anexo III)</b></div><div className="kv-line"><span>DAS</span><b className="mono">{fmtBRL(alt.itens[0].valor)}</b></div><div className="kv-line"><span>INSS e IRRF do sócio</span><b className="mono">{fmtBRL(alt.socio)}</b></div><div className="kv-line total"><span>Total</span><b className="mono">{fmtBRL(alt.total)}</b></div></div>
-                  </div>
-                  <div className={`quote-msg ${ganhoFatorR > 0 ? "ok" : "warn"}`} style={{ marginTop: 12, marginBottom: 0 }}>
-                    {ganhoFatorR > 0
-                      ? `Nesta simulação, o total cairia ${fmtBRL(ganhoFatorR)} por mês (${fmtBRL(ganhoFatorR * 12)} por ano). O DAS diminui, mas o INSS e o IRRF sobre o pró-labore aumentam.`
-                      : `Nesta simulação, subir o pró-labore não reduz o total: o INSS e o IRRF a mais superam a economia no DAS em ${fmtBRL(Math.abs(ganhoFatorR))} por mês.`}
-                  </div>
-                </>
+                ganhoFatorR > 0
+                  ? <p className="regime-desc" style={{ margin: 0 }}>Talvez. Hoje a empresa cai na tabela mais cara do Simples, porque o pró-labore é baixo perto do faturamento. Com pró-labore de <b className="mono">{fmtBRL(Math.max(plAlvo, p.proLabore))}</b>, ela passaria para a tabela mais barata, e o total de impostos cairia cerca de <b className="mono" style={{ color: "var(--teal)" }}>{fmtBRL(ganhoFatorR)}</b> por mês. Leve esse número ao seu contador antes de mudar.</p>
+                  : <p className="regime-desc" style={{ margin: 0 }}>Nesta simulação, não. A empresa está na tabela mais cara do Simples, mas subir o pró-labore para mudar de tabela custaria mais em INSS e imposto de renda do que a economia.</p>
               ) : (
-                <>
-                  <p className="regime-desc" style={{ marginTop: 0 }}>O Fator R está em {pct(simples.fatorR * 100)}, então a empresa fica no Anexo III. O pró-labore mínimo para manter os 28% é de <b className="mono">{fmtBRL(plAlvo)}</b> por mês.</p>
-                  <div className="quote-msg ok" style={{ marginBottom: 0 }}>Se o Fator R caísse abaixo de 28%, o DAS passaria de {fmtBRL(simples.itens[0].valor)} para {fmtBRL(alt.itens[0].valor)} por mês, pelo Anexo V.</div>
-                </>
+                <p className="regime-desc" style={{ margin: 0 }}>A empresa já está na tabela mais barata do Simples. Para continuar nela, o pró-labore precisa ficar em pelo menos <b className="mono">{fmtBRL(plAlvo)}</b> por mês. Abaixo disso, o DAS subiria de {fmtBRL(simples.itens[0].valor)} para {fmtBRL(alt.itens[0].valor)}.</p>
               )}
-              <div className="field-hint" style={{ marginTop: 10 }}>O cálculo oficial usa a folha e o faturamento dos 12 meses anteriores. Aqui, a folha é o pró-labore e os salários atuais multiplicados por 12.</div>
             </div>
           )}
 
-          <div className="card" id="contab-tributos">
-            <div className="card-head"><h3 className="card-title">Tributo por tributo</h3><span className="card-note">{isS ? "Simples Nacional" : "Lucro Presumido"}</span></div>
-            <div className="tax-group">Pagos pela empresa<b className="mono">{fmtBRL(res.empresa)}</b></div>
-            {res.itens.filter((i) => i.quem === "empresa").map(linha)}
-            <div className="tax-group">Descontados do pró-labore do sócio<b className="mono">{fmtBRL(res.socio)}</b></div>
-            {res.itens.filter((i) => i.quem === "socio").map(linha)}
-            <div className="tax-total"><span>Total no mês</span><b className="mono">{fmtBRL(res.total)}</b></div>
-            {!isS && <div className="field-hint">IRPJ e CSLL são apurados por trimestre. Aqui aparecem divididos por mês, para você reservar o valor.</div>}
-            {res.retencaoLucros > 0 && (
-              <div className="note-warn" style={{ marginTop: 12, marginBottom: 0 }}>
-                O lucro disponível passa de R$ 50 mil no mês. Desde 2026, lucros pagos acima desse valor a um mesmo sócio têm retenção de 10% de imposto de renda sobre o total, cerca de {fmtBRL(res.retencaoLucros)} neste caso (Lei 15.270/2025). {isS ? "Para empresas do Simples, essa retenção é discutida. " : ""}O valor não está somado ao total acima.
+          <div className="card" id="contab-outro">
+            <div className="card-head"><h3 className="card-title">E no outro regime?</h3></div>
+            <p className="regime-desc" style={{ margin: 0 }}>
+              No {isS ? "Lucro Presumido" : "Simples Nacional"}, com os mesmos dados, os impostos seriam de <b className="mono">{fmtBRL(outro.total)}</b> por mês{dif < 0.01 ? ", o mesmo valor." : <>: <b className="mono" style={{ color: outro.total > res.total ? "var(--brick)" : "var(--teal)" }}>{fmtBRL(dif)} {outro.total > res.total ? "a mais" : "a menos"}</b>.</>} A troca de regime só costuma ser possível na virada do ano e depende de outros fatores, então decida com o contador.
+            </p>
+          </div>
+
+          <details className="card ct-details" id="contab-detalhe">
+            <summary>Ver a conta detalhada</summary>
+            <div className="ct-details-body">
+              {isS && (
+                <div id="contab-passos">
+                  <div className="wr-sub" style={{ marginTop: 6 }}>Como o DAS é calculado (Anexo {simples.anexo})</div>
+                  <ol className="ct-steps">
+                    <li>
+                      <b>Fator R: {pct(simples.fatorR * 100)}</b>
+                      <span className="mono">{fmtBRL(simples.folha12)} de folha em 12 meses ÷ {fmtBRL(simples.rbt12)} de faturamento</span>
+                      <div className="fr-track"><i style={{ width: `${Math.min(100, (simples.fatorR / 0.5) * 100)}%`, background: simples.fatorR >= FATOR_R_MIN ? "var(--teal)" : "var(--gold)" }} /><em style={{ left: "56%" }}>28%</em></div>
+                      <span>{simples.fatorR >= FATOR_R_MIN ? "Com 28% ou mais, serviços médicos são tributados pelo Anexo III, de alíquotas menores." : "Abaixo de 28%, serviços médicos são tributados pelo Anexo V, de alíquotas maiores."}</span>
+                    </li>
+                    <li><b>{simples.faixa.faixa}ª faixa do Anexo {simples.anexo}</b><span>Faturamento de 12 meses de até {fmtBRL(simples.faixa.limite)}: alíquota nominal de {pct(simples.faixa.nominal, 1)} e parcela a deduzir de {fmtBRL(simples.faixa.deduz)}.</span></li>
+                    <li><b>Alíquota efetiva: {pct(simples.faixa.efetiva)}</b><span className="mono">({fmtBRL(simples.rbt12)} × {pct(simples.faixa.nominal, 1)} − {fmtBRL(simples.faixa.deduz)}) ÷ {fmtBRL(simples.rbt12)}</span></li>
+                    <li><b>DAS do mês: {fmtBRL(simples.itens[0].valor)}</b><span className="mono">{fmtBRL(simples.receita)} × {pct(simples.faixa.efetiva)}</span></li>
+                  </ol>
+                </div>
+              )}
+              <div id="contab-tributos">
+                <div className="wr-sub">Tributo por tributo ({isS ? "Simples Nacional" : "Lucro Presumido"})</div>
+                <div className="tax-group">Pagos pela empresa<b className="mono">{fmtBRL(res.empresa)}</b></div>
+                {res.itens.filter((i) => i.quem === "empresa").map(linha)}
+                <div className="tax-group">Descontados do pró-labore do sócio<b className="mono">{fmtBRL(res.socio)}</b></div>
+                {res.itens.filter((i) => i.quem === "socio").map(linha)}
+                <div className="tax-total"><span>Total no mês</span><b className="mono">{fmtBRL(res.total)}</b></div>
+                {!isS && presumido.excedente > 0 && <div className="field-hint">Como o faturamento anual passa de R$ 5 milhões, a conta aplica o acréscimo de 10% no lucro presumido sobre o excedente (LC 224/2025), regra em discussão na Justiça.</div>}
               </div>
-            )}
-          </div>
-
-          <div className="card" id="contab-comparar">
-            <div className="card-head"><h3 className="card-title">Comparação entre os regimes</h3><span className="card-note">mesmos dados</span></div>
-            <div className="cmp-grid">{col(simples, "Simples Nacional", "simples")}{col(presumido, "Lucro Presumido", "presumido")}</div>
-            <div className="quote-msg" style={{ marginTop: 12, marginBottom: 0 }}>
-              {dif < 0.01 ? "Nesta simulação, os dois regimes dão o mesmo total." : `Nesta simulação, o ${menor === "simples" ? "Simples Nacional" : "Lucro Presumido"} paga ${fmtBRL(dif)} a menos por mês (${fmtBRL(dif * 12)} por ano).`} Em regra, o regime só pode ser trocado na virada do ano, e a escolha depende de fatores que o simulador não cobre. O Lucro Real não entra na comparação.
+              <div id="contab-comparar">
+                <div className="wr-sub">Comparação entre os regimes</div>
+                <div className="cmp-grid">{col(simples, "Simples Nacional", "simples")}{col(presumido, "Lucro Presumido", "presumido")}</div>
+              </div>
+              <div id="contab-notas">
+                <div className="wr-sub">O que a conta considera</div>
+                <ul className="notes">
+                  <li>Regras de 2026: tabelas dos Anexos III e V do Simples, tabela mensal do IRRF e teto do INSS de {fmtBRL(INSS_TETO_2026)}.</li>
+                  <li>O Fator R é estimado com o pró-labore e os salários atuais multiplicados por 12. O cálculo oficial usa os 12 meses anteriores.</li>
+                  <li>No Lucro Presumido, IRPJ e CSLL são trimestrais e aparecem divididos por mês. O lucro presumido acima de R$ 20 mil por mês paga adicional de 10% de IRPJ.</li>
+                  <li>Ficam de fora: ISS fixo de sociedade de profissionais, retenções feitas na nota fiscal, encargos de terceiros sobre salários, dependentes no IRRF, o Lucro Real e os novos tributos da reforma tributária (CBS e IBS).</li>
+                </ul>
+              </div>
             </div>
-          </div>
-
+          </details>
         </>
       )}
-
-      <div className="card" id="contab-notas">
-        <div className="card-head"><h3 className="card-title">O que a simulação considera</h3></div>
-        <ul className="notes">
-          <li>Regras de 2026: tabelas dos Anexos III e V do Simples, tabela mensal do IRRF e teto do INSS de {fmtBRL(INSS_TETO_2026)}.</li>
-          <li>O sócio paga 11% de INSS sobre o pró-labore, até o teto. Quem já contribui pelo teto em outro vínculo pode ter desconto menor.</li>
-          <li>No Lucro Presumido, o lucro que passa de R$ 20 mil por mês paga adicional de 10% de IRPJ.</li>
-          <li>Ficam de fora: ISS fixo de sociedade de profissionais, retenções feitas na nota fiscal, encargos de terceiros sobre salários, dependentes no IRRF e os novos tributos da reforma tributária (CBS e IBS).</li>
-          <li>Outras formas existem, como o Lucro Real e o recebimento como pessoa física, e não entram na simulação.</li>
-        </ul>
-      </div>
+      <div className="footnote" style={{ margin: "4px 0 0", padding: 0, textAlign: "left" }}>Os valores são estimativas com as regras de 2026, para dar uma ideia do custo. Eles não substituem o seu contador.</div>
     </div>
   );
 }
@@ -4237,7 +4355,7 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
 }
 
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
-  addShift, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab }) {
+  addShift, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff }) {
   const [vinculoId, setVinculoId] = useState(vinculos[0] ? vinculos[0].id : "");
   const [gross, setGross] = useState("");
   const [hours, setHours] = useState("");
@@ -4275,7 +4393,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
       <div className="kpi-row three">
         <Kpi label="Plantões" value={nPlantoes} />
         <Kpi label="Horas no mês" value={totHoras.toFixed(0) + "h"} />
-        <Kpi label="Dias trabalhados" value={Object.keys(entriesByDay).length} />
+        <Kpi label="Dias trabalhados" value={Object.values(entriesByDay).filter((l) => l.some((e) => !e.off)).length} />
       </div>
       <div className="calendar-grid">
         {WEEKDAYS_PT.map((w, i) => <div key={i} className="weekday-label">{w}</div>)}
@@ -4288,9 +4406,9 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
             <div key={idx} className={`cal-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}`} onClick={() => setSelectedDay(day)}>
               <span className="cal-day-num mono">{day}</span>
               {dEntries.length > 0 && (
-                <div className="cal-dots">{dEntries.slice(0, 4).map((e) => { const v = vinculoMap[e.vinculoId]; return <span key={e.id} className="cal-dot" style={{ background: v ? v.cor : GOLD }} />; })}</div>
+                <div className="cal-dots">{dEntries.slice(0, 4).map((e) => { const v = vinculoMap[e.vinculoId]; return <span key={e.id} className={`cal-dot ${e._kind === "escala" ? "esc" : ""} ${e.off ? "off" : ""}`} style={{ background: v ? v.cor : GOLD }} />; })}</div>
               )}
-              {dEntries.length > 0 && <span className="cal-hours">{dEntries.reduce((a, e) => a + Number(e.hours || 0), 0)}h</span>}
+              {dEntries.some((e) => !e.off) && <span className="cal-hours">{fmtHoras(dEntries.reduce((a, e) => a + Number(e.hours || 0), 0))}</span>}
             </div>
           );
         })}
@@ -4324,6 +4442,18 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                     </select></div>
                   <div className="stub-row"><span className="k">Cai no caixa em</span><span className="v mono">{fmtDatePt(payDateOf(e))}</span></div>
                   <div className="stub-row"><span className="k">Pagamento</span><button className={`badge ${e.recebido ? "badge-paid" : "badge-pending"}`} onClick={() => toggleShiftReceived(e.id)}>{e.recebido ? "Recebido" : "Não recebido"}</button></div>
+                </div>
+              );
+            }
+            if (e._kind === "escala") {
+              return (
+                <div key={e.id} className={`stub-card ${e.off ? "off" : ""}`} data-escala-dia={v ? v.nome : ""}>
+                  <div className="stub-head"><span className="stub-hospital"><span className="color-dot" style={{ background: v ? v.cor : SLATE }} /><IconClock size={14} /> {v ? v.nome : "?"} ({(TURNOS[e.turno] || "").toLowerCase()}, escala fixa)</span></div>
+                  <div className="stub-tear" />
+                  <div className="stub-row"><span className="k">Horas previstas</span><span className="v mono">{e.off ? "não trabalhado" : fmtHoras(e.previsto)}</span></div>
+                  <div className="stub-row"><span className="k">Pagamento</span><span className="v" style={{ color: "var(--text-dim)" }}>via renda mensal fixa deste vínculo</span></div>
+                  <div className="stub-row"><span className="k">{e.off ? "Este dia não conta nas horas" : "Não trabalhou neste dia?"}</span><button className="btn btn-ghost sm" onClick={() => toggleEscalaOff(e.vinculoId, e.date)}>{e.off ? "Voltar a contar" : "Não trabalhei"}</button></div>
+                  {!e.off && <div className="field-hint">Trabalhou outro número de horas? Lance as horas deste vínculo abaixo: elas substituem a escala neste dia.</div>}
                 </div>
               );
             }
