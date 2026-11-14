@@ -4225,7 +4225,7 @@ function plantaoDatas(inicio, rep, meses) {
     return out.length ? out : [inicio];
   }
   const passo = 7 * Math.max(1, Number(rep) || 1);
-  for (let iso = inicio; iso < fim && out.length < 120; iso = addDaysIso(iso, passo)) out.push(iso);
+  for (let iso = inicio; iso < fim && out.length < 320; iso = addDaysIso(iso, passo)) out.push(iso);
   return out;
 }
 // Semanas contadas de segunda a domingo, para o sábado e o domingo do mesmo fim de semana ficarem juntos
@@ -4607,20 +4607,6 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         </div>
       )}
 
-      {pending.length > 0 && (
-        <div className="card steps">
-          <div className="card-head"><h3 className="card-title">Comece por aqui</h3><span className="card-note">{4 - pending.length} de 4</span></div>
-          <div className="lim-bar" style={{ marginTop: 0 }}><div style={{ width: ((4 - pending.length) / 4) * 100 + "%", background: TEAL }} /></div>
-          {steps.map((st, i) => (
-            <div key={i} className={`step-line ${st.done ? "done" : ""}`}>
-              <span className="step-dot">{st.done ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg> : i + 1}</span>
-              <div className="step-main"><div className="step-title">{st.label}</div></div>
-              {!st.done && <button className="btn btn-ghost sm" onClick={st.go}>{st.cta}</button>}
-            </div>
-          ))}
-        </div>
-      )}
-
       <div className="balance-card">
         <div className="bc-top">Saldo em caixa</div>
         <div className="bc-value mono" style={saldoRealizado < 0 ? { color: "var(--brick)" } : null}><CountUp value={saldoRealizado} /></div>
@@ -4789,7 +4775,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   const [modo, setModo] = useState("plantao");
   const [local, setLocal] = useState("");
   const [rep, setRep] = useState("nao");
-  const [repMeses, setRepMeses] = useState(3);
+  const [repMeses, setRepMeses] = useState(60);
   const [fixoId, setFixoId] = useState("");
   const plLocais = vinculos.filter((v) => v.tipo === "plantao");
   const fixos = vinculos.filter((v) => v.tipo === "mensal");
@@ -4944,10 +4930,6 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                   </div>
                   {rep !== "nao" && (
                     <>
-                      <div className="escala-q">Por quanto tempo?</div>
-                      <div className="chip-row" role="group" aria-label="Duração">
-                        {[1, 3, 6, 12].map((n) => <button key={n} type="button" data-meses={n} className={`chip sm ${repMeses === n ? "active" : ""}`} aria-pressed={repMeses === n} onClick={() => setRepMeses(n)}>{n === 1 ? "1 mês" : n + " meses"}</button>)}
-                      </div>
                       <div className="escala-prox" id="pl-resumo">Serão lançados <b>{datas.length} plantões</b>{rep === "mes" ? ` (${ordemTxt(diaIso)})` : ""}: {datas.slice(0, 4).map((d) => fmtDatePt(d).slice(0, 5)).join(", ")}{datas.length > 4 ? ` … até ${fmtDatePt(datas[datas.length - 1])}` : ""}. Depois dá para apagar ou ajustar cada um.</div>
                     </>
                   )}
