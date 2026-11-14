@@ -1814,6 +1814,20 @@ function App() {
     setVinculos((prev) => prev.map((v) => v.id === vinculoId ? { ...v, prazoPadrao: prazo } : v));
   };
   const removeShift = (id) => setShifts((prev) => prev.filter((s) => s.id !== id));
+  // Plantão lançado direto pelo nome do local: o local é criado na hora se ainda não existir. Várias datas = plantão que se repete (uma série)
+  const addPlantao = ({ local, gross, hours, prazoDias, datas }) => {
+    const nome = String(local || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!nome || !datas || !datas.length) return null;
+    const prazo = Math.max(0, Number(prazoDias) || 0), chave = stripAcc(nome);
+    const ja = vinculos.find((v) => v.tipo === "plantao" && stripAcc(v.nome).replace(/\s+/g, " ").trim() === chave);
+    const vid = ja ? ja.id : uid();
+    if (ja) setVinculos((prev) => prev.map((v) => (v.id === vid ? { ...v, prazoPadrao: prazo } : v)));
+    else setVinculos((prev) => [...prev, { id: vid, nome, cor: PALETTE[prev.length % PALETTE.length], tipo: "plantao", taxOverride: null, prazoPadrao: prazo }]);
+    const serie = datas.length > 1 ? uid() : null, base = uid();
+    setShifts((prev) => [...prev, ...datas.map((date, n) => ({ id: base + "-" + n, date, vinculoId: vid, gross: Number(gross) || 0, hours: Number(hours) || 0, recebido: false, prazoDias: prazo, payDate: addDaysIso(date, prazo), ...(serie ? { serie } : {}) }))]);
+    return vid;
+  };
+  const removeShiftSerie = (serie, desde) => setShifts((prev) => prev.filter((s) => !(s.serie && s.serie === serie && s.date >= desde)));
   const toggleShiftReceived = (id) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, recebido: !s.recebido } : s));
   const addPresenca = (day, vinculoId, hours) => {
     setPresencas((prev) => [...prev, { id: uid(), date: dateStr(viewYear, viewMonth, day), vinculoId, hours: Number(hours) || 0 }]);
@@ -3419,6 +3433,12 @@ function App() {
         .xl-grp-c { color: var(--text-dim); font-size: 12px; } .xl-grp-bar { height: 4px; background: var(--surface-3); margin: 0 10px 8px; border-radius: 999px; overflow: hidden; } .xl-grp-bar i { display: block; height: 100%; border-radius: 999px; }
         .xl-it { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--border); font-size: 13px; } .xl-it span:first-child { color: var(--text-dim); font-size: 12px; } .xl-it-d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .fat-box { display: flex; flex-direction: column; gap: 4px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; padding: 12px 14px; margin: 10px 0 12px; font-size: 13px; } .fat-box > span { color: var(--text-dim); } .fat-box input:not([type=checkbox]) { background: #fff; }
+        .choice em { font-style: normal; font-size: 11px; font-weight: 700; color: #166534; background: #DCFCE7; border-radius: 999px; padding: 1px 8px; align-self: flex-start; }
+        #day-modo { display: flex; margin-bottom: 0; } #day-modo .seg-btn { flex: 1; }
+        .pl-chips { margin-top: 8px; } .pl-chips .chip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .pl-rep { border-top: 1px dashed var(--border); margin: 4px 0 12px; padding-top: 10px; } .pl-rep .escala-q:first-child { margin-top: 0; }
+        .add-box input[type=text], .add-box input:not([type]) { background: #fff; }
+        .serie-tag { font-size: 10.5px; font-weight: 700; color: #1D4ED8; background: #DBEAFE; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
       `}</style>
 
       <div className="main">
@@ -3474,7 +3494,7 @@ function App() {
           <CalendarTab
             cells={cells} entriesByDay={entriesByDay} selectedDay={selectedDay} setSelectedDay={setSelectedDay}
             viewYear={viewYear} viewMonth={viewMonth} vinculos={vinculos} addVinculo={addVinculo}
-            addShift={addShift} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
+            addShift={addShift} addPlantao={addPlantao} removeShiftSerie={removeShiftSerie} shifts={shifts} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
             addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff}
             vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab}
           />
@@ -3557,10 +3577,10 @@ function SectionShell({ icon, iconBg, title, subtitle, expanded, onToggle, child
   );
 }
 
-function VinculoForm({ onSubmit, defaultStartMonth }) {
+function VinculoForm({ onSubmit, defaultStartMonth, fixo }) {
   const [nome, setNome] = useState("");
   const [cor, setCor] = useState(PALETTE[0]);
-  const [tipo, setTipo] = useState("plantao");
+  const [tipo, setTipo] = useState(fixo ? "mensal" : "plantao");
   const [taxOverride, setTaxOverride] = useState("");
   const [valorMensal, setValorMensal] = useState("");
   const [diaRecebimento, setDiaRecebimento] = useState(5);
@@ -3579,12 +3599,12 @@ function VinculoForm({ onSubmit, defaultStartMonth }) {
       <div className="form-grid">
         <div className="field"><label>Nome do vínculo</label><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Hospital São Lucas, UTI Municipal..." /></div>
         <div className="field color-field"><label>Cor</label><div className="color-input-wrap"><input type="color" value={cor} onChange={(e) => setCor(e.target.value)} /></div></div>
-        <div className="field"><label>Tipo</label>
+        {!fixo && <div className="field"><label>Tipo</label>
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
             <option value="plantao">Plantão avulso (lançado no calendário)</option>
-            <option value="mensal">Vínculo mensal fixo (diarista, contrato...)</option>
+            <option value="mensal">Cargo fixo com salário mensal (diarista, contrato...)</option>
           </select>
-        </div>
+        </div>}
         <div className="field"><label>Tributação específica (%) — opcional</label><input type="number" value={taxOverride} onChange={(e) => setTaxOverride(e.target.value)} placeholder="usa a geral" /></div>
         {tipo === "mensal" && (
           <>
@@ -3601,7 +3621,7 @@ function VinculoForm({ onSubmit, defaultStartMonth }) {
           <div className="field-hint">{tipo === "mensal" ? "Ex.: “1 mês depois” significa que o trabalho de outubro entra no caixa em novembro." : "Você ainda poderá ajustar o prazo de cada plantão na hora de lançar."}</div>
         </div>
       </div>
-      <button className="btn btn-primary" onClick={submit}><IconPlus size={15} /> Salvar vínculo</button>
+      <button className="btn btn-primary" onClick={submit}><IconPlus size={15} /> {fixo ? "Salvar cargo fixo" : "Salvar vínculo"}</button>
     </div>
   );
 }
@@ -4183,10 +4203,44 @@ function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCale
 const TURNOS = { manha: "Manhã", tarde: "Tarde", noite: "Noite", dia: "Dia todo" };
 const DIAS_SEM = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const ORDEM_SEM = [1, 2, 3, 4, 5, 6, 0];
+// Datas de um plantão que se repete: a cada N semanas ou uma vez por mês (o mesmo dia da semana, na mesma posição do mês)
+const DIA_SEM_NOME = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+function ordemNoMes(iso) { const [y, m, d] = iso.split("-").map(Number); return { wd: new Date(y, m - 1, d).getDay(), n: Math.ceil(d / 7) }; }
+const ordemTxt = (iso) => { const o = ordemNoMes(iso); return `${o.wd === 0 || o.wd === 6 ? "todo" : "toda"} ${o.n}${o.wd === 0 || o.wd === 6 ? "º" : "ª"} ${DIA_SEM_NOME[o.wd]} do mês`.replace("todo 5º", "todo último").replace("toda 5ª", "toda última"); };
+function plantaoDatas(inicio, rep, meses) {
+  if (!inicio || rep === "nao" || !rep) return inicio ? [inicio] : [];
+  const [y, m, d] = inicio.split("-").map(Number), nm = Math.max(1, Number(meses) || 1);
+  const fim = dateStr(y + Math.floor((m - 1 + nm) / 12), (m - 1 + nm) % 12, clampDay(y + Math.floor((m - 1 + nm) / 12), (m - 1 + nm) % 12, d));
+  const out = [];
+  if (rep === "mes") {
+    const o = ordemNoMes(inicio);
+    for (let k = 0; k <= nm; k++) {
+      const yy = y + Math.floor((m - 1 + k) / 12), mm = (m - 1 + k) % 12, ult = new Date(yy, mm + 1, 0).getDate();
+      let dia = 1 + ((o.wd - new Date(yy, mm, 1).getDay() + 7) % 7) + (o.n - 1) * 7;
+      while (dia > ult) dia -= 7;
+      const iso = dateStr(yy, mm, dia);
+      if (iso >= inicio && iso < fim) out.push(iso);
+    }
+    return out.length ? out : [inicio];
+  }
+  const passo = 7 * Math.max(1, Number(rep) || 1);
+  for (let iso = inicio; iso < fim && out.length < 120; iso = addDaysIso(iso, passo)) out.push(iso);
+  return out;
+}
 // Semanas contadas de segunda a domingo, para o sábado e o domingo do mesmo fim de semana ficarem juntos
 const semanaIdx = (iso) => { const [y, m, d] = String(iso).split("-").map(Number); return Math.floor((Date.UTC(y, m - 1, d) / 86400000 - 4) / 7); };
 const slotCada = (s) => { const c = Math.round(Number(s && s.cada) || 1); return c > 1 ? c : 1; };
-const slotNaSemana = (s, iso) => { const c = slotCada(s); if (c === 1 || !s.inicio) return true; return (((semanaIdx(iso) - semanaIdx(s.inicio)) % c) + c) % c === 0; };
+const slotMensal = (s) => !!s && s.cada === "mes";
+const ORD_TXT = { 1: "1º", 2: "2º", 3: "3º", 4: "4º", 5: "último" };
+// Posição, dentro do mês, da semana (segunda a domingo) em que a data cai. Quem manda é o primeiro dia do horário naquela semana (o sábado, num fim de semana).
+function semanaDoMes(dias, iso) {
+  const anc = [1, 2, 3, 4, 5, 6, 0].find((x) => (dias || []).includes(x));
+  if (anc === undefined) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  const a = addDaysIso(addDaysIso(iso, -((new Date(y, m - 1, d).getDay() + 6) % 7)), (anc + 6) % 7);
+  return { n: Math.ceil(Number(a.slice(8, 10)) / 7), ultima: addDaysIso(a, 7).slice(0, 7) !== a.slice(0, 7) };
+}
+const slotNaSemana = (s, iso) => { if (slotMensal(s)) { const w = semanaDoMes(s.dias, iso), o = Number(s.ordem) || 1; return !!w && (o >= 5 ? w.ultima : w.n === o); } const c = slotCada(s); if (c === 1 || !s.inicio) return true; return (((semanaIdx(iso) - semanaIdx(s.inicio)) % c) + c) % c === 0; };
 function escalaProximas(s, n) {
   const out = [], hoje = todayStr();
   for (let k = 0; k < 150 && out.length < n; k++) { const iso = addDaysIso(hoje, k); const [y, m, d] = iso.split("-").map(Number); if ((s.dias || []).includes(new Date(y, m - 1, d).getDay()) && slotNaSemana(s, iso)) out.push(iso); }
@@ -4228,8 +4282,8 @@ function escalaDiasTxt(dias) {
   if (d.length === 7) return "Todos os dias";
   return d.map((x) => DIAS_SEM[x]).join(", ");
 }
-const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}${slotCada(s) > 1 ? ` · ${repTxt(slotCada(s), slotFds(s))}` : ""}`).join("  |  ");
-const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + ((s.dias || []).length * (Number(s.horas) || 0)) / slotCada(s), 0);
+const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}${slotMensal(s) ? ` · 1 vez por mês (${ORD_TXT[Number(s.ordem) || 1]} ${slotFds(s) ? "fim de semana" : "semana"})` : slotCada(s) > 1 ? ` · ${repTxt(slotCada(s), slotFds(s))}` : ""}`).join("  |  ");
+const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + ((s.dias || []).length * (Number(s.horas) || 0)) / (slotMensal(s) ? 4.35 : slotCada(s)), 0);
 
 function EscalaEditor({ value, onChange }) {
   const list = value || [];
@@ -4251,27 +4305,36 @@ function EscalaEditor({ value, onChange }) {
             <button type="button" className="btn-icon" aria-label="Remover horário" onClick={() => onChange(list.filter((x) => x.id !== s.id))}><IconTrash size={15} /></button>
           </div>
           {(() => {
-            const fds = slotFds(s), c = slotCada(s), ops = escalaSemanas(s, Math.max(c, 2));
-            const px = c > 1 ? escalaProximas(s, 4) : [];
+            const fds = slotFds(s), mes = slotMensal(s), c = slotCada(s), ops = escalaSemanas(s, Math.max(c, 2));
+            const px = c > 1 || mes ? escalaProximas(s, 4) : [];
+            const temDias = (s.dias || []).length > 0;
             return (
               <div className="escala-rep" data-rep-box>
                 <div className="escala-q">Com que frequência?</div>
                 <div className="chip-row" role="group" aria-label="Frequência">
                   {[1, 2, 3].map((n) => (
-                    <button key={n} type="button" data-rep={n} className={`chip sm ${c === n ? "active" : ""}`} aria-pressed={c === n}
-                      onClick={() => upd(s.id, n > 1 ? { cada: n, inicio: (c > 1 && s.inicio) ? s.inicio : ((escalaSemanas(s, 1)[0] || {}).inicio || todayStr()) } : { cada: 1 })}>{repTxt(n, fds, true)}</button>
+                    <button key={n} type="button" data-rep={n} className={`chip sm ${!mes && c === n ? "active" : ""}`} aria-pressed={!mes && c === n}
+                      onClick={() => upd(s.id, n > 1 ? { cada: n, inicio: (!mes && c > 1 && s.inicio) ? s.inicio : ((escalaSemanas(s, 1)[0] || {}).inicio || todayStr()) } : { cada: 1 })}>{repTxt(n, fds, true)}</button>
                   ))}
+                  <button type="button" data-rep="mes" className={`chip sm ${mes ? "active" : ""}`} aria-pressed={mes} onClick={() => upd(s.id, { cada: "mes", ordem: Number(s.ordem) || 1 })}>1 vez por mês</button>
                 </div>
-                {c > 1 && (s.dias || []).length > 0 && (
+                {!mes && c > 1 && temDias && (
                   <>
                     <div className="escala-q">{fds ? "Qual é o próximo fim de semana em que você trabalha?" : "Qual é a próxima semana em que você trabalha?"}</div>
                     <div className="chip-row" role="group" aria-label="Próxima vez">
                       {ops.slice(0, c).map((o) => { const on = slotNaSemana(s, o.inicio); return <button key={o.inicio} type="button" data-prox-op={o.inicio} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { inicio: o.inicio })}>{o.label}</button>; })}
                     </div>
-                    <div className="escala-prox" data-prox>{px.length ? "Você trabalha em: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") + "…" : ""}</div>
                   </>
                 )}
-                {c > 1 && (s.dias || []).length === 0 && <div className="escala-prox" data-prox>Escolha os dias da semana acima.</div>}
+                {mes && (
+                  <>
+                    <div className="escala-q">{fds ? "Qual fim de semana do mês?" : "Qual semana do mês?"}</div>
+                    <div className="chip-row" role="group" aria-label="Semana do mês">
+                      {[1, 2, 3, 4, 5].map((o) => { const on = (Number(s.ordem) || 1) === o; return <button key={o} type="button" data-ordem={o} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { ordem: o })}>{o === 5 ? "Último" : ORD_TXT[o]}</button>; })}
+                    </div>
+                  </>
+                )}
+                {(c > 1 || mes) && <div className="escala-prox" data-prox>{!temDias ? "Escolha os dias da semana acima." : px.length ? "Você trabalha em: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") + "…" : ""}</div>}
               </div>
             );
           })()}
@@ -4282,7 +4345,7 @@ function EscalaEditor({ value, onChange }) {
         <button type="button" className="btn btn-ghost sm" onClick={() => add([6, 0])}><IconPlus size={14} /> Fim de semana</button>
         <button type="button" className="btn btn-ghost sm" onClick={() => add([])}><IconPlus size={14} /> Outros dias</button>
       </div>
-      {list.length > 0 && <div className="field-hint">Cerca de {fmtHoras(escalaHorasSemana(list))} por semana{list.some((s) => slotCada(s) > 1) ? ", em média" : ""}. Essas horas entram no Calendário e na rentabilidade do trabalho.</div>}
+      {list.length > 0 && <div className="field-hint">Cerca de {fmtHoras(escalaHorasSemana(list))} por semana{list.some((s) => slotCada(s) > 1 || slotMensal(s)) ? ", em média" : ""}. Essas horas entram no Calendário e na rentabilidade do trabalho.</div>}
     </div>
   );
 }
@@ -4721,39 +4784,41 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
 }
 
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
-  addShift, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff }) {
-  const [vinculoId, setVinculoId] = useState(vinculos[0] ? vinculos[0].id : "");
+  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff }) {
+  const [modo, setModo] = useState("plantao");
+  const [local, setLocal] = useState("");
+  const [rep, setRep] = useState("nao");
+  const [repMeses, setRepMeses] = useState(3);
+  const [fixoId, setFixoId] = useState("");
+  const plLocais = vinculos.filter((v) => v.tipo === "plantao");
+  const fixos = vinculos.filter((v) => v.tipo === "mensal");
+  const fixoSel = fixos.find((v) => v.id === fixoId) || fixos[0] || null;
+  const diaIso = selectedDay ? dateStr(viewYear, viewMonth, selectedDay) : "";
+  const datas = plantaoDatas(diaIso, rep, repMeses);
   const [gross, setGross] = useState("");
   const [hours, setHours] = useState("");
   const [showNewVinculo, setShowNewVinculo] = useState(false);
   const [prazoDias, setPrazoDias] = useState(0);
   const [erro, setErro] = useState("");
-  useEffect(() => { setErro(""); setShowNewVinculo(false); }, [selectedDay]);
+  useEffect(() => { setErro(""); setShowNewVinculo(false); setRep("nao"); }, [selectedDay]);
   const today = todayStr();
   const dayEntries = selectedDay ? (entriesByDay[selectedDay] || []) : [];
-  const selectedVinculo = vinculoMap[vinculoId];
   const allEntries = Object.values(entriesByDay).flat();
   const nPlantoes = allEntries.filter((e) => e._kind === "plantao").length;
   const totHoras = allEntries.reduce((a, e) => a + Number(e.hours || 0), 0);
   const usedVinc = vinculos.filter((v) => allEntries.some((e) => e.vinculoId === v.id));
 
-  useEffect(() => { if (!vinculoId && vinculos[0]) setVinculoId(vinculos[0].id); }, [vinculos]);
-  // ao trocar de vínculo, sugere o prazo padrão da empresa
-  useEffect(() => {
-    const v = vinculoMap[vinculoId];
-    setPrazoDias(v && v.prazoPadrao ? Number(v.prazoPadrao) : 0);
-  }, [vinculoId]);
-
-  const submit = () => {
-    if (!vinculoId || !selectedVinculo) return;
-    if (selectedVinculo.tipo === "plantao") {
-      if (!(Number(gross) > 0)) { setErro("Informe o valor do plantão."); return; }
-      addShift(selectedDay, vinculoId, gross, hours, prazoDias);
-    } else {
-      if (!(Number(hours) > 0)) { setErro("Informe quantas horas você trabalhou neste dia."); return; }
-      addPresenca(selectedDay, vinculoId, hours);
-    }
-    setGross(""); setHours(""); setErro("");
+  const submitPlantao = () => {
+    if (!String(local).trim()) { setErro("Digite onde foi o plantão."); return; }
+    if (!(Number(gross) > 0)) { setErro("Informe o valor do plantão."); return; }
+    addPlantao({ local, gross, hours, prazoDias, datas });
+    setGross(""); setHours(""); setErro(""); setRep("nao");
+  };
+  const submitFixo = () => {
+    if (!fixoSel) return;
+    if (!(Number(hours) > 0)) { setErro("Informe quantas horas você trabalhou neste dia."); return; }
+    addPresenca(selectedDay, fixoSel.id, hours);
+    setHours(""); setErro("");
   };
 
   return (
@@ -4798,7 +4863,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
             if (e._kind === "plantao") {
               return (
                 <div key={e.id} className="stub-card">
-                  <div className="stub-head"><span className="stub-hospital"><span className="color-dot" style={{ background: v ? v.cor : GOLD }} /><IconBuilding size={14} /> {v ? v.nome : "?"}</span><button className="btn-icon" onClick={() => removeShift(e.id)}><IconTrash size={15} /></button></div>
+                  <div className="stub-head"><span className="stub-hospital"><span className="color-dot" style={{ background: v ? v.cor : GOLD }} /><IconBuilding size={14} /> {v ? v.nome : "?"}{e.serie && <small className="serie-tag">repete</small>}</span><button className="btn-icon" aria-label="Apagar este plantão" onClick={() => removeShift(e.id)}><IconTrash size={15} /></button></div>
                   <div className="stub-tear" />
                   <div className="stub-row"><span className="k">Valor bruto</span><span className="v mono">{fmtBRL(e.gross)}</span></div>
                   <div className="stub-row"><span className="k">Horas trabalhadas</span><span className="v mono">{e.hours || 0}h</span></div>
@@ -4810,6 +4875,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                     </select></div>
                   <div className="stub-row"><span className="k">Cai no caixa em</span><span className="v mono">{fmtDatePt(payDateOf(e))}</span></div>
                   <div className="stub-row"><span className="k">Pagamento</span><button className={`badge ${e.recebido ? "badge-paid" : "badge-pending"}`} onClick={() => toggleShiftReceived(e.id)}>{e.recebido ? "Recebido" : "Não recebido"}</button></div>
+                  {e.serie && (() => { const n = (shifts || []).filter((x) => x.serie === e.serie && x.date > e.date).length; return n > 0 ? <div className="stub-row"><span className="k">Plantão que se repete</span><button type="button" className="link-btn" data-serie-del onClick={() => removeShiftSerie(e.serie, e.date)}>Apagar este e os {n} seguintes</button></div> : null; })()}
                 </div>
               );
             }
@@ -4836,58 +4902,90 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
           })}
 
           <div className="add-box" id="day-add">
-            {showNewVinculo ? (
+            <div className="add-head"><b>Adicionar neste dia</b></div>
+            <div className="segmented" id="day-modo" role="tablist">
+              <button type="button" role="tab" aria-selected={modo === "plantao"} className={`seg-btn ${modo === "plantao" ? "active" : ""}`} data-modo="plantao" onClick={() => { setModo("plantao"); setErro(""); setShowNewVinculo(false); }}>Plantão</button>
+              <button type="button" role="tab" aria-selected={modo === "fixo"} className={`seg-btn ${modo === "fixo" ? "active" : ""}`} data-modo="fixo" onClick={() => { setModo("fixo"); setErro(""); }}>Cargo fixo (diarista)</button>
+            </div>
+            {modo === "plantao" ? (
               <>
-                <div className="add-head"><b>Cadastrar novo local de trabalho</b><button type="button" className="link-btn" id="day-novo-cancel" onClick={() => setShowNewVinculo(false)}>Cancelar</button></div>
-                <p className="add-sub">Você faz isso uma vez só. Depois de salvar, o local entra na lista e você volta para lançar este dia.</p>
-                <VinculoForm onSubmit={(d) => { const id = addVinculo(d); setVinculoId(id); setShowNewVinculo(false); }} defaultStartMonth={monthKeyOf(viewYear, viewMonth)} />
-              </>
-            ) : vinculos.length === 0 ? (
-              <>
-                <div className="add-head"><b>Adicionar neste dia</b></div>
-                <p className="add-sub">Você ainda não cadastrou nenhum local de trabalho (hospital, clínica, UPA). Cadastre o primeiro para lançar plantões e horas.</p>
-                <button className="btn btn-primary" id="day-novo" onClick={() => setShowNewVinculo(true)}><IconPlus size={15} /> Cadastrar local de trabalho</button>
-              </>
-            ) : (
-              <>
-                <div className="add-head"><b>Adicionar neste dia</b></div>
-                <div className="field">
-                  <label>Onde você trabalhou?</label>
-                  <select id="day-vinculo" value={vinculoId} onChange={(e) => { setVinculoId(e.target.value); setErro(""); }}>
-                    {vinculos.map((v) => <option key={v.id} value={v.id}>{v.nome} ({v.tipo === "mensal" ? "cargo fixo" : "plantão"})</option>)}
-                  </select>
-                  <button type="button" className="subtle-link" id="day-novo" onClick={() => { setShowNewVinculo(true); setErro(""); }}>Não está na lista? Cadastrar novo local</button>
-                </div>
-                {selectedVinculo && (
-                  <div className="add-tip" id="day-tip">
-                    {selectedVinculo.tipo === "plantao"
-                      ? "Plantão avulso: informe quanto vai receber por ele. O valor entra no faturamento."
-                      : "Cargo fixo: o salário já entra sozinho todo mês. Aqui você só anota as horas deste dia" + ((selectedVinculo.escala || []).length ? ", e elas substituem a escala fixa nesta data." : ".")}
-                  </div>
-                )}
-                <div className="form-grid" style={{ marginTop: 10 }}>
-                  {selectedVinculo && selectedVinculo.tipo === "plantao" && (
-                    <div className="field"><label>Valor do plantão (R$)</label><input type="number" inputMode="decimal" value={gross} onChange={(e) => { setGross(e.target.value); setErro(""); }} placeholder="0,00" /></div>
-                  )}
-                  {selectedVinculo && selectedVinculo.tipo === "plantao" && (
-                    <div className="field">
-                      <label>Quando você recebe?</label>
-                      <PrazoPicker key={vinculoId + ":" + prazoDias} unit="dias" value={prazoDias} onChange={setPrazoDias} />
-                      {selectedDay && <div className="field-hint">Cairá no caixa em <b>{fmtDatePt(addDaysIso(dateStr(viewYear, viewMonth, selectedDay), prazoDias))}</b></div>}
+                <div className="field" style={{ marginTop: 12 }}>
+                  <label htmlFor="pl-local">Onde foi o plantão?</label>
+                  <input id="pl-local" value={local} onChange={(e) => { setLocal(e.target.value); setErro(""); }} placeholder="Ex.: Hospital São Lucas, UPA Centro" autoComplete="off" />
+                  {plLocais.length > 0 && (
+                    <div className="chip-row pl-chips" role="group" aria-label="Locais já usados">
+                      {plLocais.map((v) => { const on = stripAcc(local).trim() === stripAcc(v.nome).trim(); return <button key={v.id} type="button" data-local={v.nome} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => { setLocal(v.nome); setPrazoDias(Number(v.prazoPadrao) || 0); setErro(""); }}><i style={{ background: v.cor }} />{v.nome}</button>; })}
                     </div>
                   )}
+                  <div className="field-hint">{plLocais.length ? "Toque em um local já usado ou digite um novo. Local novo fica guardado sozinho." : "É só digitar o nome. O local fica guardado para as próximas vezes."}</div>
+                </div>
+                <div className="form-grid" style={{ marginTop: 10 }}>
+                  <div className="field"><label htmlFor="pl-valor">Valor do plantão (R$)</label><input id="pl-valor" type="number" inputMode="decimal" value={gross} onChange={(e) => { setGross(e.target.value); setErro(""); }} placeholder="0,00" /></div>
                   <div className="field">
-                    <label>{selectedVinculo && selectedVinculo.tipo === "plantao" ? "Horas trabalhadas (opcional)" : "Horas trabalhadas neste dia"}</label>
-                    <input type="number" inputMode="decimal" value={hours} onChange={(e) => { setHours(e.target.value); setErro(""); }} placeholder="12" />
+                    <label htmlFor="pl-horas">Horas trabalhadas (opcional)</label>
+                    <input id="pl-horas" type="number" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="12" />
                     <div className="preset-row">
                       <button type="button" className="preset-btn" onClick={() => setHours(6)}>6h</button>
                       <button type="button" className="preset-btn" onClick={() => setHours(12)}>12h</button>
                       <button type="button" className="preset-btn" onClick={() => setHours(24)}>24h</button>
                     </div>
                   </div>
+                  <div className="field" style={{ gridColumn: "1 / -1" }}>
+                    <label>Quando você recebe?</label>
+                    <PrazoPicker key={"pl:" + prazoDias} unit="dias" value={prazoDias} onChange={setPrazoDias} />
+                    {selectedDay && <div className="field-hint">Cairá no caixa em <b>{fmtDatePt(addDaysIso(diaIso, prazoDias))}</b></div>}
+                  </div>
+                </div>
+                <div className="pl-rep" id="pl-rep">
+                  <div className="escala-q">Este plantão se repete?</div>
+                  <div className="chip-row" role="group" aria-label="Repetição">
+                    {[["nao", "Não, só este dia"], ["1", "Toda semana"], ["2", "Semana sim, semana não"], ["3", "A cada 3 semanas"], ["mes", "1 vez por mês"]].map(([k, l]) => <button key={k} type="button" data-rep={k} className={`chip sm ${rep === k ? "active" : ""}`} aria-pressed={rep === k} onClick={() => setRep(k)}>{l}</button>)}
+                  </div>
+                  {rep !== "nao" && (
+                    <>
+                      <div className="escala-q">Por quanto tempo?</div>
+                      <div className="chip-row" role="group" aria-label="Duração">
+                        {[1, 3, 6, 12].map((n) => <button key={n} type="button" data-meses={n} className={`chip sm ${repMeses === n ? "active" : ""}`} aria-pressed={repMeses === n} onClick={() => setRepMeses(n)}>{n === 1 ? "1 mês" : n + " meses"}</button>)}
+                      </div>
+                      <div className="escala-prox" id="pl-resumo">Serão lançados <b>{datas.length} plantões</b>{rep === "mes" ? ` (${ordemTxt(diaIso)})` : ""}: {datas.slice(0, 4).map((d) => fmtDatePt(d).slice(0, 5)).join(", ")}{datas.length > 4 ? ` … até ${fmtDatePt(datas[datas.length - 1])}` : ""}. Depois dá para apagar ou ajustar cada um.</div>
+                    </>
+                  )}
                 </div>
                 {erro && <div className="note-bad" id="day-erro" style={{ marginBottom: 10 }}>{erro}</div>}
-                <button className="btn btn-primary" id="day-save" onClick={submit}><IconPlus size={15} /> {selectedVinculo && selectedVinculo.tipo === "mensal" ? "Salvar horas do dia" : "Salvar plantão"}</button>
+                <button className="btn btn-primary" id="day-save" onClick={submitPlantao}><IconPlus size={15} /> {datas.length > 1 ? `Salvar ${datas.length} plantões` : "Salvar plantão"}</button>
+              </>
+            ) : showNewVinculo ? (
+              <>
+                <div className="add-head" style={{ marginTop: 14 }}><b>Novo cargo fixo</b><button type="button" className="link-btn" id="day-novo-cancel" onClick={() => setShowNewVinculo(false)}>Cancelar</button></div>
+                <p className="add-sub">Para trabalho com salário mensal e dias fixos, como diarista ou meio turno. Você cadastra uma vez e o salário entra sozinho todo mês.</p>
+                <VinculoForm fixo onSubmit={(d) => { const id = addVinculo(d); setFixoId(id); setShowNewVinculo(false); }} defaultStartMonth={monthKeyOf(viewYear, viewMonth)} />
+              </>
+            ) : fixos.length === 0 ? (
+              <>
+                <p className="add-sub" style={{ marginTop: 12 }}>Cargo fixo é o trabalho com salário mensal e dias certos, como diarista ou meio turno. Ele fica separado dos plantões: o salário entra sozinho todo mês e a escala aparece no calendário.</p>
+                <button className="btn btn-primary" id="day-novo" onClick={() => setShowNewVinculo(true)}><IconPlus size={15} /> Cadastrar cargo fixo</button>
+              </>
+            ) : (
+              <>
+                <div className="field" style={{ marginTop: 12 }}>
+                  <label htmlFor="day-vinculo">Qual cargo fixo?</label>
+                  <select id="day-vinculo" value={fixoSel ? fixoSel.id : ""} onChange={(e) => { setFixoId(e.target.value); setErro(""); }}>
+                    {fixos.map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                  </select>
+                </div>
+                <div className="add-tip" id="day-tip">O salário deste cargo já entra sozinho todo mês. Aqui você só anota as horas deste dia{fixoSel && (fixoSel.escala || []).length ? ", e elas substituem a escala fixa nesta data." : "."}</div>
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label htmlFor="fx-horas">Horas trabalhadas neste dia</label>
+                  <input id="fx-horas" type="number" inputMode="decimal" value={hours} onChange={(e) => { setHours(e.target.value); setErro(""); }} placeholder="6" />
+                  <div className="preset-row">
+                    <button type="button" className="preset-btn" onClick={() => setHours(6)}>6h</button>
+                    <button type="button" className="preset-btn" onClick={() => setHours(12)}>12h</button>
+                    <button type="button" className="preset-btn" onClick={() => setHours(24)}>24h</button>
+                  </div>
+                </div>
+                {erro && <div className="note-bad" id="day-erro" style={{ marginBottom: 10 }}>{erro}</div>}
+                <button className="btn btn-primary" id="day-save" onClick={submitFixo}><IconPlus size={15} /> Salvar horas do dia</button>
+                <div style={{ marginTop: 8 }}><button type="button" className="subtle-link" id="day-novo" onClick={() => { setShowNewVinculo(true); setErro(""); }}><IconPlus size={13} /> Cadastrar outro cargo fixo</button></div>
               </>
             )}
           </div>
@@ -5869,12 +5967,12 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
 
       {raw.length === 0 && b3raw.length === 0 && (
         <div className="card">
-          <div className="card-head"><h3 className="card-title">1. O que você vai importar?</h3></div>
+          <div className="card-head"><h3 className="card-title">1. O que você quer fazer?</h3></div>
           <div className="choice-row">
-            <button className={`choice ${source === "extrato" ? "on" : ""}`} onClick={() => setSource("extrato")}><b>Extrato da conta</b><span>Entradas (pagamentos dos hospitais) e saídas (contas, PIX, boletos)</span></button>
-            <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><span>Entra como uma despesa só. Os gastos ficam dentro dela, por categoria</span></button>
-            <button className={`choice ${source === "b3" ? "on" : ""}`} onClick={() => setSource("b3")}><b>Planilha da B3</b><span>Sua carteira da Área do Investidor: ações, FIIs, ETFs e Tesouro</span></button>
-            <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><span>O PDF que a corretora envia: lança as compras e vendas do mês</span></button>
+            <button className={`choice ${source === "extrato" ? "on" : ""}`} onClick={() => setSource("extrato")}><b>Extrato da conta</b><em>Todo mês</em><span>Para conferir o que entrou e o que saiu da sua conta: pagamentos recebidos, contas, PIX e boletos</span></button>
+            <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><em>Todo mês</em><span>Para lançar a fatura como uma despesa só. Os gastos ficam dentro dela, por categoria</span></button>
+            <button className={`choice ${source === "b3" ? "on" : ""}`} onClick={() => setSource("b3")}><b>Planilha da B3</b><em>Uma vez, no começo</em><span>Para cadastrar a carteira de investimentos que você já tem: ações, FIIs, ETFs e Tesouro</span></button>
+            <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><em>Todo mês</em><span>Para adicionar os investimentos feitos no mês: as compras e vendas do PDF da corretora</span></button>
           </div>
 
           <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">2. Anexe o arquivo</h3></div>
