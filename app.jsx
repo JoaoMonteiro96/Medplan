@@ -55,7 +55,8 @@ const EXP_CAT_MAP = Object.fromEntries(EXP_CATS.map((c) => [c.id, c]));
 const guessExpCat = (desc) => {
   const d = String(desc || "").toLowerCase();
   if (!d) return "outros";
-  for (const c of EXP_CATS) if (c.kw.some((k) => d.includes(k))) return c.id;
+  const palavras = " " + d.replace(/[^a-z0-9\u00e0-\u00fc]+/g, " ") + " ";
+  for (const c of EXP_CATS) if (c.kw.some((k) => (k.trim().length <= 4 ? palavras.includes(" " + k.trim() + " ") : d.includes(k)))) return c.id;
   return "outros";
 };
 
@@ -87,6 +88,150 @@ const ASSET_RAW = {
 
 const numOf = (v) => { const n = Number(String(v === undefined || v === null ? "" : v).replace(",", ".")); return isFinite(n) ? n : 0; };
 
+// ---- Relatório mensal em PDF: resumo, tabelas detalhadas e totais ----
+const pdfTxt = (v) => String(v === undefined || v === null ? "" : v).replace(/ /g, " ").replace(/[−–—]/g, "-").replace(/…/g, "...").replace(/[“”]/g, '"').replace(/[^\x20-\xff]/g, "");
+function buildMonthlyReport(doc, D) {
+  const W = 210, H = 297, MX = 14, CW = W - MX * 2;
+  const INK = [30, 41, 59], DIM = [100, 116, 139], GREEN = [22, 163, 74], RED = [185, 28, 28], HEAD = [15, 23, 42], ZEBRA = [246, 248, 250], RULE = [222, 228, 235];
+  const money = (n) => pdfTxt(fmtBRL(n));
+  let y = 0;
+  const font = (size, bold, color) => { doc.setFont("helvetica", bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(...(color || INK)); };
+  const fit = (t, w) => { t = pdfTxt(t); if (doc.getTextWidth(t) <= w) return t; while (t.length > 1 && doc.getTextWidth(t + "...") > w) t = t.slice(0, -1); return t + "..."; };
+  const space = (h) => { if (y + h > H - 16) { doc.addPage(); y = 16; return true; } return false; };
+  const title = (t, sub) => {
+    space(22); y += 4;
+    font(12.5, true, HEAD); doc.text(pdfTxt(t), MX, y);
+    if (sub) { font(8.5, false, DIM); doc.text(pdfTxt(sub), W - MX, y, { align: "right" }); }
+    y += 2; doc.setDrawColor(...GREEN); doc.setLineWidth(0.6); doc.line(MX, y, MX + 18, y); y += 4;
+  };
+  const note = (t) => { font(8.5, false, DIM); space(6); doc.text(pdfTxt(t), MX, y + 3); y += 7; };
+  // cols: [{ t: título, w: peso, a: "r" para alinhar à direita }]; rows: matriz de textos; foot: linha de total; tone(r, c): cor opcional
+  const table = (cols, rows, foot, tone) => {
+    const tw = cols.reduce((a, c) => a + c.w, 0), xs = []; let x = MX;
+    cols.forEach((c) => { const w = (c.w / tw) * CW; xs.push([x, w]); x += w; });
+    const RH = 6.2, PAD = 1.8;
+    const cell = (t, i, yy) => { const [cx, w] = xs[i]; const s = fit(t, w - PAD * 2); if (cols[i].a === "r") doc.text(s, cx + w - PAD, yy, { align: "right" }); else doc.text(s, cx + PAD, yy); };
+    const head = () => { doc.setFillColor(...HEAD); doc.rect(MX, y, CW, 6.6, "F"); font(8, true, [255, 255, 255]); cols.forEach((c, i) => cell(c.t, i, y + 4.5)); y += 6.6; };
+    space(6.6 + RH * Math.min(rows.length + (foot ? 1 : 0), 3)); head();
+    rows.forEach((r, n) => {
+      if (space(RH)) head();
+      if (n % 2 === 1) { doc.setFillColor(...ZEBRA); doc.rect(MX, y, CW, RH, "F"); }
+      r.forEach((t, i) => { font(8.5, false, (tone && tone(r, i, n)) || INK); cell(t, i, y + 4.3); });
+      y += RH;
+    });
+    if (foot) {
+      if (space(RH + 1)) head();
+      doc.setDrawColor(...HEAD); doc.setLineWidth(0.3); doc.line(MX, y, MX + CW, y);
+      foot.forEach((t, i) => { font(8.5, true, INK); cell(t, i, y + 4.6); });
+      y += RH + 1;
+    } else { doc.setDrawColor(...RULE); doc.setLineWidth(0.2); doc.line(MX, y, MX + CW, y); }
+    y += 4;
+  };
+
+  // ---- cabeçalho ----
+  doc.setFillColor(...HEAD); doc.rect(0, 0, W, 30, "F");
+  doc.setFillColor(...GREEN); doc.rect(0, 30, W, 1.2, "F");
+  font(18, true, [255, 255, 255]); doc.text("Mediplan", MX, 14);
+  font(10, false, [203, 213, 225]); doc.text("Relatório financeiro mensal", MX, 21);
+  font(14, true, [255, 255, 255]); doc.text(pdfTxt(D.mesNome), W - MX, 14, { align: "right" });
+  font(8.5, false, [203, 213, 225]); doc.text(pdfTxt("Gerado em " + D.geradoEm), W - MX, 21, { align: "right" });
+  y = 38;
+
+  // ---- resumo em quadros ----
+  const boxes = [["Receita bruta", D.bruto, INK], ["Impostos estimados", D.bruto - D.liquido, RED], ["Receita líquida", D.liquido, GREEN], ["Despesas", D.despesas, RED], ["Investido no mês", D.investido, INK], ["Sobra do mês", D.sobra, D.sobra >= 0 ? GREEN : RED]];
+  const bw = (CW - 8) / 3, bh = 17;
+  boxes.forEach(([l, v, c], i) => {
+    const bx = MX + (i % 3) * (bw + 4), by = y + Math.floor(i / 3) * (bh + 4);
+    doc.setFillColor(...ZEBRA); doc.setDrawColor(...RULE); doc.setLineWidth(0.2); doc.rect(bx, by, bw, bh, "FD");
+    font(8, false, DIM); doc.text(pdfTxt(l), bx + 3.5, by + 5.5);
+    font(12.5, true, c); doc.text(money(v), bx + 3.5, by + 12.8);
+  });
+  y += bh * 2 + 4 + 6;
+  table([{ t: "Indicador", w: 5 }, { t: "Valor", w: 5.2, a: "r" }, { t: "Como ler", w: 7.4 }], [
+    ["Carga de impostos sobre a receita", D.bruto > 0 ? pdfTxt(fmtPct(((D.bruto - D.liquido) / D.bruto) * 100)) : "-", "Estimativa pela alíquota configurada no app"],
+    ["Despesas sobre a receita líquida", D.liquido > 0 ? pdfTxt(fmtPct((D.despesas / D.liquido) * 100)) : "-", "Quanto do que entrou foi gasto"],
+    ["Taxa de poupança", D.liquido > 0 ? pdfTxt(fmtPct(((D.liquido - D.despesas) / D.liquido) * 100)) : "-", "Receita líquida menos despesas, sobre a receita líquida"],
+    ["Horas trabalhadas", D.horas > 0 ? pdfTxt(fmtHoras(D.horas)) : "-", D.horas > 0 ? "Ganho líquido por hora: " + money(D.porHora) : "Sem horas lançadas no mês"],
+    ["Já recebido / a receber", money(D.recebido) + " / " + money(D.liquido - D.recebido), "Líquido das receitas do mês"],
+    ["Já pago / a pagar", money(D.pago) + " / " + money(D.despesas - D.pago), "Despesas do mês"],
+    ["Patrimônio total", money(D.patrimonio), "Caixa acumulado mais a carteira a valor atual"],
+  ]);
+
+  // ---- receitas ----
+  title("Receitas", `${D.receitas.length} lançamento(s)`);
+  if (!D.receitas.length) note("Nenhuma receita neste mês.");
+  else table([{ t: "Quando", w: 5 }, { t: "Origem", w: 5 }, { t: "Tipo", w: 2.4 }, { t: "Bruto", w: 3, a: "r" }, { t: "Impostos", w: 2.8, a: "r" }, { t: "Líquido", w: 3, a: "r" }, { t: "Situação", w: 2.4 }],
+    D.receitas.map((r) => [r.quando, r.nome, r.tipo, money(r.bruto), money(r.bruto - r.liquido), money(r.liquido), r.recebido ? "Recebido" : "Pendente"]),
+    ["Total", "", "", money(D.bruto), money(D.bruto - D.liquido), money(D.liquido), ""], (r, i) => (i === 6 ? (r[6] === "Recebido" ? GREEN : RED) : null));
+  if (D.trabalho.length) {
+    title("Rentabilidade do trabalho", "ganho líquido por hora em cada local");
+    table([{ t: "Local", w: 6 }, { t: "Horas", w: 2.5, a: "r" }, { t: "Líquido", w: 3.5, a: "r" }, { t: "Por hora", w: 3.5, a: "r" }],
+      D.trabalho.map((t) => [t.nome, pdfTxt(fmtHoras(t.horas)), money(t.liquido), money(t.porHora)]), ["Total", pdfTxt(fmtHoras(D.horas)), money(D.trabalho.reduce((a, t) => a + t.liquido, 0)), money(D.porHora)]);
+  }
+
+  // ---- despesas ----
+  title("Despesas", `${D.despesasItens.length} conta(s)`);
+  if (!D.despesasItens.length) note("Nenhuma despesa neste mês.");
+  else {
+    table([{ t: "Vencimento", w: 2.6 }, { t: "Descrição", w: 6.5 }, { t: "Categoria", w: 3.4 }, { t: "Tipo", w: 2.4 }, { t: "Valor", w: 3, a: "r" }, { t: "Situação", w: 2.4 }],
+      D.despesasItens.map((e) => [e.venc, e.descricao, e.categoria, e.tipo, money(e.valor), e.paga ? "Paga" : "Pendente"]),
+      ["Total", "", "", "", money(D.despesas), ""], (r, i) => (i === 5 ? (r[5] === "Paga" ? GREEN : RED) : null));
+    title("Despesas por categoria", "da maior para a menor");
+    table([{ t: "Categoria", w: 5 }, { t: "Contas", w: 2, a: "r" }, { t: "Valor", w: 3, a: "r" }, { t: "% das despesas", w: 3, a: "r" }, { t: "Limite", w: 3, a: "r" }, { t: "Situação", w: 3.4 }],
+      D.categorias.map((c) => [c.nome, String(c.n), money(c.valor), pdfTxt(fmtPct(D.despesas > 0 ? (c.valor / D.despesas) * 100 : 0)), c.limite > 0 ? money(c.limite) : "-", c.limite > 0 ? (c.valor > c.limite ? "Acima do limite" : "Dentro do limite") : "-"]),
+      ["Total", String(D.despesasItens.length), money(D.despesas), "100%", D.limiteGeral > 0 ? money(D.limiteGeral) : "-", D.limiteGeral > 0 ? (D.despesas > D.limiteGeral ? "Acima do limite" : "Dentro do limite") : ""],
+      (r, i) => (i === 5 && r[5] === "Acima do limite" ? RED : null));
+  }
+
+  (D.cartoes || []).forEach((c) => {
+    title("Cartão de crédito: " + c.nome, `${c.n} compra(s) na fatura`);
+    table([{ t: "Categoria", w: 6 }, { t: "Compras", w: 2.4, a: "r" }, { t: "Valor", w: 3.4, a: "r" }, { t: "% da fatura", w: 3, a: "r" }],
+      c.grupos.map((g) => [g.nome, String(g.n), money(g.valor), pdfTxt(fmtPct(c.total > 0 ? (g.valor / c.total) * 100 : 0))]), ["Total da fatura", String(c.n), money(c.total), "100%"]);
+  });
+
+  // ---- investimentos ----
+  title("Investimentos do mês", `${D.aportes.length} lançamento(s)`);
+  if (!D.aportes.length) note("Nenhuma compra ou venda neste mês.");
+  else table([{ t: "Data", w: 2.4 }, { t: "Ativo", w: 4.5 }, { t: "Classe", w: 3 }, { t: "Operação", w: 2.6 }, { t: "Qtd.", w: 2.4, a: "r" }, { t: "Preço", w: 3, a: "r" }, { t: "Total", w: 3.4, a: "r" }],
+    D.aportes.map((a) => [a.data, a.ativo, a.classe, a.operacao, a.qtd, a.preco, money(a.total)]),
+    ["Aportes menos vendas", "", "", "", "", "", money(D.investido)], (r, i) => (i === 3 && r[3] === "Venda" ? RED : null));
+  if (D.carteira.length) {
+    title("Carteira na data do relatório", `${D.carteira.length} ativo(s)`);
+    table([{ t: "Ativo", w: 2.8 }, { t: "Qtd.", w: 2.2, a: "r" }, { t: "Preço médio", w: 3, a: "r" }, { t: "Cotação", w: 3, a: "r" }, { t: "Investido", w: 3.6, a: "r" }, { t: "Valor atual", w: 3.6, a: "r" }, { t: "Resultado", w: 3.6, a: "r" }, { t: "Rent.", w: 2, a: "r" }],
+      D.carteira.map((p) => [p.ativo, p.qtd, p.pm, p.cotacao, money(p.custo), money(p.valor), (p.resultado >= 0 ? "+" : "-") + money(Math.abs(p.resultado)), p.pct !== null ? pdfTxt(fmtPct(p.pct)) : "-"]),
+      ["Total", "", "", "", money(D.carteiraCusto), money(D.carteiraValor), (D.carteiraValor - D.carteiraCusto >= 0 ? "+" : "-") + money(Math.abs(D.carteiraValor - D.carteiraCusto)), D.carteiraCusto > 0 ? pdfTxt(fmtPct(((D.carteiraValor - D.carteiraCusto) / D.carteiraCusto) * 100)) : "-"],
+      (r, i) => (i >= 6 ? (String(r[6]).startsWith("-") ? RED : GREEN) : null));
+  }
+
+  // ---- histórico ----
+  if (D.historico.length) {
+    title("Últimos meses", "para comparar com este mês");
+    table([{ t: "Mês", w: 4 }, { t: "Receita líquida", w: 3.5, a: "r" }, { t: "Despesas", w: 3.5, a: "r" }, { t: "Investido", w: 3.5, a: "r" }, { t: "Sobra", w: 3.5, a: "r" }],
+      D.historico.map((h) => [h.mes, money(h.liquido), money(h.despesas), money(h.investido), money(h.sobra)]), null, (r, i) => (i === 4 ? (String(r[4]).includes("-") ? RED : GREEN) : null));
+  }
+  note("Valores líquidos e impostos são estimativas pela alíquota configurada no app e não substituem a apuração do contador.");
+
+  // ---- rodapé com número de página ----
+  const n = doc.getNumberOfPages();
+  for (let p = 1; p <= n; p++) {
+    doc.setPage(p); doc.setDrawColor(...RULE); doc.setLineWidth(0.2); doc.line(MX, H - 11, W - MX, H - 11);
+    font(8, false, DIM); doc.text(pdfTxt("Mediplan · " + D.mesNome), MX, H - 6.5); doc.text(`Página ${p} de ${n}`, W - MX, H - 6.5, { align: "right" });
+  }
+  return n;
+}
+
+// Soma dos ajustes de preço médio que de fato valeram (os lançados com a posição zerada são ignorados, como em computePortfolio)
+function ajustesPM(investments) {
+  const q = {}; let tot = 0;
+  [...investments].sort((a, b) => (a.date || "").localeCompare(b.date || "") || String(a.id).localeCompare(String(b.id))).forEach((i) => {
+    const k = (i.category || "Outro") + "|" + i.description, n = Number(i.qty || 0);
+    const st = q[k] = q[k] || { qty: 0, cost: 0 };
+    if (i.tipo === "ajuste") { if (st.qty > 0) { const d = Math.max(-st.cost, Number(i.ajuste || 0)); st.cost += d; tot += d; } return; }
+    if (n > 0) { if (i.tipo === "venda") { const avg = st.qty > 0 ? st.cost / st.qty : 0, sq = Math.min(n, st.qty); st.cost -= avg * sq; st.qty -= sq; } else { st.qty += n; st.cost += Math.abs(Number(i.amount || 0)); } }
+    else st.cost += Number(i.amount || 0);
+  });
+  return tot;
+}
 // Calcula posições da carteira (preço médio, valor atual, rentabilidade) a partir dos lançamentos
 function computePortfolio(investments, cotacoes) {
   const groups = {};
@@ -96,6 +241,8 @@ function computePortfolio(investments, cotacoes) {
     const g = groups[key] = groups[key] || { key, category: cat, description: i.description, assetName: i.assetName || ASSET_NAME[i.description] || "", qty: 0, cost: 0, realized: 0, bought: 0, sold: 0, legacyCost: 0, entries: 0 };
     g.entries += 1;
     if (i.assetName && !g.assetName) g.assetName = i.assetName;
+    // ajuste manual do preço médio: muda só o custo da posição, sem compra, venda nem movimento de caixa
+    if (i.tipo === "ajuste") { if (g.qty > 0) g.cost = Math.max(0, g.cost + Number(i.ajuste || 0)); return; }
     const amt = Number(i.amount || 0);
     const q = Number(i.qty || 0);
     if (q > 0) {
@@ -444,6 +591,12 @@ function parseB3Tables(tables) {
 
 const CARD_PAY_RE = /(pag(amento|to)?\.?\s*(de\s+)?fatura|fatura\s*(do\s+)?cart|pagto\.?\s*cart|cart[aã]o de cr[eé]dito)/i;
 const INVEST_RE = /(aplica[cç][aã]o|resgate|tesouro direto|corretora|\bcdb\b|\blci\b|\blca\b|invest)/i;
+// Agrupa as compras de uma fatura por categoria, da maior para a menor
+function faturaGrupos(itens) {
+  const map = {};
+  (itens || []).forEach((it) => { const m = EXP_CAT_MAP[it.c] || EXP_CAT_MAP.outros; const g = map[m.id] = map[m.id] || { id: m.id, label: m.label, color: m.color, valor: 0, itens: [] }; g.valor += Number(it.v || 0); g.itens.push(it); });
+  return Object.values(map).map((g) => ({ ...g, itens: g.itens.sort((a, b) => (a.dt || "").localeCompare(b.dt || "")) })).sort((a, b) => b.valor - a.valor);
+}
 const cleanDesc = (d) => String(d || "").replace(/\s+/g, " ").trim().slice(0, 70);
 
 const normTxt = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -1536,7 +1689,7 @@ function App() {
     const mk = monthKeyOf(y, m);
     const items = [];
     expenses.filter((e) => inMonth(e.dueDate, y, m)).forEach((e) => {
-      items.push({ key: "exp-" + e.id, description: e.description, category: e.category || guessExpCat(e.description), amount: Number(e.amount || 0), dateLabel: fmtDatePt(e.dueDate), dateIso: e.dueDate,
+      items.push({ key: "exp-" + e.id, description: e.description, category: e.category || guessExpCat(e.description), amount: Number(e.amount || 0), dateLabel: fmtDatePt(e.dueDate), dateIso: e.dueDate, itens: Array.isArray(e.itens) && e.itens.length ? e.itens : null,
         tipo: "pontual", paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id) });
     });
     recurringExpenses.filter((r) => r.startMonth <= mk).forEach((r) => {
@@ -1689,6 +1842,15 @@ function App() {
 
   const addInvestment = (d) => setInvestments((prev) => [...prev, { id: uid(), description: d.description, assetName: d.assetName || "", category: d.category, date: d.date,
     tipo: d.tipo || "compra", qty: d.qty || 0, price: d.price || 0, amount: Number(d.amount) || 0 }]);
+  // Ajusta o preço médio de um ativo para o valor informado, registrando a diferença como um lançamento de ajuste
+  const adjustAvg = (p, novo) => {
+    const n = numOf(novo);
+    if (!p || !(p.qty > 0) || !(n > 0)) return false;
+    const delta = Math.round((n * p.qty - p.cost) * 100) / 100;
+    if (Math.abs(delta) < 0.005) return true;
+    setInvestments((prev) => [...prev, { id: uid(), description: p.description, assetName: p.assetName || "", category: p.category, date: todayStr(), tipo: "ajuste", qty: 0, price: n, amount: 0, ajuste: delta }]);
+    return true;
+  };
   const setCotacao = (key, val) => setCotacoes((prev) => ({ ...prev, [key]: val }));
   const refreshQuotes = async () => {
     if (quoteRun.busy) return;
@@ -1908,7 +2070,8 @@ function App() {
   }, [expenses, recurringExpenses]);
 
   const totalInvestedAllTime = investments.filter((i) => !i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0);
-  const posicaoInicialTotal = investments.filter((i) => i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0);
+  // os ajustes de preço médio entram aqui para o patrimônio não mudar quando o custo da posição é corrigido
+  const posicaoInicialTotal = investments.filter((i) => i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0) + ajustesPM(investments);
   const portfolio = useMemo(() => computePortfolio(investments, cotacoes), [investments, cotacoes]);
   const saldoRealizado = totalRecebidoAllTime - totalPagoAllTime - totalInvestedAllTime;
 
@@ -2121,22 +2284,28 @@ function App() {
   })();
 
   // ---- importação de extratos ----
-  const commitImport = (rows, label) => {
+  const commitImport = (rows, label, fat) => {
     const bid = uid();
-    const newExp = [], newInc = [], keys = [];
+    const newExp = [], newInc = [], keys = [], fatItens = [];
     let baixas = 0;
     rows.forEach((r) => {
       if (r.action === "ignorar") return;
       keys.push(r.key);
-      if (r.action === "novo") newExp.push({ id: uid() + newExp.length, description: cleanDesc(r.desc), category: r.category, amount: Math.abs(r.amount), dueDate: r.date, paid: true, paidDate: r.date, imported: true, batch: bid });
+      if (r.action === "novo" && fat) fatItens.push({ d: cleanDesc(r.desc), v: Math.abs(r.amount), dt: r.date, c: r.category });
+      else if (r.action === "novo") newExp.push({ id: uid() + newExp.length, description: cleanDesc(r.desc), category: r.category, amount: Math.abs(r.amount), dueDate: r.date, paid: true, paidDate: r.date, imported: true, batch: bid });
       else if (r.action === "receita") newInc.push({ id: uid() + newInc.length, description: cleanDesc(r.desc), amount: Math.abs(r.amount), date: r.date, recebido: true, batch: bid });
       else if (r.action === "baixar" && r.matchItem) { if (!r.matchItem.paid) r.matchItem.toggle(); baixas++; }
       else if (r.action === "receber" && r.matchItem) { if (!r.matchItem.recebido) r.matchItem.toggle(); baixas++; }
     });
+    // fatura do cartão: uma despesa só, com cada compra guardada dentro dela
+    if (fat && fatItens.length) {
+      const tot = Math.round(fatItens.reduce((a, i) => a + i.v, 0) * 100) / 100;
+      newExp.push({ id: uid() + "f", description: cleanDesc(fat.nome) || "Cartão de crédito", category: "cartao", amount: tot, dueDate: fat.dueDate, paid: !!fat.paid, ...(fat.paid ? { paidDate: fat.dueDate } : {}), imported: true, batch: bid, itens: fatItens });
+    }
     setExpenses((p) => [...p, ...newExp]);
     setOneOffIncomes((p) => [...p, ...newInc]);
     setImportedKeys((p) => { const n = { ...p }; keys.forEach((k) => { n[k] = bid; }); return n; });
-    const entry = { id: bid, date: todayStr(), label, despesas: newExp.length, entradas: newInc.length, baixas, total: newExp.reduce((a, e) => a + e.amount, 0) };
+    const entry = { id: bid, date: todayStr(), label, ...(fat && fatItens.length ? { fatura: fatItens.length } : {}), despesas: newExp.length, entradas: newInc.length, baixas, total: newExp.reduce((a, e) => a + e.amount, 0) };
     setImportLog((p) => [entry, ...p].slice(0, 30));
     return entry;
   };
@@ -2253,34 +2422,25 @@ function App() {
     if (!window.jspdf) { alert("A biblioteca de PDF ainda está carregando, tente novamente em instantes."); return; }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    let y = 20;
-    const line = (text, size = 11, bold = false, color = [38, 53, 50]) => {
-      doc.setFontSize(size);
-      doc.setFont(undefined, bold ? "bold" : "normal");
-      doc.setTextColor(...color);
-      doc.text(text, 14, y);
-      y += size * 0.6 + 4;
+    const TIPOS = { plantao: "Plantão", mensal: "Cargo fixo", extra: "Recorrente", avulsa: "Avulsa" };
+    const ws = workStats(viewYear, viewMonth), cats = {};
+    monthExpenseItems.forEach((e) => { const c = cats[e.category] = cats[e.category] || { id: e.category, nome: (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, valor: 0, n: 0, limite: Number(limits[e.category] || 0) }; c.valor += e.amount; c.n += 1; });
+    const hist = [];
+    for (let k = 5; k >= 0; k--) { const d = new Date(viewYear, viewMonth - k, 1), st = monthStats(d.getFullYear(), d.getMonth()); hist.push({ mes: MONTHS_PT[d.getMonth()] + " de " + d.getFullYear(), liquido: st.net, despesas: st.expTotal, investido: st.invested, sobra: st.leftover }); }
+    const D = {
+      mesNome: `${MONTHS_PT[viewMonth]} de ${viewYear}`, geradoEm: fmtDatePt(todayStr()),
+      bruto: totalGross, liquido: totalNet, despesas: totalExpensesMonth, investido: totalInvestedMonth, sobra: totalNet - totalExpensesMonth - totalInvestedMonth,
+      recebido: monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0), pago: totalPaidExpenses, patrimonio: patrimonioTotal,
+      horas: ws.hours, porHora: ws.hourly, trabalho: ws.byVinculo.map((o) => ({ nome: o.nome, horas: o.hours, liquido: o.net, porHora: o.hourly })),
+      receitas: [...monthIncomeItems].sort((a, b) => (a.dateIso || "").localeCompare(b.dateIso || "")).map((i) => ({ quando: i.dateLabel, nome: i.nome, tipo: TIPOS[i.tipo] || i.tipo, bruto: i.gross, liquido: i.net, recebido: i.recebido })),
+      despesasItens: [...monthExpenseItems].sort((a, b) => (a.dateIso || "").localeCompare(b.dateIso || "")).map((e) => ({ venc: e.dateLabel, descricao: e.description, categoria: (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, tipo: e.tipo === "recorrente" ? "Todo mês" : "Pontual", valor: e.amount, paga: e.paid })),
+      cartoes: monthExpenseItems.filter((e) => Array.isArray(e.itens) && e.itens.length).map((e) => { const g = faturaGrupos(e.itens); return { nome: e.description, n: e.itens.length, total: e.amount, grupos: g.map((x) => ({ nome: x.label, n: x.itens.length, valor: x.valor })) }; }),
+      categorias: Object.values(cats).sort((a, b) => b.valor - a.valor), limiteGeral: Number(limits.__total || 0),
+      aportes: [...monthInvestments].filter((i) => i.tipo !== "ajuste").sort((a, b) => (a.date || "").localeCompare(b.date || "")).map((i) => { const venda = i.tipo === "venda" || Number(i.amount) < 0; return { data: fmtDatePt(i.date), ativo: i.description, classe: i.category, operacao: venda ? "Venda" : "Compra", qtd: i.qty > 0 ? fmtQty(i.qty) : "-", preco: i.qty > 0 ? fmtBRL(i.price) : "-", total: Number(i.amount || 0) }; }),
+      carteira: portfolio.positions.map((p) => ({ ativo: p.description, classe: p.category, qtd: p.isQty ? fmtQty(p.qty) : "-", pm: p.isQty ? fmtBRL(p.avg) : "-", cotacao: p.isQty && p.cotacao > 0 ? fmtBRL(p.cotacao) : "-", custo: p.cost, valor: p.value, resultado: p.profit, pct: p.cost > 0 ? p.profitPct : null })),
+      carteiraCusto: portfolio.totalCost, carteiraValor: portfolio.totalValue, historico: hist,
     };
-    line("Mediplan — Relatório Mensal", 18, true, [76, 146, 132]);
-    line(`${MONTHS_PT[viewMonth]} de ${viewYear}`, 12, false, [122, 139, 135]);
-    y += 4;
-    line("Receitas", 14, true);
-    if (monthIncomeItems.length === 0) line("Nenhuma receita lançada.");
-    monthIncomeItems.forEach((it) => line(`${it.nome} (${it.dateLabel}) — ${fmtBRL(it.net)} ${it.recebido ? "[recebido]" : "[pendente]"}`));
-    line(`Total líquido: ${fmtBRL(totalNet)}`, 12, true);
-    y += 4;
-    line("Despesas", 14, true);
-    if (monthExpenseItems.length === 0) line("Nenhuma despesa lançada.");
-    monthExpenseItems.forEach((it) => line(`${it.description} (${it.dateLabel}) — ${fmtBRL(it.amount)} ${it.paid ? "[pago]" : "[pendente]"}`));
-    line(`Total de despesas: ${fmtBRL(totalExpensesMonth)}`, 12, true);
-    y += 4;
-    line("Investimentos", 14, true);
-    if (monthInvestments.length === 0) line("Nenhum aporte neste mês.");
-    monthInvestments.forEach((it) => line(`${it.description} (${it.category}) — ${fmtBRL(it.amount)}`));
-    line(`Total investido no mês: ${fmtBRL(totalInvestedMonth)}`, 12, true);
-    y += 6;
-    line(`Saldo do mês (líquido − despesas − investido): ${fmtBRL(totalNet - totalExpensesMonth - totalInvestedMonth)}`, 12, true, [76, 146, 132]);
-    line(`Patrimônio total acumulado: ${fmtBRL(patrimonioTotal)}`, 12, true, [189, 138, 61]);
+    buildMonthlyReport(doc, D);
     doc.save(`mediplan-relatorio-${MONTHS_ABBR_PT[viewMonth]}-${viewYear}.pdf`);
   };
 
@@ -3221,6 +3381,44 @@ function App() {
         .imp-ctrl .tk-in { width: 130px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px; font-size: 13px; background: #fff; font-family: inherit; text-transform: uppercase; }
         .imp-ctrl .tk-in.need { border-color: var(--brick); }
         .pm-line { display: block; margin-top: 3px; color: var(--text); } .pm-line b { color: var(--teal); }
+        .escala-rep { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+        .escala-q { font-size: 12px; font-weight: 600; color: var(--text-dim); margin: 8px 0 6px; } .escala-rep .escala-q:first-child { margin-top: 0; }
+        /* ---- v17: despesas em lista, ajuste de preço médio ---- */
+        .xl-cats { margin: 2px 0 12px; } .xl-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--surface-3); } .xl-bar i { display: block; height: 100%; min-width: 2px; }
+        .xl-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--text-dim); } .xl-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; } .xl-legend b { color: var(--text); font-weight: 600; }
+        .xl-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+        .xl { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+        .xl-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto 28px; align-items: center; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--border); }
+        .xl-head, .xl-date, .xl-cat, .xl-tipo, .xl-st { display: none; }
+        .xl-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 7px 10px; background: var(--surface-2); font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border); }
+        .xl-secbox:first-of-type .xl-sec, .xl-head + .xl-secbox .xl-sec { border-top: none; }
+        .xl-sec b { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text); } .xl-sec.atrasadas b { color: var(--brick); } .xl-sec.pagas b { color: #15803D; }
+        .xl-check { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #CBD5E1; background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; transition: background .15s, border-color .15s; }
+        .xl-check:hover { border-color: #16A34A; } .xl-check.on { background: #16A34A; border-color: #16A34A; }
+        .xl-main { min-width: 0; } .xl-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .xl-sub { display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; white-space: nowrap; overflow: hidden; font-size: 12px; color: var(--text-dim); margin-top: 1px; } .xl-sub i, .xl-cat i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .xl-amt { font-weight: 700; font-size: 14px; white-space: nowrap; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .xl-amt small { font-weight: 600; font-size: 11px; }
+        .xl-row.is-paid .xl-title { color: var(--text-dim); text-decoration: line-through; text-decoration-color: rgba(100,116,139,.45); } .xl-row.is-paid .xl-amt { color: var(--text-dim); }
+        .xl-total { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px; border-top: 2px solid var(--border); font-size: 13px; color: var(--text-dim); background: var(--surface-2); } .xl-total b { font-size: 15px; color: var(--text); }
+        @media (min-width: 721px) {
+          .xl-row { grid-template-columns: 26px 52px minmax(0, 1fr) 150px 84px 118px 128px 28px; padding: 7px 12px; }
+          .xl-head { display: grid; border-top: none; background: var(--surface-3); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); } .xl-head .r { text-align: right; }
+          .xl-date, .xl-tipo, .xl-st { display: block; font-size: 13px; color: var(--text-dim); } .xl-cat { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .xl-sub, .xl-amt small { display: none; } .xl-row:not(.xl-head):hover { background: var(--surface-2); }
+        }
+        .pm-edit { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin: 8px 0; }
+        .pm-edit label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 4px; }
+        .pm-edit input { width: 100%; font-family: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text); }
+        .pm-edit .pm-btns { display: flex; gap: 8px; margin-top: 8px; } .pm-edit p { font-size: 12px; color: var(--text-dim); margin: 8px 0 0; }
+        .kv-line .link-btn { padding: 0; margin-left: 8px; font-size: 12px; }
+        .xl-more { background: none; border: none; padding: 2px 0 0; font-family: inherit; font-size: 12.5px; font-weight: 700; color: var(--teal); cursor: pointer; }
+        .xl-fat { background: var(--surface-2); border-top: 1px solid var(--border); padding: 10px 12px 12px; } .xl-fat-h { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; }
+        .xl-grp { background: #fff; border: 1px solid var(--border); border-radius: 10px; margin-top: 6px; overflow: hidden; }
+        .xl-grp-h { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: none; padding: 9px 10px 6px; font-family: inherit; font-size: 13.5px; color: var(--text); cursor: pointer; text-align: left; }
+        .xl-grp-n { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-weight: 600; flex-wrap: wrap; } .xl-grp-n i { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; } .xl-grp-n small { font-weight: 400; font-size: 12px; color: var(--text-dim); }
+        .xl-grp-c { color: var(--text-dim); font-size: 12px; } .xl-grp-bar { height: 4px; background: var(--surface-3); margin: 0 10px 8px; border-radius: 999px; overflow: hidden; } .xl-grp-bar i { display: block; height: 100%; border-radius: 999px; }
+        .xl-it { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--border); font-size: 13px; } .xl-it span:first-child { color: var(--text-dim); font-size: 12px; } .xl-it-d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fat-box { display: flex; flex-direction: column; gap: 4px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; padding: 12px 14px; margin: 10px 0 12px; font-size: 13px; } .fat-box > span { color: var(--text-dim); } .fat-box input:not([type=checkbox]) { background: #fff; }
       `}</style>
 
       <div className="main">
@@ -3289,7 +3487,7 @@ function App() {
         )}
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
-            addInvestment={addInvestment} removeInvestment={removeInvestment}
+            addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun}
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} />
         )}
@@ -3654,7 +3852,7 @@ function PosicaoInicialCard({ investments, onToggle }) {
   const groups = useMemo(() => {
     const map = {};
     investments.forEach((i) => {
-      if (!i.date) return;
+      if (!i.date || i.tipo === "ajuste") return;
       const g = map[i.date] = map[i.date] || { date: i.date, count: 0, total: 0, marked: 0 };
       g.count += 1; g.total += Number(i.amount || 0); if (i.posicaoInicial) g.marked += 1;
     });
@@ -3994,6 +4192,23 @@ function escalaProximas(s, n) {
   for (let k = 0; k < 150 && out.length < n; k++) { const iso = addDaysIso(hoje, k); const [y, m, d] = iso.split("-").map(Number); if ((s.dias || []).includes(new Date(y, m - 1, d).getDay()) && slotNaSemana(s, iso)) out.push(iso); }
   return out;
 }
+const slotFds = (s) => (s.dias || []).length > 0 && (s.dias || []).every((d) => d === 6 || d === 0);
+const repTxt = (n, fds, cap) => {
+  const t = n <= 1 ? (fds ? "todo fim de semana" : "toda semana") : n === 2 ? (fds ? "um fim de semana sim, outro não" : "uma semana sim, outra não") : (fds ? `a cada ${n} fins de semana` : `a cada ${n} semanas`);
+  return cap ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+};
+// Próximas semanas (de segunda a domingo) em que os dias deste horário ainda não passaram, para escolher qual é a da vez
+function escalaSemanas(s, n) {
+  const out = [], hoje = todayStr(), [y, m, d] = hoje.split("-").map(Number);
+  const seg = addDaysIso(hoje, -((new Date(y, m - 1, d).getDay() + 6) % 7));
+  for (let k = 0; k < 8 && out.length < n; k++) {
+    const dias = ORDEM_SEM.filter((x) => (s.dias || []).includes(x)).map((x) => addDaysIso(seg, k * 7 + ((x + 6) % 7))).filter((iso) => iso >= hoje);
+    if (!dias.length) continue;
+    const c = (iso) => fmtDatePt(iso).slice(0, 5);
+    out.push({ inicio: dias[0], label: dias.length === 1 ? c(dias[0]) : dias.length === 2 ? `${c(dias[0])} e ${c(dias[1])}` : `${c(dias[0])} a ${c(dias[dias.length - 1])}` });
+  }
+  return out;
+}
 function escalaDoMes(v, y, m) {
   if (!v || v.tipo !== "mensal" || !Array.isArray(v.escala) || v.escala.length === 0) return [];
   if (v.startMonth && v.startMonth > monthKeyOf(y, m)) return [];
@@ -4013,7 +4228,7 @@ function escalaDiasTxt(dias) {
   if (d.length === 7) return "Todos os dias";
   return d.map((x) => DIAS_SEM[x]).join(", ");
 }
-const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}${slotCada(s) > 1 ? ` · a cada ${slotCada(s) * 7} dias` : ""}`).join("  |  ");
+const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}${slotCada(s) > 1 ? ` · ${repTxt(slotCada(s), slotFds(s))}` : ""}`).join("  |  ");
 const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + ((s.dias || []).length * (Number(s.horas) || 0)) / slotCada(s), 0);
 
 function EscalaEditor({ value, onChange }) {
@@ -4022,7 +4237,7 @@ function EscalaEditor({ value, onChange }) {
   const add = (dias) => onChange([...list, { id: uid(), dias, turno: "manha", horas: 6 }]);
   return (
     <div className="escala-ed">
-      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Sem escala. Adicione os horários que se repetem, como “Seg a Sex de manhã” ou “fim de semana a cada 14 dias”.</div>}
+      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Sem escala. Adicione os horários que se repetem, como “Seg a Sex de manhã” ou “um fim de semana sim, outro não”.</div>}
       {list.map((s) => (
         <div key={s.id} className="escala-slot">
           <div className="chip-row" role="group" aria-label="Dias da semana">
@@ -4035,13 +4250,31 @@ function EscalaEditor({ value, onChange }) {
             <label>Horas por dia<input type="number" inputMode="decimal" min="0" step="0.5" value={s.horas} onChange={(e) => upd(s.id, { horas: e.target.value })} /></label>
             <button type="button" className="btn-icon" aria-label="Remover horário" onClick={() => onChange(list.filter((x) => x.id !== s.id))}><IconTrash size={15} /></button>
           </div>
-          <div className="escala-row rep">
-            <label>Repete<select data-rep value={slotCada(s)} onChange={(e) => { const c = Number(e.target.value); upd(s.id, c > 1 ? { cada: c, inicio: s.inicio || todayStr() } : { cada: 1 }); }}>
-              <option value={1}>Toda semana (a cada 7 dias)</option><option value={2}>A cada 14 dias</option><option value={3}>A cada 21 dias</option><option value={4}>A cada 28 dias</option>
-            </select></label>
-            {slotCada(s) > 1 && <label>Um dia em que você trabalha<input type="date" data-inicio value={s.inicio || ""} onChange={(e) => upd(s.id, { inicio: e.target.value || todayStr() })} /></label>}
-          </div>
-          {slotCada(s) > 1 && (() => { const px = escalaProximas(s, 4); return <div className="escala-prox" data-prox>{px.length ? "Próximos dias: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") : "Escolha os dias da semana acima."}</div>; })()}
+          {(() => {
+            const fds = slotFds(s), c = slotCada(s), ops = escalaSemanas(s, Math.max(c, 2));
+            const px = c > 1 ? escalaProximas(s, 4) : [];
+            return (
+              <div className="escala-rep" data-rep-box>
+                <div className="escala-q">Com que frequência?</div>
+                <div className="chip-row" role="group" aria-label="Frequência">
+                  {[1, 2, 3].map((n) => (
+                    <button key={n} type="button" data-rep={n} className={`chip sm ${c === n ? "active" : ""}`} aria-pressed={c === n}
+                      onClick={() => upd(s.id, n > 1 ? { cada: n, inicio: (c > 1 && s.inicio) ? s.inicio : ((escalaSemanas(s, 1)[0] || {}).inicio || todayStr()) } : { cada: 1 })}>{repTxt(n, fds, true)}</button>
+                  ))}
+                </div>
+                {c > 1 && (s.dias || []).length > 0 && (
+                  <>
+                    <div className="escala-q">{fds ? "Qual é o próximo fim de semana em que você trabalha?" : "Qual é a próxima semana em que você trabalha?"}</div>
+                    <div className="chip-row" role="group" aria-label="Próxima vez">
+                      {ops.slice(0, c).map((o) => { const on = slotNaSemana(s, o.inicio); return <button key={o.inicio} type="button" data-prox-op={o.inicio} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { inicio: o.inicio })}>{o.label}</button>; })}
+                    </div>
+                    <div className="escala-prox" data-prox>{px.length ? "Você trabalha em: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") + "…" : ""}</div>
+                  </>
+                )}
+                {c > 1 && (s.dias || []).length === 0 && <div className="escala-prox" data-prox>Escolha os dias da semana acima.</div>}
+              </div>
+            );
+          })()}
         </div>
       ))}
       <div className="escala-add">
@@ -4402,7 +4635,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         </div>
       </div>
 
-      <button className="btn btn-ghost" onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar resumo do mês (PDF)</button>
+      <button className="btn btn-ghost" onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>
     </div>
   );
 }
@@ -4675,6 +4908,9 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
   const [cat, setCat] = useState("outros");
   const [catTouched, setCatTouched] = useState(false);
   const [filter, setFilter] = useState("todas");
+  const [sort, setSort] = useState("data");
+  const [openFat, setOpenFat] = useState(null);
+  const [openGrp, setOpenGrp] = useState({});
   const [editing, setEditing] = useState(null);
   const [addCat, setAddCat] = useState("");
   const [extraCats, setExtraCats] = useState([]);
@@ -4705,8 +4941,16 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
 
   const visible = monthExpenseItems.filter((e) => filter === "todas" ? true : filter === "pagas" ? e.paid : !e.paid)
     .sort((a, b) => (a.dateIso || "").localeCompare(b.dateIso || ""));
-  const groups = [];
-  visible.forEach((e) => { const g = groups[groups.length - 1]; if (g && g.iso === e.dateIso) g.items.push(e); else groups.push({ iso: e.dateIso, items: [e] }); });
+  const catLabel = (e) => (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label;
+  const byDate = (a, b) => (a.dateIso || "").localeCompare(b.dateIso || "") || a.description.localeCompare(b.description);
+  const ordem = { data: byDate, valor: (a, b) => b.amount - a.amount || byDate(a, b), categoria: (a, b) => catLabel(a).localeCompare(catLabel(b)) || byDate(a, b) };
+  const sorted = [...visible].sort(ordem[sort] || byDate);
+  const secs = [
+    { id: "atrasadas", titulo: "Atrasadas", items: sorted.filter((e) => !e.paid && e.dateIso < today) },
+    { id: "apagar", titulo: "A pagar", items: sorted.filter((e) => !e.paid && e.dateIso >= today) },
+    { id: "pagas", titulo: "Pagas", items: sorted.filter((e) => e.paid) },
+  ].filter((x) => x.items.length > 0);
+  const catResumo = Object.keys(spentBy).map((c) => { const m = EXP_CAT_MAP[c] || EXP_CAT_MAP.outros; return { id: c, label: m.label, color: m.color, valor: spentBy[c] }; }).filter((c) => c.valor > 0).sort((a, b) => b.valor - a.valor);
 
   return (
     <div>
@@ -4727,31 +4971,71 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
           </div>
         </div>
         {visible.length === 0 && <div className="empty-state">{monthExpenseItems.length === 0 ? "Nenhuma despesa cadastrada neste mês." : "Nada por aqui neste filtro."}</div>}
-        {groups.map((g) => (
-          <div key={g.iso}>
-            <div className="tx-group">{dayGroupLabel(g.iso, today)}</div>
-            {g.items.map((e) => {
-              const meta = EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros;
-              const di = dueInfo(e.dateIso, today, e.paid);
-              return (
-                <div key={e.key} className={`tx-row ${e.paid ? "is-paid" : ""}`}>
-                  <span className="tx-ico" style={{ background: meta.color + "1a" }}><ExpIcon id={meta.id} size={19} color={meta.color} /></span>
-                  <div className="tx-main">
-                    <div className="tx-title">{e.description}</div>
-                    <div className="tx-sub"><span>{meta.label}</span><span>·</span><span>{e.tipo === "recorrente" ? "todo mês" : "pontual"}</span>{!e.paid && <span className={`due ${di.cls}`}>{di.text}</span>}</div>
-                  </div>
-                  <div className="tx-right">
-                    <span className="tx-amt mono">− {fmtBRL(e.amount)}</span>
-                    <div className="tx-actions">
-                      <button className={`tx-status ${e.paid ? "paid" : "open"}`} onClick={e.toggle}>{e.paid ? "Pago" : "Marcar pago"}</button>
-                      <button className="btn-icon" onClick={e.remove} aria-label="Excluir"><IconTrash size={15} /></button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+        {total > 0 && (
+          <div className="xl-cats" id="exp-cats">
+            <div className="xl-bar">{catResumo.map((c) => <i key={c.id} style={{ width: `${(c.valor / total) * 100}%`, background: c.color }} title={`${c.label}: ${fmtBRL(c.valor)}`} />)}</div>
+            <div className="xl-legend">{catResumo.slice(0, 5).map((c) => <span key={c.id}><i style={{ background: c.color }} />{c.label} <b>{Math.round((c.valor / total) * 100)}%</b></span>)}{catResumo.length > 5 && <span>+{catResumo.length - 5}</span>}</div>
           </div>
-        ))}
+        )}
+        {visible.length > 1 && (
+          <div className="xl-tools">
+            <span>Ordenar por</span>
+            {[["data", "Vencimento"], ["valor", "Maior valor"], ["categoria", "Categoria"]].map(([k, l]) => <button key={k} type="button" data-sort={k} className={`chip sm ${sort === k ? "active" : ""}`} aria-pressed={sort === k} onClick={() => setSort(k)}>{l}</button>)}
+          </div>
+        )}
+        {visible.length > 0 && (
+          <div className="xl" id="exp-list">
+            <div className="xl-row xl-head"><span /><span>Venc.</span><span>Descrição</span><span>Categoria</span><span>Tipo</span><span className="r">Valor</span><span>Situação</span><span /></div>
+            {secs.map((sec) => (
+              <div key={sec.id} className="xl-secbox" data-sec={sec.id}>
+                <div className={`xl-sec ${sec.id}`}><b>{sec.titulo}</b><span>{sec.items.length} {sec.items.length === 1 ? "conta" : "contas"} · {fmtBRL(sec.items.reduce((a, e) => a + e.amount, 0))}</span></div>
+                {sec.items.map((e) => {
+                  const meta = EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros;
+                  const di = dueInfo(e.dateIso, today, e.paid), dm = e.dateIso.slice(8, 10) + "/" + e.dateIso.slice(5, 7);
+                  const linha = (
+                    <div key={e.key} className={`xl-row ${e.paid ? "is-paid" : ""}`} data-exp={e.description}>
+                      <button type="button" className={`xl-check ${e.paid ? "on" : ""}`} aria-pressed={e.paid} aria-label={e.paid ? `Desmarcar ${e.description} como paga` : `Marcar ${e.description} como paga`} onClick={e.toggle}>
+                        {e.paid && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                      </button>
+                      <span className="xl-date mono">{dm}</span>
+                      <div className="xl-main">
+                        <div className="xl-title">{e.description}</div>
+                        {e.itens && <button type="button" className="xl-more" data-fat-open aria-expanded={openFat === e.key} onClick={() => setOpenFat(openFat === e.key ? null : e.key)}>{openFat === e.key ? "Fechar" : `Ver os ${e.itens.length} gastos`} <span aria-hidden="true">{openFat === e.key ? "▴" : "▾"}</span></button>}
+                        <div className="xl-sub"><span className="mono">{dm}</span><span>·</span><i style={{ background: meta.color }} /><span>{meta.label}</span>{e.tipo === "recorrente" && <><span>·</span><span>todo mês</span></>}</div>
+                      </div>
+                      <span className="xl-cat"><i style={{ background: meta.color }} />{meta.label}</span>
+                      <span className="xl-tipo">{e.tipo === "recorrente" ? "Todo mês" : "Pontual"}</span>
+                      <span className="xl-amt"><span className="mono">{fmtBRL(e.amount)}</span>{!e.paid && di.cls !== "open" && <small className={`due ${di.cls}`}>{di.text}</small>}</span>
+                      <span className="xl-st"><span className={`due ${di.cls}`}>{e.paid ? "Paga" : di.text}</span></span>
+                      <button className="btn-icon" onClick={e.remove} aria-label={`Excluir ${e.description}`}><IconTrash size={15} /></button>
+                    </div>
+                  );
+                  if (e.itens && openFat === e.key) return (
+                    <React.Fragment key={e.key}>
+                      {linha}
+                      <div className="xl-fat" data-fat={e.description}>
+                        <div className="xl-fat-h">Gastos desta fatura por categoria</div>
+                        {faturaGrupos(e.itens).map((g) => { const gk = e.key + "|" + g.id, ab = !!openGrp[gk]; return (
+                          <div key={g.id} className="xl-grp">
+                            <button type="button" className="xl-grp-h" data-grp={g.label} aria-expanded={ab} onClick={() => setOpenGrp((p) => ({ ...p, [gk]: !p[gk] }))}>
+                              <span className="xl-grp-n"><i style={{ background: g.color }} />{g.label}<small>{g.itens.length} {g.itens.length === 1 ? "compra" : "compras"} · {Math.round((g.valor / (e.amount || 1)) * 100)}%</small></span>
+                              <b className="mono">{fmtBRL(g.valor)}</b><span className="xl-grp-c" aria-hidden="true">{ab ? "▴" : "▾"}</span>
+                            </button>
+                            <div className="xl-grp-bar"><i style={{ width: `${Math.min(100, (g.valor / (e.amount || 1)) * 100)}%`, background: g.color }} /></div>
+                            {ab && g.itens.map((it, n) => <div key={n} className="xl-it"><span className="mono">{(it.dt || "").slice(8, 10)}/{(it.dt || "").slice(5, 7)}</span><span className="xl-it-d">{it.d}</span><b className="mono">{fmtBRL(it.v)}</b></div>)}
+                          </div>
+                        ); })}
+                      </div>
+                    </React.Fragment>
+                  );
+                  return linha;
+                })}
+              </div>
+            ))}
+            <div className="xl-total"><span>{filter === "todas" ? "Total do mês" : "Total deste filtro"} · {visible.length} {visible.length === 1 ? "conta" : "contas"}</span><b className="mono">{fmtBRL(visible.reduce((a, e) => a + e.amount, 0))}</b></div>
+          </div>
+        )}
+        <div className="field-hint" style={{ marginTop: 10 }}>Toque no círculo para marcar a conta como paga.</div>
       </div>
       <div className="grid-2">
         <div className="card">
@@ -4853,7 +5137,7 @@ function AssetInput({ value, onChange, onPick, options, placeholder, showAllOnEm
   );
 }
 
-function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment,
+function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
   setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal }) {
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
@@ -4861,6 +5145,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const [catFilter, setCatFilter] = useState("todas");
   const [sortBy, setSortBy] = useState("valor");
   const [openKey, setOpenKey] = useState(null);
+  const [pmEdit, setPmEdit] = useState(null); // { key, value, erro }
   const formRef = useRef(null);
   const todayIso = todayStr();
 
@@ -5181,13 +5466,34 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                         {open && (
                           <div className="ac-more">
                             {p.isQty && <div className="kv-line"><span>Quantidade</span><b className="mono">{fmtQty(p.qty)}</b></div>}
-                            {p.isQty && <div className="kv-line"><span>Preço médio</span><b className="mono">{fmtBRL(p.avg)}</b></div>}
+                            {p.isQty && <div className="kv-line"><span>Preço médio{!(pmEdit && pmEdit.key === p.key) && <button type="button" className="link-btn" data-pm-ajustar onClick={() => setPmEdit({ key: p.key, value: String(Math.round(p.avg * 100) / 100).replace(".", ","), erro: "" })}>ajustar</button>}</span><b className="mono">{fmtBRL(p.avg)}</b></div>}
+                            {p.isQty && pmEdit && pmEdit.key === p.key && (
+                              <div className="pm-edit" data-pm-edit>
+                                <label>Novo preço médio (R$)</label>
+                                <input type="text" inputMode="decimal" value={pmEdit.value} onChange={(e) => setPmEdit({ ...pmEdit, value: e.target.value, erro: "" })} />
+                                {numOf(pmEdit.value) > 0 && <p data-pm-prev>Total investido passa de {fmtBRL(p.cost)} para <b>{fmtBRL(numOf(pmEdit.value) * p.qty)}</b>.</p>}
+                                {pmEdit.erro && <div className="note-bad" style={{ marginTop: 8 }}>{pmEdit.erro}</div>}
+                                <div className="pm-btns">
+                                  <button type="button" className="btn btn-primary sm" data-pm-salvar onClick={() => { if (adjustAvg(p, pmEdit.value)) setPmEdit(null); else setPmEdit({ ...pmEdit, erro: "Digite um preço maior que zero." }); }}>Salvar</button>
+                                  <button type="button" className="btn btn-ghost sm" onClick={() => setPmEdit(null)}>Cancelar</button>
+                                </div>
+                                <p>Use quando o preço médio do app estiver diferente do da corretora, por causa de taxas, desdobramentos ou compras antigas. Não mexe no seu caixa nem no patrimônio. Para desfazer, apague o ajuste em Lançamentos.</p>
+                              </div>
+                            )}
                             <div className="kv-line"><span>Total investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
                             <div className="kv-line"><span>Valor atual</span><b className="mono">{fmtBRL(p.value)}</b></div>
                             {Math.abs(p.realized) > 0.005 && <div className="kv-line"><span>Resultado de vendas</span><b className="mono" style={{ color: p.realized >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(p.realized)} {fmtBRL(Math.abs(p.realized))}</b></div>}
                             <div className="ac-hist-title">{hist.length} {hist.length === 1 ? "lançamento" : "lançamentos"}</div>
                             {hist.map((i) => {
                               const sell = i.tipo === "venda" || Number(i.amount) < 0;
+                              if (i.tipo === "ajuste") return (
+                                <div key={i.id} className="ac-hist" data-ajuste>
+                                  <span className="ah-date">{fmtDatePt(i.date)}</span>
+                                  <span className="ah-kind" style={{ color: "var(--text-dim)" }}>Ajuste do preço médio</span>
+                                  <span className="ah-qty mono">para {fmtBRL(i.price)}</span>
+                                  <b className="mono">{Number(i.ajuste) >= 0 ? "+" : "−"} {fmtBRL(Math.abs(i.ajuste))}</b>
+                                </div>
+                              );
                               return (
                                 <div key={i.id} className="ac-hist">
                                   <span className="ah-date">{fmtDatePt(i.date)}</span>
@@ -5228,10 +5534,10 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                       <tr key={i.id}>
                         <td>{fmtDatePt(i.date).slice(0, 5)}<span className="cell-sub">{i.date.slice(0, 4)}</span></td>
                         <td><b>{i.description}</b><span className="cell-sub">{i.category}</span></td>
-                        <td><span className={`badge ${i.posicaoInicial ? "" : sell ? "badge-pending" : "badge-paid"}`} style={{ cursor: "default" }}>{i.posicaoInicial ? "Posição inicial" : sell ? "Venda" : "Compra"}</span></td>
+                        <td><span className={`badge ${i.posicaoInicial || i.tipo === "ajuste" ? "" : sell ? "badge-pending" : "badge-paid"}`} style={{ cursor: "default" }}>{i.tipo === "ajuste" ? "Ajuste de preço médio" : i.posicaoInicial ? "Posição inicial" : sell ? "Venda" : "Compra"}</span></td>
                         <td className="num mono hide-sm">{i.qty > 0 ? Number(i.qty) : "—"}</td>
-                        <td className="num mono hide-sm">{i.qty > 0 ? fmtBRL(i.price) : "—"}</td>
-                        <td className="num mono" style={{ color: sell ? "var(--brick)" : "var(--text)" }}>{fmtBRL(Math.abs(i.amount))}</td>
+                        <td className="num mono hide-sm">{i.qty > 0 || i.tipo === "ajuste" ? fmtBRL(i.price) : "—"}</td>
+                        <td className="num mono" style={{ color: sell ? "var(--brick)" : "var(--text)" }}>{i.tipo === "ajuste" ? (Number(i.ajuste) >= 0 ? "+ " : "− ") + fmtBRL(Math.abs(i.ajuste)) : fmtBRL(Math.abs(i.amount))}</td>
                         <td className="num"><button className="btn-icon" onClick={() => removeInvestment(i.id)}><IconTrash size={15} /></button></td>
                       </tr>
                     );
@@ -5337,9 +5643,12 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
   const [password, setPassword] = useState("");
   const [filter, setFilter] = useState("todos");
   const [done, setDone] = useState(null);
+  const [fatNome, setFatNome] = useState("Cartão de crédito");
+  const [fatVenc, setFatVenc] = useState("");
+  const [fatPago, setFatPago] = useState(null);
   const fileRef = useRef(null);
 
-  const reset = () => { setRaw([]); setB3raw([]); setB3info(null); setEdits({}); setLabel(""); setError(""); setInvert(false); setPwdFile(null); setPassword(""); };
+  const reset = () => { setRaw([]); setB3raw([]); setB3info(null); setEdits({}); setLabel(""); setError(""); setInvert(false); setPwdFile(null); setPassword(""); setFatNome("Cartão de crédito"); setFatVenc(""); setFatPago(null); };
 
   const handleFiles = async (files, pwd) => {
     setError(""); setDone(null);
@@ -5527,13 +5836,16 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
   const shown = rows.filter((r) => filter === "todos" ? true : filter === "saidas" ? r.out && r.action !== "ignorar" : filter === "entradas" ? !r.out && r.action !== "ignorar" : r.action === "ignorar")
     .sort((a, b) => b.date.localeCompare(a.date));
 
+  const ehFatura = source === "fatura" && novos.length > 0;
+  const fatVencDef = useMemo(() => { const ds = novos.map((r) => r.date).sort(); return ds.length ? addDaysIso(ds[ds.length - 1], 10) : todayStr(); }, [rows]);
+  const fatVencV = fatVenc || fatVencDef, fatPagoV = fatPago === null ? fatVencV < todayStr() : fatPago;
   const doImport = () => {
-    const entry = commitImport(rows, label || "Importação");
+    const entry = commitImport(rows, label || "Importação", ehFatura ? { nome: fatNome, dueDate: fatVencV, paid: fatPagoV } : null);
     setDone(entry); reset();
   };
 
   const actionOptions = (r) => r.out
-    ? [["novo", "Criar despesa (já paga)"], ...(r.matchItem ? [["baixar", "Dar baixa: " + r.matchItem.description]] : []), ["ignorar", "Ignorar"]]
+    ? [["novo", source === "fatura" ? "Incluir na fatura" : "Criar despesa (já paga)"], ...(r.matchItem ? [["baixar", "Dar baixa: " + r.matchItem.description]] : []), ["ignorar", "Ignorar"]]
     : [["receita", "Registrar como entrada"], ...(r.matchItem ? [["receber", "Marcar recebido: " + r.matchItem.nome]] : []), ["ignorar", "Ignorar"]];
 
   return (
@@ -5544,6 +5856,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
           <div className="line-sub" style={{ fontSize: 14, color: "var(--text)" }}>
             {done.investimentos !== undefined
               ? `${done.investimentos} lançamento(s) de investimento criado(s) e ${done.cotacoes} cotação(ões) atualizada(s).`
+              : done.fatura ? `Fatura lançada como uma despesa só, de ${fmtBRL(done.total)}, com ${done.fatura} compra(s) dentro. ${done.baixas} conta(s) conciliada(s).`
               : `${done.despesas} despesa(s) criada(s) (${fmtBRL(done.total)}), ${done.baixas} conta(s) conciliada(s) e ${done.entradas} entrada(s) registrada(s).`}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
@@ -5559,7 +5872,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
           <div className="card-head"><h3 className="card-title">1. O que você vai importar?</h3></div>
           <div className="choice-row">
             <button className={`choice ${source === "extrato" ? "on" : ""}`} onClick={() => setSource("extrato")}><b>Extrato da conta</b><span>Entradas (pagamentos dos hospitais) e saídas (contas, PIX, boletos)</span></button>
-            <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><span>Compras do cartão, cada uma vira uma despesa</span></button>
+            <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><span>Entra como uma despesa só. Os gastos ficam dentro dela, por categoria</span></button>
             <button className={`choice ${source === "b3" ? "on" : ""}`} onClick={() => setSource("b3")}><b>Planilha da B3</b><span>Sua carteira da Área do Investidor: ações, FIIs, ETFs e Tesouro</span></button>
             <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><span>O PDF que a corretora envia: lança as compras e vendas do mês</span></button>
           </div>
@@ -5700,6 +6013,17 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
               </div>
               <label className="check-line"><input type="checkbox" checked={invert} onChange={(e) => setInvert(e.target.checked)} /> Inverter sinais (use se as compras aparecerem como entradas)</label>
               {error && <div className="note-bad">{error}</div>}
+              {ehFatura && (
+                <div className="fat-box" id="fat-box">
+                  <b>Tudo entra como uma despesa só: {fmtBRL(sum(novos))}</b>
+                  <span>As {novos.length} compras ficam guardadas dentro dela. Em Despesas, toque na fatura para ver os gastos por categoria.</span>
+                  <div className="form-grid" style={{ marginTop: 8 }}>
+                    <div className="field"><label>Nome</label><input id="fat-nome" value={fatNome} onChange={(e) => setFatNome(e.target.value)} placeholder="Cartão de crédito" /></div>
+                    <div className="field"><label>Vencimento da fatura</label><input id="fat-venc" type="date" value={fatVencV} onChange={(e) => setFatVenc(e.target.value)} /></div>
+                  </div>
+                  <label className="check-line"><input id="fat-pago" type="checkbox" checked={fatPagoV} onChange={(e) => setFatPago(e.target.checked)} /> Esta fatura já foi paga</label>
+                </div>
+              )}
             </div>
             <div className="imp-list">
               {shown.length === 0 && <div className="empty-state">Nada neste filtro.</div>}
