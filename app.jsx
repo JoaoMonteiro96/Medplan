@@ -605,7 +605,8 @@ const pad = (n) => String(n).padStart(2, "0");
 const dateStr = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
 const monthKeyOf = (y, m) => `${y}-${pad(m + 1)}`;
 const todayStr = () => { const t = new Date(); return dateStr(t.getFullYear(), t.getMonth(), t.getDate()); };
-const fmtBRL = (n) => (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+let DISCRETO = false; // modo discreto: esconde os valores em reais (fica neste aparelho)
+const fmtBRL = (n) => (DISCRETO ? "R$ ••••" : (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
 const fmtDatePt = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const colorForIndex = (i) => PALETTE[i % PALETTE.length];
@@ -1704,6 +1705,22 @@ function App() {
 
   // Lembretes: o que vence ou cai nos próximos 40 dias e ainda está em aberto. A opção fica só neste aparelho.
   const [notifOn, setNotifOnState] = useState(() => { try { return localStorage.getItem("mediplan-notif") === "1"; } catch (e) { return false; } });
+  const [discreto, setDiscretoState] = useState(() => lsGet("mediplan-discreto") === "1");
+  DISCRETO = discreto;
+  const setDiscreto = (v) => { lsSet("mediplan-discreto", v ? "1" : null); setDiscretoState(!!v); };
+  // trava com código de 4 números (só neste aparelho)
+  const [pinHash, setPinHashState] = useState(() => lsGet("mediplan-pin") || "");
+  const [locked, setLocked] = useState(() => !!lsGet("mediplan-pin"));
+  const [bioId, setBioIdState] = useState(() => lsGet("mediplan-bio") || "");
+  const setBioId = (id) => { lsSet("mediplan-bio", id || null); setBioIdState(id || ""); };
+  const setPinHash = (h) => { lsSet("mediplan-pin", h || null); setPinHashState(h || ""); setLocked(false); if (!h) setBioId(""); };
+  useEffect(() => {
+    if (!pinHash) return;
+    let saiuEm = 0;
+    const onVis = () => { if (document.hidden) saiuEm = Date.now(); else if (saiuEm && Date.now() - saiuEm > 60000) setLocked(true); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [pinHash]);
   const setNotifOn = (v) => { setNotifOnState(!!v); try { localStorage.setItem("mediplan-notif", v ? "1" : "0"); } catch (e) {} };
   const lembretes = useMemo(() => {
     const t = new Date(), hoje = todayStr(), fim = addDaysIso(hoje, 40), out = [];
@@ -1762,8 +1779,10 @@ function App() {
   }, [monthShifts, monthPresencas, vinculos, viewYear, viewMonth]);
 
   const goMonth = (y, m) => { setViewYear(y); setViewMonth(m); setSelectedDay(null); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} };
+  const [cargoOpen, setCargoOpen] = useState(false);
   const quickGo = (kind) => {
     setQuickOpen(false);
+    if (kind === "cargo") { setCargoOpen(true); return; }
     if (kind === "plantao") {
       const t = new Date(); setViewYear(t.getFullYear()); setViewMonth(t.getMonth()); setSelectedDay(t.getDate()); goTab("calendario");
     } else if (kind === "despesa") { setSignals((x) => ({ ...x, despesas: x.despesas + 1 })); goTab("despesas"); }
@@ -2426,6 +2445,9 @@ function App() {
       if (sp >= lim) list.unshift({ id: "lim-" + c, level: "danger", text: `${name}: passou ${fmtBRL(sp - lim)} do limite` });
       else if (sp >= lim * 0.8) list.push({ id: "lim-" + c, level: "warning", text: `${name}: ${Math.round((sp / lim) * 100)}% usado` });
     });
+    monthIncomeItems.forEach((it) => {
+      if (it.tipo === "plantao" && !it.recebido && it.dateIso < todayIso) list.push({ id: "atraso-" + it.key, level: "danger", text: `${it.nome}: pagamento previsto para ${fmtDatePt(it.dateIso)} ainda não foi marcado como recebido` });
+    });
     goals.forEach((g) => {
       if (g.prazo && g.valorAtual < g.valorAlvo && g.prazo < todayIso) list.push({ id: "goal-" + g.id, level: "warning", text: `Meta "${g.nome}" passou do prazo e ainda não foi concluída` });
     });
@@ -2459,6 +2481,10 @@ function App() {
     doc.save(`mediplan-relatorio-${MONTHS_ABBR_PT[viewMonth]}-${viewYear}.pdf`);
   };
 
+
+  if (pinHash && locked) {
+    return <PinGate hash={pinHash} bioId={bioId} onOk={() => setLocked(false)} onForget={() => { if (!window.confirm("Remover a trava deste aparelho? Seus dados continuam aqui.")) return; setPinHash(""); }} />;
+  }
 
   if (cloudCfg && !cloudSkip && authNeeded && (!session || recovery)) {
     return <AuthScreen key={recovery ? "rec" : "auth"} cfg={cloudCfg} recovery={recovery} onSkip={cloudActions.skip} onRecovered={() => { setRecovery(false); setAuthNeeded(false); }} />;
@@ -3489,6 +3515,7 @@ function App() {
             netByVinculo={netByVinculo} gainScope={gainScope} setGainScope={setGainScope} history12={history12}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth}
             workCard={<WorkRateCard cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} goMonth={goMonth} />}
+            discreto={discreto} setDiscreto={setDiscreto}
           />
         )}
         {activeTab === "calendario" && (
@@ -3510,7 +3537,7 @@ function App() {
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun}
-            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} />
+            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} />
         )}
         {activeTab === "metas" && (
           <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} />
@@ -3530,6 +3557,7 @@ function App() {
         {activeTab === "backup" && (
           <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
             notifCard={<LembretesCard on={notifOn} setOn={setNotifOn} itens={lembretes} />}
+            privacyCard={<PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} />}
             posicaoCard={<PosicaoInicialCard investments={investments} onToggle={setPosicaoInicial} />}
             wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
             cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
@@ -3546,11 +3574,15 @@ function App() {
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
             <div className="sheet-title">O que você quer lançar?</div>
-            {[["plantao", "Plantão", "no calendário", IconCalendar, TEAL], ["despesa", "Despesa", "conta fixa ou pontual", IconWallet, BRICK], ["aporte", "Investimento", "aporte, compra ou venda", IconTrending, "#2563EB"], ["importar", "Importar extrato", "OFX, CSV ou PDF do banco", IconUpload, SLATE]].map(([k, l, sub, Ic, c]) => (
+            {[["plantao", "Plantão", "no calendário", IconCalendar, TEAL], ["cargo", "Cargo fixo", "diarismo, coordenação, preceptoria", IconCalendar, "#7C5CBF"], ["despesa", "Despesa", "conta fixa ou pontual", IconWallet, BRICK], ["aporte", "Investimento", "aporte, compra ou venda", IconTrending, "#2563EB"], ["importar", "Importar extrato", "OFX, CSV ou PDF do banco", IconUpload, SLATE]].map(([k, l, sub, Ic, c]) => (
               <button key={k} className="sheet-item" onClick={() => quickGo(k)}><span className="sheet-ico" style={{ background: c + "1a", color: c }}><Ic size={18} /></span><span><b>{l}</b><small>{sub}</small></span></button>
             ))}
           </div>
         </div>
+      )}
+
+      {cargoOpen && (
+        <QuickCargoFixo onClose={() => setCargoOpen(false)} monthKey={monthKey} onSave={(d) => addVinculo(d)} />
       )}
 
       <button className="fab2" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
@@ -3558,6 +3590,26 @@ function App() {
       <div className="footnote">
         {session ? `Conectado como ${session.user.email}. Seus dados ficam salvos na nuvem e neste aparelho.` : "Os dados ficam salvos neste aparelho. Para usar em mais de um aparelho, conecte a nuvem em Configurações."}
       </div>
+      </div>
+    </div>
+  );
+}
+
+// atalho "Cargo fixo" do botão +: abre direto o cadastro de cargo fixo (diarismo, coordenação, preceptoria)
+function QuickCargoFixo({ onClose, onSave, monthKey }) {
+  const [escolhido, setEscolhido] = useState("");
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="sheet-handle" />
+        <div className="sheet-title">Novo cargo fixo</div>
+        <p className="add-sub">Escolha o tipo ou digite um nome. O salário do mês entra sozinho e a escala aparece no calendário.</p>
+        <div className="chip-row" style={{ marginBottom: 10 }}>
+          {["Diarismo", "Coordenação", "Preceptoria", "Outro"].map((p) => <button key={p} type="button" className={`chip sm ${escolhido === p ? "active" : ""}`} onClick={() => setEscolhido(p === "Outro" ? "__" : p)}>{p}</button>)}
+        </div>
+        <VinculoForm key={escolhido} fixo defaultNome={escolhido === "__" ? "" : escolhido} defaultStartMonth={monthKey}
+          onSubmit={(d) => { onSave(d); onClose(); }} />
+        <div style={{ marginTop: 10, textAlign: "center" }}><button className="link-btn" onClick={onClose}>Cancelar</button></div>
       </div>
     </div>
   );
@@ -3578,8 +3630,8 @@ function SectionShell({ icon, iconBg, title, subtitle, expanded, onToggle, child
   );
 }
 
-function VinculoForm({ onSubmit, defaultStartMonth, fixo }) {
-  const [nome, setNome] = useState("");
+function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome }) {
+  const [nome, setNome] = useState(defaultNome || "");
   const [cor, setCor] = useState(PALETTE[0]);
   const [tipo, setTipo] = useState(fixo ? "mensal" : "plantao");
   const [taxOverride, setTaxOverride] = useState("");
@@ -3717,7 +3769,7 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
 function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
-  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard
+  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto
 }) {
   const [manage, setManage] = useState(vinculos.length === 0);
   const sorted = [...monthIncomeItems].sort((a, b) => a.tipo === b.tipo ? 0 : (a.tipo === "plantao" ? -1 : 1));
@@ -3726,6 +3778,7 @@ function FaturamentoTab({
 
   return (
     <div>
+      <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
       <div className="kpi-row">
         <Kpi label="Receita bruta" value={fmtBRL(totalGross)} />
         <Kpi label="Impostos" value={fmtBRL(totalGross - totalNet)} tone="var(--brick)" />
@@ -3983,7 +4036,120 @@ function LembretesCard({ on, setOn, itens }) {
   );
 }
 
-function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard }) {
+// botão de olho: esconde ou mostra os valores (é o mesmo modo discreto)
+function EyeBtn({ on, toggle }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+      <button type="button" className="btn btn-ghost sm" onClick={toggle} aria-pressed={on} aria-label={on ? "Mostrar valores" : "Ocultar valores"} title={on ? "Mostrar valores" : "Ocultar valores"}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" /><circle cx="12" cy="12" r="3" />{on && <line x1="3" y1="3" x2="21" y2="21" />}
+        </svg>
+        {on ? " Mostrar valores" : " Ocultar valores"}
+      </button>
+    </div>
+  );
+}
+
+// digital / rosto do aparelho (WebAuthn). É uma confirmação local: o app só verifica que a pessoa passou pelo sensor.
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64u = (s) => { const t = s.replace(/-/g, "+").replace(/_/g, "/"); const bin = atob(t + "===".slice((t.length + 3) % 4)); return Uint8Array.from(bin, (c) => c.charCodeAt(0)); };
+async function bioDisponivel() {
+  try { return !!(window.PublicKeyCredential && navigator.credentials && (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())); } catch (e) { return false; }
+}
+async function bioCadastrar() {
+  const cred = await navigator.credentials.create({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)), rp: { name: "Mediplan" },
+    user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "mediplan", displayName: "Mediplan" },
+    pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+    authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" }, timeout: 60000 } });
+  return b64u(cred.rawId);
+}
+async function bioConfirmar(id) {
+  try {
+    const c = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: "public-key", id: unb64u(id) }], userVerification: "required", timeout: 60000 } });
+    return !!c;
+  } catch (e) { return false; }
+}
+
+async function hashPin(p) {
+  try {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("mediplan:" + p));
+    return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, "0")).join("");
+  } catch (e) { return "p:" + p; }
+}
+
+function PinGate({ hash, bioId, onOk, onForget }) {
+  const [pin, setPin] = useState("");
+  const [erro, setErro] = useState("");
+  const usarDigital = async () => { if (await bioConfirmar(bioId)) onOk(); else setErro("Não reconheci a digital. Use o código."); };
+  useEffect(() => { if (bioId) usarDigital(); }, []);
+  const tentar = async () => {
+    if ((await hashPin(pin)) === hash) onOk();
+    else { setErro("Código errado."); setPin(""); }
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "var(--bg, #f5f5f5)", display: "grid", placeItems: "center", padding: 16, zIndex: 1000 }}>
+      <div style={{ width: "100%", maxWidth: 320, textAlign: "center" }}>
+        <h2 style={{ margin: "0 0 6px" }}>Mediplan bloqueado</h2>
+        <p style={{ margin: "0 0 16px", color: "var(--text-dim)" }}>Digite seu código de 4 números.</p>
+        <input type="password" inputMode="numeric" autoComplete="off" maxLength={4} aria-label="Código" value={pin} autoFocus
+          onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setErro(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && pin.length === 4) tentar(); }}
+          style={{ fontSize: 24, textAlign: "center", letterSpacing: 8, width: "100%", padding: 10 }} />
+        {erro && <div className="note-bad" style={{ marginTop: 10 }}>{erro}</div>}
+        <button className="btn btn-primary" style={{ marginTop: 14, width: "100%" }} disabled={pin.length !== 4} onClick={tentar}>Entrar</button>
+        {bioId && <button className="btn btn-ghost" style={{ marginTop: 10, width: "100%" }} onClick={usarDigital}>Usar digital ou rosto</button>}
+        <div style={{ marginTop: 14 }}><button className="link-btn" onClick={onForget}>Esqueci o código</button></div>
+      </div>
+    </div>
+  );
+}
+
+function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioId, onSetBio }) {
+  const [novo, setNovo] = useState("");
+  const [conf, setConf] = useState("");
+  const [erro, setErro] = useState("");
+  const [bioOk, setBioOk] = useState(false);
+  useEffect(() => { bioDisponivel().then(setBioOk); }, []);
+  const ativarBio = async () => {
+    try { onSetBio(await bioCadastrar()); setErro(""); } catch (e) { setErro("Não consegui ativar a digital neste aparelho."); }
+  };
+  const ativar = async () => {
+    if (!/^\d{4}$/.test(novo)) { setErro("Use 4 números."); return; }
+    if (novo !== conf) { setErro("Os dois códigos não batem."); return; }
+    onSetPin(await hashPin(novo)); setNovo(""); setConf(""); setErro("");
+  };
+  return (
+    <div className="day-panel">
+      <div className="day-panel-title"><span>Privacidade</span></div>
+      <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 0 }}>Modo discreto: esconde todos os valores em reais deste aparelho, para você mostrar a tela sem expor o saldo.</p>
+      <button className="btn btn-ghost sm" onClick={() => setDiscreto(!discreto)}>{discreto ? "Desligar modo discreto" : "Ligar modo discreto"}</button>
+      <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "16px 0 8px" }}>Trava com código: pede os 4 números ao abrir o app e depois de ficar fora dele por mais de 1 minuto. É uma proteção de tela neste aparelho, não substitui o bloqueio do celular.</p>
+      {pinOn ? (
+        <>
+          <div className="field-hint" style={{ marginBottom: 8 }}>Trava ativa neste aparelho.</div>
+          {bioOk && (bioId ? (
+            <div style={{ marginBottom: 10 }}><div className="field-hint" style={{ marginBottom: 6 }}>Digital ou rosto ligado: você pode usar no lugar do código.</div><button className="btn btn-ghost sm" onClick={() => onSetBio("")}>Desligar digital</button></div>
+          ) : (
+            <div style={{ marginBottom: 10 }}><button className="btn btn-ghost sm" onClick={ativarBio}>Usar digital ou rosto</button></div>
+          ))}
+          {erro && <div className="note-bad" style={{ marginBottom: 8 }}>{erro}</div>}
+          <button className="btn btn-ghost sm" onClick={onRemovePin}>Remover trava</button>
+        </>
+      ) : (
+        <>
+          <div className="field"><label htmlFor="pin-novo">Código de 4 números</label><input id="pin-novo" type="password" inputMode="numeric" maxLength={4} value={novo} onChange={(e) => { setNovo(e.target.value.replace(/\D/g, "").slice(0, 4)); setErro(""); }} autoComplete="off" /></div>
+          <div className="field"><label htmlFor="pin-conf">Repita o código</label><input id="pin-conf" type="password" inputMode="numeric" maxLength={4} value={conf} onChange={(e) => { setConf(e.target.value.replace(/\D/g, "").slice(0, 4)); setErro(""); }} autoComplete="off" /></div>
+          {erro && <div className="note-bad" style={{ marginBottom: 8 }}>{erro}</div>}
+          <button className="btn btn-ghost sm" onClick={ativar}>Ativar trava</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard }) {
   return (
     <div>
       {cloudCard}
@@ -3998,6 +4164,8 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
       </div>
 
       {notifCard}
+
+      {privacyCard}
 
       <div className="day-panel">
         <div className="day-panel-title"><span>Backup dos dados</span></div>
@@ -5219,7 +5387,7 @@ function AssetInput({ value, onChange, onPick, options, placeholder, showAllOnEm
 }
 
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
-  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal }) {
+  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto }) {
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
   useEffect(() => { if (openSignal) { setShowForm(true); setTab("resumo"); } }, [openSignal]);
@@ -5304,6 +5472,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
 
   return (
     <div>
+      <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
       <div className="kpi-row">
         <Kpi label="Total investido" num={totalCost} sub="custo das posições" />
         <Kpi label="Patrimônio atual" num={totalValue} sub={positions.length + " posição(ões)"} />
