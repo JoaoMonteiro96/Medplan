@@ -2157,6 +2157,19 @@ function App() {
   const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + posicaoInicialTotal + portfolio.unrealized;
   const valorDaMeta = (g) => (g.fonte === "carteira" ? (portfolio.totalValue || 0) : g.fonte === "patrimonio" ? Math.max(0, patrimonioTotal) : Number(g.valorAtual) || 0);
   const setGoalFonte = (id, fonte) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, fonte } : g)));
+  const setGoalPatch = (id, patch) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  // média do que você investiu por mês nos últimos 6 meses fechados (ou desde o primeiro aporte, se faz menos tempo)
+  const aporteMedio = useMemo(() => {
+    const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth();
+    const lanc = investments.filter((i) => !i.posicaoInicial && i.tipo !== "ajuste" && i.date);
+    const idx = (iso) => Number(String(iso).slice(0, 4)) * 12 + Number(String(iso).slice(5, 7)) - 1;
+    if (!lanc.length) return 0;
+    const primeiro = Math.min(...lanc.map((i) => idx(i.date)));
+    const meses = Math.max(1, Math.min(6, cur - primeiro));
+    const tot = lanc.filter((i) => idx(i.date) >= cur - meses && idx(i.date) < cur).reduce((a, i) => a + (Number(i.amount) || 0), 0);
+    if (cur - primeiro <= 0) return Math.max(0, lanc.filter((i) => idx(i.date) === cur).reduce((a, i) => a + (Number(i.amount) || 0), 0));
+    return Math.max(0, tot / meses);
+  }, [investments]);
   const saldoRealizado = totalRecebidoAllTime - totalPagoAllTime - totalInvestedAllTime;
 
   const scopedExpenseAmounts = chartScope === "all" ? expenses.concat(recurringExpenses.map(r => ({ description: r.description, amount: r.amount }))) : monthExpenseItems;
@@ -3539,6 +3552,20 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v32: projeção das metas ================= */
+        .gp { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+        .gp-tit { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+        .gp-res { font-size: 16px; line-height: 1.4; margin: 4px 0 8px; } .gp-res b { color: #15803D; }
+        .gp-prazo { font-size: 13.5px; line-height: 1.4; padding: 9px 12px; border-radius: 10px; margin-bottom: 10px; }
+        .gp-prazo.ok { background: #F0FDF4; color: #166534; } .gp-prazo.falta { background: #FFFBEB; color: #92400E; }
+        .gp-sel { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--text-dim); margin: 6px 0 2px; } .gp-sel b { font-size: 16px; color: var(--text); }
+        .gp-grid { stroke: var(--border); } .gp-alvo { stroke: #3B82F6; stroke-width: 1.6; stroke-dasharray: 5 5; }
+        .gp-lbl { fill: var(--text-dim); font-size: 11px; font-family: inherit; }
+        .gp-bar { fill: #BBF7D0; } .gp-bar.ok { fill: #4ADE80; } .gp-bar.sel { stroke: var(--text); stroke-width: 2; }
+        .gp-campos { display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 12px; }
+        :root[data-theme="dark"] .gp-res b { color: #4ADE80; } :root[data-theme="dark"] .gp-bar { fill: rgba(74,222,128,.32); } :root[data-theme="dark"] .gp-bar.ok { fill: #4ADE80; } :root[data-theme="dark"] .gp-alvo { stroke: #60A5FA; }
+        :root[data-theme="dark"] .gp-prazo.ok { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .gp-prazo.falta { background: rgba(245,158,11,.12); color: #FCD34D; }
+
         /* ================= v31: organização (caminho do dinheiro) ================= */
         .oa { max-width: 640px; }
         .oa-chips { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -3790,7 +3817,7 @@ function App() {
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} />
         )}
         {activeTab === "metas" && (
-          <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} />
+          <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} />
         )}
         {activeTab === "visao" && (
           <OverviewTab chartScope={chartScope} setChartScope={setChartScope} expensesByDesc={expensesByDesc} investByCategory={investByCategory}
@@ -5269,7 +5296,92 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   );
 }
 
-function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte }) {
+// ---- projeção da meta: com o aporte mensal (e um rendimento opcional), em que mês a meta é alcançada ----
+const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
+  const alvo = Number(g.valorAlvo) || 0;
+  const manual = g.aporteMensal !== null && g.aporteMensal !== undefined && g.aporteMensal !== "";
+  const aporte = manual ? Math.max(0, Number(g.aporteMensal) || 0) : Math.max(0, Math.round(aporteSugerido || 0));
+  const rAno = Number(g.rendimentoAno) || 0;
+  const r = rAno > 0 ? Math.pow(1 + rAno / 100, 1 / 12) - 1 : 0;
+  const [txt, setTxt] = useState(manual ? String(g.aporteMensal).replace(".", ",") : "");
+  const [sel, setSel] = useState(null);
+  const salvar = () => { const t = txt.trim(); onPatch({ aporteMensal: t === "" ? null : Math.max(0, parseAmountBR(t) || 0) }); };
+
+  const serie = [Math.max(0, atual)]; let n = serie[0] >= alvo ? 0 : null;
+  for (let k = 1; k <= 600 && n === null; k++) { const v = serie[k - 1] * (1 + r) + aporte; serie.push(v); if (v >= alvo) n = k; }
+  const hoje = new Date();
+  const dataK = (k) => new Date(hoje.getFullYear(), hoje.getMonth() + k, 1);
+  const horiz = n === null ? Math.min(serie.length - 1, 24) : Math.max(n, 6);
+  while (serie.length <= horiz) serie.push(serie[serie.length - 1] * (1 + r) + aporte);
+  const anual = horiz > 24;
+  const ks = []; if (anual) { for (let k = 0; k < horiz; k += 12) ks.push(k); ks.push(horiz); } else for (let k = 0; k <= horiz; k++) ks.push(k);
+  const rot = (k) => { const d = dataK(k); return anual ? String(d.getFullYear()) : (k === 0 ? "hoje" : (MONTHS_ABBR_PT[d.getMonth()] || "").toLowerCase()); };
+  const W = 340, H = 176, pt = 22, pb = 22, ih = H - pt - pb;
+  const maxV = Math.max(alvo, serie[horiz], 1) * 1.08;
+  const bw = Math.min(30, (W - 8) / ks.length - 4), gap = (W - ks.length * bw) / (ks.length + 1);
+  const xs = (i) => gap + i * (bw + gap), ys = (v) => pt + ih * (1 - v / maxV);
+  const passo = Math.ceil(ks.length / 8);
+  const selI = sel !== null && sel < ks.length ? sel : (n !== null ? ks.indexOf(anual ? horiz : n) : ks.length - 1);
+  const kSel = ks[Math.max(0, selI)], dSel = dataK(kSel);
+
+  const tempo = (m) => { const a = Math.floor(m / 12), mm = m % 12; return [a ? `${a} ${a === 1 ? "ano" : "anos"}` : "", mm ? `${mm} ${mm === 1 ? "mês" : "meses"}` : ""].filter(Boolean).join(" e "); };
+  const dN = n !== null ? dataK(n) : null;
+  let precisa = null, mPrazo = null;
+  if (g.prazo && n !== 0) {
+    const t = new Date(g.prazo + "T12:00:00");
+    mPrazo = Math.max(1, (t.getFullYear() - hoje.getFullYear()) * 12 + (t.getMonth() - hoje.getMonth()));
+    const f = Math.pow(1 + r, mPrazo);
+    precisa = Math.max(0, r > 0 ? ((alvo - atual * f) * r) / (f - 1) : (alvo - atual) / mPrazo);
+  }
+  return (
+    <div className="gp">
+      <div className="gp-tit">Projeção</div>
+      <div className="gp-res">
+        {n === 0 && <><b>Você já alcançou esta meta.</b></>}
+        {n !== null && n > 0 && <>Você alcança em <b>{MES_LONGO[dN.getMonth()]} de {dN.getFullYear()}</b>, daqui a {tempo(n)}.</>}
+        {n === null && (aporte === 0 && r === 0 ? <>Sem aporte por mês, a meta não sai do lugar. Diga quanto você investe por mês.</> : <>Com esse ritmo, leva mais de 50 anos.</>)}
+      </div>
+      {precisa !== null && (
+        <div className={`gp-prazo ${precisa <= aporte + 0.5 ? "ok" : "falta"}`}>
+          {precisa <= aporte + 0.5 ? <>Dá para chegar até o prazo ({fmtDatePt(g.prazo)}).</> : <>Para chegar até {fmtDatePt(g.prazo)}, você precisaria de <b>{fmtBRL(precisa)} por mês</b>.</>}
+        </div>
+      )}
+      <div className="gp-sel"><span>{anual ? dSel.getFullYear() : `${MES_LONGO[dSel.getMonth()]} de ${dSel.getFullYear()}`}{kSel === 0 ? " (hoje)" : ""}</span><b className="mono">{fmtBRL(serie[kSel])}</b></div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Projeção da meta ${g.nome}`} style={{ display: "block" }}>
+        <line className="gp-grid" x1="0" x2={W} y1={pt + ih} y2={pt + ih} />
+        <line className="gp-alvo" x1="0" x2={W} y1={ys(alvo)} y2={ys(alvo)} />
+        <text className="gp-lbl" x={W - 2} y={Math.max(11, ys(alvo) - 5)} textAnchor="end">meta {fmtBRL(alvo)}</text>
+        {ks.map((k, i) => {
+          const v = serie[k], chegou = n !== null && k >= n;
+          return (
+            <g key={k} onClick={() => setSel(i)} style={{ cursor: "pointer" }}>
+              <rect x={xs(i) - gap / 2} y={pt} width={bw + gap} height={ih} fill="transparent" />
+              <rect className={`gp-bar ${k === 0 ? "now" : chegou ? "ok" : ""} ${i === selI ? "sel" : ""}`} x={xs(i)} y={ys(v)} width={bw} height={Math.max(2, pt + ih - ys(v))} rx="4" style={k === 0 ? { fill: g.cor } : undefined} />
+              {(i % passo === 0 || i === ks.length - 1) && <text className="gp-lbl" x={xs(i) + bw / 2} y={H - 6} textAnchor="middle">{rot(k)}</text>}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="gp-campos">
+        <div className="field">
+          <label htmlFor={"gp-ap-" + g.id}>Aporte por mês (R$)</label>
+          <input id={"gp-ap-" + g.id} inputMode="decimal" value={txt} placeholder={Math.round(aporteSugerido || 0).toLocaleString("pt-BR")} onChange={(e) => setTxt(e.target.value)} onBlur={salvar} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+          <div className="field-hint">{manual ? "Valor que você definiu." : `Em branco: média dos seus investimentos nos últimos 6 meses (${fmtBRL(aporteSugerido || 0)}).`}</div>
+        </div>
+        <div className="field">
+          <label>Rendimento estimado</label>
+          <div className="chip-row" role="group" aria-label="Rendimento estimado ao ano">
+            {[[0, "Sem rendimento"], [6, "6% ao ano"], [10, "10% ao ano"], [12, "12% ao ano"]].map(([v, l]) => <button key={v} type="button" className={`chip sm ${rAno === v ? "active" : ""}`} aria-pressed={rAno === v} onClick={() => onPatch({ rendimentoAno: v })}>{l}</button>)}
+          </div>
+        </div>
+      </div>
+      <div className="field-hint">É uma estimativa. Rendimento passado não garante rendimento futuro.</div>
+    </div>
+  );
+}
+
+function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0 }) {
   const FONTES = [["manual", "Eu informo"], ["carteira", "Meus investimentos"], ["patrimonio", "Meu patrimônio"]];
   const [showForm, setShowForm] = useState(goals.length === 0);
   const [nome, setNome] = useState("");
@@ -5301,9 +5413,6 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, set
       {goals.map((g) => {
         const atual = valorDaMeta(g);
         const pct = Math.min(100, (atual / Math.max(g.valorAlvo, 1)) * 100);
-        const m = monthsUntil(g.prazo);
-        const faltam = Math.max(0, g.valorAlvo - atual);
-        const mensal = m ? faltam / m : null;
         return (
           <div key={g.id} className="chart-card">
             <div className="stub-head">
@@ -5322,15 +5431,13 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, set
             <div className="stub-row" style={{ marginTop: 10 }}>
               <span className="k">Prazo</span><span className="v">{g.prazo ? fmtDatePt(g.prazo) : "sem prazo definido"}</span>
             </div>
-            {mensal !== null && (
-              <div className="stub-row"><span className="k">Necessário por mês</span><span className="v mono" style={{ color: "var(--gold)" }}>{fmtBRL(mensal)}</span></div>
-            )}
             <div className="field" style={{ marginTop: 10 }}>
               <label>De onde vem o valor</label>
               <div className="chip-row" role="group" aria-label={"Origem do valor de " + g.nome}>
                 {FONTES.map(([k, l]) => <button key={k} type="button" className={`chip sm ${(g.fonte || "manual") === k ? "active" : ""}`} aria-pressed={(g.fonte || "manual") === k} onClick={() => setGoalFonte(g.id, k)}>{l}</button>)}
               </div>
             </div>
+            <GoalProjection g={g} atual={atual} aporteSugerido={aporteMedio} onPatch={(p) => setGoalPatch(g.id, p)} />
             {(g.fonte || "manual") === "manual" && (
               <>
                 <div className="form-grid" style={{ marginTop: 10, marginBottom: 8 }}>
