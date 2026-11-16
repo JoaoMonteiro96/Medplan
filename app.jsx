@@ -409,7 +409,7 @@ function itemsToLines(items) {
 }
 
 const DATE_SRC = "(\\d{1,2}\\/\\d{1,2}(?:\\/\\d{2,4})?|\\d{1,2}\\s+(?:de\\s+)?(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\\.?(?:\\s+\\d{4})?)";
-const AMT_SRC = "((?:R\\$\\s*)?-?\\s?\\(?(?:\\d{1,3}(?:\\.\\d{3})+|\\d+),\\d{2}\\)?(?:\\s?(?:[CD]|-)(?![\\w]))?)";
+const AMT_SRC = "((?:-\\s?)?(?:R\\$\\s*)?-?\\s?\\(?(?:\\d{1,3}(?:\\.\\d{3})+|\\d+),\\d{2}\\)?(?:\\s?(?:[CD]|-)(?![\\w]))?)";
 
 function parseStatementLines(lines, refYear, today) {
   const re = new RegExp("(?:^|\\s)" + DATE_SRC + "\\s+(.+?)\\s+" + AMT_SRC + "(?:\\s+" + AMT_SRC + ")?(?=\\s+" + DATE_SRC + "\\s|\\s*$)", "gi");
@@ -419,14 +419,34 @@ function parseStatementLines(lines, refYear, today) {
     let mt;
     re.lastIndex = 0;
     while ((mt = re.exec(L))) {
-      const desc = mt[2].trim();
+      const desc = mt[2].trim().replace(/^[•*·.]{2,}\s*\d{4}\s+/, "");
       if (/^(saldo|total|subtotal)\b|saldo (anterior|do dia|final|disponivel|disponível)|^limite/i.test(desc)) continue;
+      // "Total de compras, 06 OUT a 06 NOV R$ ..." e parecidas: a data está no meio de uma frase de resumo
+      if (/total|per[ií]odo|vigente|fechamento|vencimento/i.test(L.slice(0, mt.index)) || /^a \d{1,2} [a-zç]{3}/i.test(desc)) continue;
       const dt = fixYear(parseDateAny(mt[1], refYear), today);
       const amount = parseAmountBR(mt[3]);
       if (dt && !isNaN(amount) && amount !== 0) out.push({ date: dt, desc: desc.replace(/\s+/g, " "), amount, fmt: "pdf" });
     }
   });
   return out;
+}
+
+// Lê da fatura do cartão o total a pagar neste mês e o vencimento, quando estão impressos.
+function faturaInfo(lines, refYear) {
+  const num = "R\\$\\s*((?:\\d{1,3}(?:\\.\\d{3})+|\\d+),\\d{2})";
+  const todas = lines.map((l) => String(l).replace(/−/g, "-").replace(/\s+/g, " ").trim());
+  const junto = todas.join(" ");
+  let total = null, mt;
+  const exata = new RegExp("^total a pagar " + num + "$", "i");
+  for (const l of todas) { if ((mt = l.match(exata))) { total = parseAmountBR(mt[1]); break; } }
+  if (total === null) {
+    for (const src of ["fatura[^.]{0,40}?no valor de " + num, "pagamento total da fatura " + num, "total (?:da|desta) fatura:? " + num, "valor total(?: da fatura)?:? " + num, "total a pagar:? " + num]) {
+      if ((mt = junto.match(new RegExp(src, "i")))) { total = parseAmountBR(mt[1]); break; }
+    }
+  }
+  let venc = null;
+  if ((mt = junto.match(/vencimento:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2} (?:de )?[a-zç]{3}[a-zç]*\.?(?: (?:de )?\d{4})?)/i))) { const d = parseDateAny(mt[1], refYear); if (d) venc = d.iso; }
+  return { total: total > 0 ? total : null, venc };
 }
 
 function guessYear(text) {
@@ -975,6 +995,7 @@ const initialsOf = (d) => { const w = String(d || "").replace(/[^\p{L}\p{N} ]/gu
 
 const PAGE_TITLES = {
   inicio: ["Início", "Resumo do seu mês"],
+  organizacao: ["Organização", "Quanto entrou, quanto falta pagar e quanto sobra"],
   faturamento: ["Faturamento", "Receitas por vínculo, impostos e recebimentos"],
   calendario: ["Calendário de plantões", "Lance plantões e horas trabalhadas"],
   despesas: ["Despesas", "Contas do mês, limites por categoria"],
@@ -1023,7 +1044,7 @@ function NavStrip({ items, active, onPick }) {
   const [ind, setInd] = useState(null);
   const place = useCallback((smooth) => {
     const w = wrap.current, el = w && w.querySelector('[data-tab="' + active + '"]');
-    if (!el) return;
+    if (!el) { setInd(null); return; }
     setInd((p) => (p && p.left === el.offsetLeft && p.width === el.offsetWidth ? p : { left: el.offsetLeft, width: el.offsetWidth }));
     const left = Math.max(0, el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2);
     try { w.scrollTo({ left, behavior: smooth && !prefersReducedMotion() ? "smooth" : "auto" }); } catch (e) { w.scrollLeft = left; }
@@ -1191,8 +1212,11 @@ function MonthPicker({ year, setYear, viewYear, viewMonth, statsOf, onPick, onCl
 
 const IconCalc = (p) => <Ico {...p}><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="12" x2="8.6" y2="12"/><line x1="12" y1="12" x2="12.1" y2="12"/><line x1="15.4" y1="12" x2="15.5" y2="12"/><line x1="8.5" y1="16" x2="8.6" y2="16"/><line x1="12" y1="16" x2="12.1" y2="16"/><line x1="15.4" y1="16" x2="15.5" y2="16"/></Ico>;
 const IconMore = (p) => <Ico {...p}><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></Ico>;
+const IconGear = (p) => <Ico {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></Ico>;
+const IconScale = (p) => <Ico {...p}><path d="M12 3v18"/><path d="M5 21h14"/><path d="M3 7h18"/><path d="M6 7 3 14a3.5 3.5 0 0 0 6 0Z"/><path d="M18 7l-3 7a3.5 3.5 0 0 0 6 0Z"/></Ico>;
 const NAV_MAIN = [
   { id: "inicio", short: "Início", long: "Início", icon: IconHome },
+  { id: "organizacao", short: "Organizar", long: "Organização", icon: IconScale },
   { id: "faturamento", short: "Receitas", long: "Faturamento", icon: IconReceipt },
   { id: "calendario", short: "Agenda", long: "Calendário", icon: IconCalendar },
   { id: "despesas", short: "Despesas", long: "Despesas", icon: IconWallet },
@@ -1691,7 +1715,7 @@ function App() {
     const mk = monthKeyOf(y, m);
     const items = [];
     expenses.filter((e) => inMonth(e.dueDate, y, m)).forEach((e) => {
-      items.push({ key: "exp-" + e.id, description: e.description, category: e.category || guessExpCat(e.description), amount: Number(e.amount || 0), dateLabel: fmtDatePt(e.dueDate), dateIso: e.dueDate, itens: Array.isArray(e.itens) && e.itens.length ? e.itens : null,
+      items.push({ key: "exp-" + e.id, description: e.description, category: e.category || guessExpCat(e.description), amount: Number(e.amount || 0), dateLabel: fmtDatePt(e.dueDate), dateIso: e.dueDate, itens: Array.isArray(e.itens) && e.itens.length ? e.itens : null, ajuste: Number(e.ajuste) || 0,
         tipo: "pontual", paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id) });
     });
     recurringExpenses.filter((r) => r.startMonth <= mk).forEach((r) => {
@@ -2359,8 +2383,10 @@ function App() {
     });
     // fatura do cartão: uma despesa só, com cada compra guardada dentro dela
     if (fat && fatItens.length) {
-      const tot = Math.round(fatItens.reduce((a, i) => a + i.v, 0) * 100) / 100;
-      newExp.push({ id: uid() + "f", description: cleanDesc(fat.nome) || "Cartão de crédito", category: "cartao", amount: tot, dueDate: fat.dueDate, paid: !!fat.paid, ...(fat.paid ? { paidDate: fat.dueDate } : {}), imported: true, batch: bid, itens: fatItens });
+      const soma = Math.round(fatItens.reduce((a, i) => a + i.v, 0) * 100) / 100;
+      const tot = Number(fat.total) > 0 ? Math.round(Number(fat.total) * 100) / 100 : soma;
+      const ajuste = Math.round((tot - soma) * 100) / 100;
+      newExp.push({ id: uid() + "f", description: cleanDesc(fat.nome) || "Cartão de crédito", category: "cartao", amount: tot, ...(Math.abs(ajuste) >= 0.01 ? { ajuste } : {}), dueDate: fat.dueDate, paid: !!fat.paid, ...(fat.paid ? { paidDate: fat.dueDate } : {}), imported: true, batch: bid, itens: fatItens });
     }
     setExpenses((p) => [...p, ...newExp]);
     setOneOffIncomes((p) => [...p, ...newInc]);
@@ -3504,6 +3530,81 @@ function App() {
         .fx-line i { width: 8px; height: 8px; border-radius: 50%; background: #DC2626; } .fx-line i.in { background: #16A34A; }
         .fx-nome { min-width: 0; font-weight: 500; } .fx-nome small { display: block; font-size: 12px; color: var(--text-dim); font-weight: 400; } .fx-line b { white-space: nowrap; }
 
+        .xl-it.xl-aj { grid-template-columns: 1fr auto; display: grid; gap: 10px; border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 10px; color: var(--text-dim); }
+
+
+        /* ================= v30: engrenagem das configurações ================= */
+        .tb-gear { width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+        .tb-gear:hover { background: var(--surface-3); } .tb-gear.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+        .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
+
+        /* ================= v30: organização financeira ================= */
+        .org { max-width: 720px; }
+        .org-hero { padding: 20px 20px 16px; }
+        .org-lbl { font-size: 15px; font-weight: 600; color: var(--text-dim); }
+        .org-big-row { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; margin: 4px 0 6px; }
+        .org-big { font-size: 38px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+        .org-of { font-size: 18px; font-weight: 600; color: var(--text-dim); }
+        .org .pos { color: #15803D; } .org .neg { color: #B91C1C; } .org-big.pos { color: #16A34A; } .org-big.neg { color: #DC2626; }
+        .org-pace { margin: 0 0 14px; font-size: 14.5px; line-height: 1.5; color: var(--text-dim); }
+        .org-pace b { color: var(--text); }
+        .org-sw { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); font-size: 15px; color: var(--text-dim); font-weight: 500; }
+        .org-switch { width: 50px; height: 30px; border-radius: 999px; border: none; background: #CBD5E1; position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+        .org-switch i { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s; }
+        .org-switch.on { background: #22C55E; } .org-switch.on i { transform: translateX(20px); }
+        .org-switch:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        .org-chart { position: relative; border: 1.5px solid rgba(34,197,94,.5); border-radius: 16px; padding: 8px 8px 4px; background: var(--surface); box-shadow: 0 0 0 4px rgba(34,197,94,.08); cursor: crosshair; user-select: none; -webkit-user-select: none; }
+        .og-grid { stroke: var(--border); stroke-width: 1; }
+        .og-area { fill: rgba(22,163,74,.13); }
+        .og-ideal { stroke: #3B82F6; stroke-width: 2.2; stroke-dasharray: 6 6; stroke-linecap: round; }
+        .og-real { fill: none; stroke: #16A34A; stroke-width: 3.2; stroke-linejoin: round; stroke-linecap: round; }
+        .og-prev { fill: none; stroke: #16A34A; stroke-width: 2.6; stroke-dasharray: 5 6; stroke-linecap: round; opacity: .8; }
+        .og-today { stroke: var(--text-dim); stroke-width: 1; stroke-dasharray: 3 4; opacity: .7; }
+        .og-sel { stroke: var(--text); stroke-width: 1; opacity: .35; }
+        .og-halo { fill: rgba(148,163,184,.22); stroke: rgba(148,163,184,.55); stroke-width: 1.5; }
+        .og-dot { fill: var(--surface); stroke: #15803D; stroke-width: 3.2; }
+        .og-end { fill: var(--surface); stroke: #16A34A; stroke-width: 2.5; }
+        .og-lbl { fill: var(--text-dim); font-size: 11.5px; font-family: inherit; } .og-hoje { fill: var(--text); font-weight: 700; }
+        .org-tip { position: absolute; top: 10px; display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(15,23,42,.12); font-size: 12.5px; pointer-events: none; max-width: 62%; }
+        .org-tip b { font-size: 13px; } .org-tip .org-tip-i { color: var(--text-dim); } .org-tip .up { color: #C2410C; font-weight: 600; } .org-tip .down { color: #15803D; font-weight: 600; }
+        .org-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+        .org-leg i { display: inline-block; width: 18px; height: 0; border-top: 3px solid #16A34A; vertical-align: middle; margin-right: 6px; }
+        .org-leg i.l-prev { border-top-style: dashed; opacity: .8; } .org-leg i.l-ideal { border-top: 2.5px dashed #3B82F6; }
+        .org-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; font-size: 15px; }
+        .org-row span { display: flex; align-items: center; gap: 10px; color: var(--text-dim); }
+        .org-row b { font-weight: 600; }
+        .org-row.tot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px; } .org-row.tot span { color: var(--text); font-weight: 700; } .org-row.tot b { font-size: 17px; font-weight: 700; }
+        .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; flex-shrink: 0; }
+        .sw.real { background: #4ADE80; } .sw.inv { background: #60A5FA; } .sw.prev { background: repeating-linear-gradient(135deg, #4ADE80 0 3px, transparent 3px 6px); border: 1px solid rgba(74,222,128,.6); }
+        .org-eq > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; font-size: 14.5px; }
+        .org-eq > div span { color: var(--text-dim); } .org-eq > div b { font-weight: 600; white-space: nowrap; }
+        .org-eq > div.off { opacity: .45; } .org-eq > div.off b { text-decoration: line-through; }
+        .org-eq > div.res { border-top: 1.5px solid var(--text); margin-top: 6px; padding-top: 12px; } .org-eq > div.res span { color: var(--text); font-weight: 700; } .org-eq > div.res b { font-size: 19px; font-weight: 800; }
+        .org-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+        :root[data-theme="dark"] .org .pos, :root[data-theme="dark"] .org-big.pos { color: #4ADE80; } :root[data-theme="dark"] .org .neg, :root[data-theme="dark"] .org-big.neg { color: #F87171; }
+        :root[data-theme="dark"] .og-real, :root[data-theme="dark"] .og-prev, :root[data-theme="dark"] .og-end { stroke: #4ADE80; } :root[data-theme="dark"] .og-dot { stroke: #4ADE80; }
+        :root[data-theme="dark"] .og-ideal, :root[data-theme="dark"] .org-leg i.l-ideal { stroke: #60A5FA; border-top-color: #60A5FA; }
+        :root[data-theme="dark"] .og-area { fill: rgba(74,222,128,.14); } :root[data-theme="dark"] .org-switch { background: #475569; } :root[data-theme="dark"] .org-switch.on { background: #22C55E; }
+        :root[data-theme="dark"] .org-tip { box-shadow: 0 6px 18px rgba(0,0,0,.4); } :root[data-theme="dark"] .org-tip .up { color: #FDBA74; } :root[data-theme="dark"] .org-tip .down { color: #4ADE80; }
+        :root[data-theme="dark"] .org-leg i { border-top-color: #4ADE80; }
+
+        /* ================= v29: configurações em menu ================= */
+        .cfg { max-width: 640px; }
+        .cfg-head { text-align: center; padding: 8px 0 20px; }
+        .cfg-av { width: 64px; height: 64px; border-radius: 50%; background: var(--teal); color: #fff; display: grid; place-items: center; font-size: 26px; font-weight: 700; margin: 0 auto 10px; }
+        .cfg-head h2 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+        .cfg-chip { display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: var(--surface-3); color: var(--text-dim); }
+        .cfg-group { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; margin-bottom: 14px; overflow: hidden; }
+        .cfg-row { display: grid; grid-template-columns: 38px 1fr 18px; gap: 14px; align-items: center; width: 100%; padding: 13px 16px; border: none; background: none; text-align: left; font-family: inherit; color: var(--text); cursor: pointer; position: relative; }
+        .cfg-row + .cfg-row::before { content: ""; position: absolute; top: 0; left: 68px; right: 0; height: 1px; background: var(--border); }
+        .cfg-row:hover, .cfg-row:focus-visible { background: var(--surface-2); outline: none; }
+        .cfg-row > i { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; }
+        .cfg-txt { min-width: 0; } .cfg-txt b { display: block; font-size: 15px; font-weight: 600; } .cfg-txt small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }
+        .cfg-chev { color: var(--text-dim); opacity: .7; }
+        .cfg-sub { max-width: 640px; } .cfg-sub > .day-panel:first-of-type { margin-top: 0; }
+        .cfg-back { display: inline-flex; align-items: center; gap: 4px; border: none; background: none; padding: 4px 8px 4px 0; margin: 0 0 12px -4px; font: inherit; font-weight: 600; font-size: 14px; color: var(--teal); cursor: pointer; }
+
         /* ================= v27: tema escuro ================= */
         :root[data-theme="dark"] { --bg: #0B1220; --surface: #141D2F; --surface-2: #1A2539; --surface-3: #223049; --text: #E6EDF7; --text-dim: #94A3B8; --border: #2A3950; }
         :root[data-theme="dark"] body { background: #0B1220; color: #E6EDF7; }
@@ -3620,6 +3721,7 @@ function App() {
         :root[data-theme="dark"] .add-box input[type=text], :root[data-theme="dark"] .add-box input:not([type]) { background:var(--surface) }
         :root[data-theme="dark"] .serie-tag { color:#93C5FD; background:rgba(59,130,246,.24) }
         :root[data-theme="dark"] .segmented .seg-btn.active { background: #334155; color: #fff; }
+        :root[data-theme="dark"] .cfg-back { color: #4ADE80; }
         :root[data-theme="dark"] .fx-net.in, :root[data-theme="dark"] .fx-line b.in { color: #4ADE80; } :root[data-theme="dark"] .fx-net.out { color: #FCA5A5; }
         :root[data-theme="dark"] .cal-cell.fx-in1 { background-color: rgba(34,197,94,.16); } :root[data-theme="dark"] .cal-cell.fx-in2 { background-color: rgba(34,197,94,.32); } :root[data-theme="dark"] .cal-cell.fx-in3 { background-color: rgba(34,197,94,.52); }
         :root[data-theme="dark"] .cal-cell.fx-out1 { background-color: rgba(239,68,68,.16); } :root[data-theme="dark"] .cal-cell.fx-out2 { background-color: rgba(239,68,68,.30); } :root[data-theme="dark"] .cal-cell.fx-out3 { background-color: rgba(239,68,68,.48); }
@@ -3641,14 +3743,18 @@ function App() {
               <button className="mp-open" onClick={() => setPickerYear(viewYear)} aria-label="Ver todos os meses">{MONTHS_PT[viewMonth]} {viewYear}</button>
               <button onClick={() => changeMonth(1)} aria-label="Próximo mês"><IconChevronRight size={17} /></button>
             </div>
+            <button type="button" className={`tb-gear ${activeTab === "backup" ? "on" : ""}`} aria-label="Configurações" title="Configurações" aria-current={activeTab === "backup" ? "page" : undefined} onClick={() => goTab("backup")}><IconGear size={19} /></button>
             <button className="btn btn-primary tb-new" onClick={() => setQuickOpen(true)}><IconPlus size={16} color="#fff" /> Novo</button>
           </div>
         </header>
-        <NavStrip items={NAV_ALL} active={activeTab} onPick={goTab} />
+        <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup")} active={activeTab} onPick={goTab} />
       </div>
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
+        {activeTab === "organizacao" && (
+          <OrganizacaoTab viewYear={viewYear} viewMonth={viewMonth} incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} invItems={monthInvestments.filter((i) => i.tipo !== "ajuste")} goTab={goTab} />
+        )}
         {activeTab === "inicio" && (
           <DashboardTab
             viewMonth={viewMonth} viewYear={viewYear}
@@ -3714,7 +3820,8 @@ function App() {
         {activeTab === "backup" && (
           <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
             notifCard={<LembretesCard on={notifOn} setOn={setNotifOn} itens={lembretes} />}
-            privacyCard={<><ThemeCard tema={tema} setTema={setTema} /><PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} /></>}
+            themeCard={<ThemeCard tema={tema} setTema={setTema} />} goTab={goTab} conta={session && session.user ? session.user.email : ""} cloudLabel={cloudLabel} resumo={{ tema, discreto, pinOn: !!pinHash, notifOn }}
+            privacyCard={<PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} />}
             posicaoCard={<PosicaoInicialCard investments={investments} onToggle={setPosicaoInicial} />}
             wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
             cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
@@ -4263,6 +4370,132 @@ function PinGate({ hash, bioId, onOk, onForget }) {
   );
 }
 
+// ---- Organização financeira: quanto entrou, quanto falta pagar e quanto sobra para extras e investimentos ----
+function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invItems, goTab }) {
+  const [prev, setPrevState] = useState(() => lsGet("mediplan-org-previstos") !== "0");
+  const setPrev = (v) => { lsSet("mediplan-org-previstos", v ? "1" : "0"); setPrevState(v); };
+  const N = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const agora = new Date();
+  const rel = viewYear * 12 + viewMonth - (agora.getFullYear() * 12 + agora.getMonth());
+  const hoje = rel < 0 ? N : rel > 0 ? 0 : agora.getDate();
+  const dia = (iso) => Math.min(N, Math.max(1, Number(String(iso || "").slice(8, 10)) || 1));
+  const soma = (l, f) => l.reduce((a, x) => a + (Number(f(x)) || 0), 0);
+
+  const recebido = soma(incomeItems.filter((i) => i.recebido), (i) => i.net);
+  const aReceber = soma(incomeItems.filter((i) => !i.recebido), (i) => i.net);
+  const pagas = soma(expenseItems.filter((e) => e.paid), (e) => e.amount);
+  const aPagar = soma(expenseItems.filter((e) => !e.paid), (e) => e.amount);
+  const investido = soma(invItems, (i) => i.amount);
+  const receita = recebido + (prev ? aReceber : 0);
+  const contas = pagas + (prev ? aPagar : 0);
+  const sobra = receita - contas - investido;
+
+  // saídas acumuladas por dia: o que já foi pago ou investido, e o previsto (contas em aberto; atrasadas contam em "hoje")
+  const real = Array(N + 1).fill(0), prevD = Array(N + 1).fill(0);
+  expenseItems.forEach((e) => { if (e.paid) real[dia(e.dateIso)] += Number(e.amount) || 0; else prevD[Math.max(dia(e.dateIso), hoje || 1)] += Number(e.amount) || 0; });
+  invItems.forEach((i) => { real[dia(i.date)] += Number(i.amount) || 0; });
+  const R = [0], P = [0];
+  for (let d = 1; d <= N; d++) { R[d] = R[d - 1] + real[d]; P[d] = P[d - 1] + prevD[d]; }
+  const F = R.map((v, d) => v + P[d]);
+  const ideal = (d) => (receita * d) / N;
+  const valorDia = (d) => (d <= hoje ? R[d] : prev ? F[d] : null);
+
+  const [sel, setSel] = useState(null);
+  const selD = sel && sel <= N ? sel : Math.max(1, hoje);
+  const W = 340, H = 236, pl = 4, pr = 4, pt = 30, pb = 26, iw = W - pl - pr, ih = H - pt - pb;
+  const maxV = Math.max(receita, prev ? F[N] : R[N], 1) * 1.08;
+  const X = (d) => pl + (iw * d) / N, Y = (v) => pt + ih * (1 - Math.max(0, v) / maxV);
+  const path = (from, to, arr) => { const pts = []; for (let d = from; d <= to; d++) pts.push(`${X(d).toFixed(1)},${Y(arr[d]).toFixed(1)}`); return pts.length > 1 ? "M" + pts.join(" L") : ""; };
+  const realPath = hoje >= 1 ? path(0, hoje, R) : "";
+  const areaPath = realPath ? `${realPath} L${X(hoje).toFixed(1)},${(pt + ih).toFixed(1)} L${X(0).toFixed(1)},${(pt + ih).toFixed(1)} Z` : "";
+  const prevPath = prev && hoje < N ? (() => { const arr = F.slice(); if (hoje >= 1) arr[hoje] = F[hoje]; return `M${X(Math.max(hoje, 0)).toFixed(1)},${Y(hoje >= 1 ? R[hoje] : 0).toFixed(1)} L` + path(Math.max(hoje, 0), N, arr).slice(1); })() : "";
+  const escolher = (ev) => {
+    const r = ev.currentTarget.getBoundingClientRect(); if (!r.width) return;
+    const px = ((ev.clientX - r.left) / r.width) * W;
+    setSel(Math.min(N, Math.max(1, Math.round(((px - pl) / iw) * N))));
+  };
+  const vSel = valorDia(selD), iSel = ideal(selD), dif = vSel === null ? 0 : vSel - iSel;
+  const pctX = (X(selD) / W) * 100;
+
+  const mes = MONTHS_PT[viewMonth].toLowerCase(), abr = (MONTHS_ABBR_PT[viewMonth] || "").toLowerCase();
+  const gastoHoje = R[Math.max(hoje, 0)], idealHoje = ideal(hoje), difHoje = gastoHoje - idealHoje;
+  const diasRest = rel === 0 ? N - hoje + 1 : rel > 0 ? N : 0;
+  const porDia = diasRest > 0 && sobra > 0 ? sobra / diasRest : 0;
+
+  return (
+    <div className="org">
+      <div className="card org-hero">
+        <div className="org-lbl">{sobra >= 0 ? "Você ainda pode gastar ou investir" : "Falta para fechar as contas do mês"}</div>
+        <div className="org-big-row"><span className={`org-big mono ${sobra >= 0 ? "pos" : "neg"}`}>{fmtBRL(Math.abs(sobra))}</span><span className="org-of mono">de {fmtBRL(receita)}</span></div>
+        <p className="org-pace">
+          {rel === 0 && receita > 0 && (difHoje <= 0
+            ? <>Você gastou <b className="pos">{fmtBRL(-difHoje)}</b> a menos que o ritmo ideal até hoje.</>
+            : <>Você gastou <b className="neg">{fmtBRL(difHoje)}</b> a mais que o ritmo ideal até hoje.</>)}
+          {rel < 0 && <>Em {mes}, {sobra >= 0 ? <>sobraram <b className="pos">{fmtBRL(sobra)}</b> depois das contas e dos investimentos.</> : <>as saídas passaram as entradas em <b className="neg">{fmtBRL(-sobra)}</b>.</>}</>}
+          {rel > 0 && <>Previsão para {mes}, com o que já está lançado.</>}
+          {receita <= 0 && rel === 0 && <>Ainda não há receita {prev ? "prevista" : "recebida"} neste mês. Lance plantões, cargos fixos ou outras entradas para ver o seu limite.</>}
+          {porDia > 0 && <> Dá para usar até <b>{fmtBRL(porDia)}</b> por dia {rel === 0 ? "até o fim do mês" : "no mês"}.</>}
+        </p>
+        <div className="org-sw">
+          <span id="org-prev-lbl">Incluir previstos</span>
+          <button type="button" role="switch" aria-checked={prev} aria-labelledby="org-prev-lbl" className={`org-switch ${prev ? "on" : ""}`} onClick={() => setPrev(!prev)}><i /></button>
+        </div>
+        <div className="org-chart">
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Saídas acumuladas em ${mes} comparadas com o ritmo ideal`} onPointerDown={escolher} onPointerMove={escolher} style={{ touchAction: "pan-y", display: "block" }}>
+            {[0, 1, 2, 3].map((k) => <line key={k} className="og-grid" x1={pl} x2={W - pr} y1={pt + (ih * k) / 3} y2={pt + (ih * k) / 3} />)}
+            {areaPath && <path className="og-area" d={areaPath} />}
+            {hoje >= 1 && hoje <= N && rel === 0 && <line className="og-today" x1={X(hoje)} x2={X(hoje)} y1={pt - 6} y2={pt + ih} />}
+            <line className="og-ideal" x1={X(0)} y1={Y(0)} x2={X(N)} y2={Y(receita)} />
+            <text className="og-lbl" x={W - pr} y={Math.max(12, Y(receita) - 8)} textAnchor="end">limite</text>
+            {prevPath && <path className="og-prev" d={prevPath} />}
+            {realPath && <path className="og-real" d={realPath} />}
+            {vSel !== null && <><line className="og-sel" x1={X(selD)} x2={X(selD)} y1={pt - 6} y2={pt + ih} /><circle className="og-halo" cx={X(selD)} cy={Y(vSel)} r="13" /><circle className="og-dot" cx={X(selD)} cy={Y(vSel)} r="5" /></>}
+            {prev && hoje < N && <circle className="og-end" cx={X(N)} cy={Y(F[N])} r="4.5" />}
+            <text className="og-lbl" x={pl} y={H - 6}>1 de {abr}.</text>
+            {rel === 0 && hoje > 4 && hoje < N - 4 && <text className="og-lbl og-hoje" x={X(hoje)} y={H - 6} textAnchor="middle">hoje</text>}
+            <text className="og-lbl" x={W - pr} y={H - 6} textAnchor="end">{N} de {abr}.</text>
+          </svg>
+          {vSel !== null && (
+            <div className="org-tip" style={pctX > 52 ? { right: `${100 - pctX + 4}%` } : { left: `${pctX + 4}%` }}>
+              <b>{selD} de {abr}.{selD > hoje ? " (previsto)" : ""}</b>
+              <span className="mono">{fmtBRL(vSel)}</span>
+              <span className="org-tip-i mono">Ritmo ideal {fmtBRL(iSel)}</span>
+              <span className={`mono ${dif > 0.005 ? "up" : "down"}`}>{fmtBRL(Math.abs(dif))} {dif > 0.005 ? "acima" : "abaixo"} do ideal</span>
+            </div>
+          )}
+        </div>
+        <div className="org-leg"><span><i className="l-real" />saídas</span>{prev && <span><i className="l-prev" />previstas</span>}<span><i className="l-ideal" />ritmo ideal</span></div>
+      </div>
+
+      <div className="card">
+        <div className="card-head"><h3 className="card-title">Saídas realizadas {prev ? "+ previstas" : ""}</h3></div>
+        <div className="org-row"><span><i className="sw real" />Contas pagas</span><b className="mono">{fmtBRL(pagas)}</b></div>
+        <div className="org-row"><span><i className="sw inv" />Investido no mês</span><b className="mono">{fmtBRL(investido)}</b></div>
+        {prev && <div className="org-row"><span><i className="sw prev" />Contas a pagar</span><b className="mono">{fmtBRL(aPagar)}</b></div>}
+        <div className="org-row tot"><span>Total</span><b className="mono">{fmtBRL(pagas + investido + (prev ? aPagar : 0))}</b></div>
+      </div>
+
+      <div className="card">
+        <div className="card-head"><h3 className="card-title">Balanço do mês</h3></div>
+        <div className="org-eq">
+          <div><span>Já recebeu</span><b className="mono pos">{fmtBRL(recebido)}</b></div>
+          <div className={prev ? "" : "off"}><span>Ainda vai receber</span><b className="mono">+ {fmtBRL(aReceber)}</b></div>
+          <div><span>Contas pagas</span><b className="mono">− {fmtBRL(pagas)}</b></div>
+          <div className={prev ? "" : "off"}><span>Contas a pagar</span><b className="mono">− {fmtBRL(aPagar)}</b></div>
+          <div><span>Já investido</span><b className="mono">− {fmtBRL(investido)}</b></div>
+          <div className="res"><span>Sobra para gastos extras e investimentos</span><b className={`mono ${sobra >= 0 ? "pos" : "neg"}`}>{sobra < 0 ? "− " : ""}{fmtBRL(Math.abs(sobra))}</b></div>
+        </div>
+        {!prev && (aReceber > 0 || aPagar > 0) && <div className="field-hint" style={{ marginTop: 8 }}>Os valores ainda não recebidos ou não pagos estão fora da conta. Ligue “Incluir previstos” para ver o mês completo.</div>}
+        <div className="org-links">
+          <button type="button" className="btn btn-ghost sm" onClick={() => goTab("faturamento")}>Ver receitas</button>
+          <button type="button" className="btn btn-ghost sm" onClick={() => goTab("despesas")}>Ver contas</button>
+          <button type="button" className="btn btn-ghost sm" onClick={() => goTab("investimentos")}>Investir</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ThemeCard({ tema, setTema }) {
   return (
     <div className="day-panel">
@@ -4319,40 +4552,77 @@ function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioI
   );
 }
 
-function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard }) {
+function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard, themeCard, goTab, conta, cloudLabel, resumo = {} }) {
+  const [sec, setSec] = useState(null);
+  const taxa = (
+    <div className="day-panel" style={{ marginTop: 0 }}>
+      <div className="day-panel-title"><span>Imposto padrão</span></div>
+      <div className="tax-box" style={{ marginBottom: 0 }}>
+        <span className="tax-box-label">Tributação geral (usada quando um vínculo não tem taxa própria)</span>
+        <input id="cfg-tax" type="number" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value)} step="0.1" disabled={!!contabAuto} />
+        <span className="tax-box-label">%</span>
+      </div>
+      {contabAuto && <div className="field-hint">Calculada pela aba Contabilidade. Para digitar uma porcentagem, escolha “Porcentagem fixa” lá.</div>}
+    </div>
+  );
+  const backup = (
+    <div className="day-panel" style={{ marginTop: 0 }}>
+      <div className="day-panel-title"><span>Backup dos dados</span></div>
+      <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 0 }}>
+        Baixe uma cópia dos seus dados de vez em quando. Ela serve para restaurar tudo se algo der errado, mesmo usando a nuvem.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn btn-primary" onClick={downloadBackup}><IconDownload size={15} /> Baixar backup (.json)</button>
+        <button className="btn btn-ghost" onClick={() => fileInputRef.current.click()}><IconUpload size={15} /> Importar backup</button>
+        <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => handleImportFile(e.target.files[0])} />
+      </div>
+      {saveError && <div style={{ color: "var(--brick)", marginTop: 10, fontSize: 13 }}>Não foi possível salvar as últimas alterações neste navegador.</div>}
+    </div>
+  );
+  const SECS = { nuvem: cloudCard, aparencia: themeCard, privacidade: privacyCard, lembretes: notifCard, imposto: taxa, carteira: posicaoCard, backup, apagar: wipeCard };
+  if (sec) return (
+    <div className="cfg-sub">
+      <button type="button" className="cfg-back" onClick={() => setSec(null)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg> Configurações</button>
+      {SECS[sec]}
+    </div>
+  );
+  const ic = (d) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>;
+  const row = (id, cor, icon, label, sub, onClick) => (
+    <button type="button" key={id} className="cfg-row" data-cfg={id} onClick={onClick || (() => setSec(id))}>
+      <i style={{ background: cor }}>{icon}</i>
+      <span className="cfg-txt"><b>{label}</b>{sub ? <small>{sub}</small> : null}</span>
+      <svg className="cfg-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18" /></svg>
+    </button>
+  );
+  const temaTxt = { claro: "Claro", escuro: "Escuro", auto: "Igual ao celular" }[resumo.tema] || "Claro";
   return (
-    <div>
-      {cloudCard}
-      <div className="day-panel" style={{ marginTop: 0 }}>
-        <div className="day-panel-title"><span>Configurações gerais</span></div>
-        <div className="tax-box" style={{ marginBottom: 0 }}>
-          <span className="tax-box-label">Tributação geral (usada quando um vínculo não tem taxa própria)</span>
-          <input id="cfg-tax" type="number" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value)} step="0.1" disabled={!!contabAuto} />
-          <span className="tax-box-label">%</span>
-        </div>
-        {contabAuto && <div className="field-hint">Calculada pela aba Contabilidade. Para digitar uma porcentagem, escolha “Porcentagem fixa” lá.</div>}
+    <div className="cfg">
+      <div className="cfg-head">
+        <div className="cfg-av" aria-hidden="true">{conta ? conta.slice(0, 1).toUpperCase() : ic(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>)}</div>
+        <h2>{conta || "Sem conta neste aparelho"}</h2>
+        <span className="cfg-chip">{cloudLabel}</span>
+        {saveError && <div className="note-bad" style={{ marginTop: 10 }}>Não foi possível salvar as últimas alterações neste navegador.</div>}
       </div>
-
-      {notifCard}
-
-      {privacyCard}
-
-      <div className="day-panel">
-        <div className="day-panel-title"><span>Backup dos dados</span></div>
-        <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 0 }}>
-          Baixe uma cópia dos seus dados de vez em quando. Ela serve para restaurar tudo se algo der errado, mesmo usando a nuvem.
-        </p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn btn-primary" onClick={downloadBackup}><IconDownload size={15} /> Baixar backup (.json)</button>
-          <button className="btn btn-ghost" onClick={() => fileInputRef.current.click()}><IconUpload size={15} /> Importar backup</button>
-          <input ref={fileInputRef} type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => handleImportFile(e.target.files[0])} />
-        </div>
-        {saveError && <div style={{ color: "var(--brick)", marginTop: 10, fontSize: 13 }}>Não foi possível salvar as últimas alterações neste navegador.</div>}
+      <div className="cfg-group">
+        {row("nuvem", "#3B82F6", ic(<path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8.5 4.8 4.8 0 0 1 17.5 18Z" />), "Nuvem e conta", conta ? "Entrar, sair e sincronizar" : "Criar conta ou entrar")}
+        {row("aparencia", "#7C5CFC", ic(<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />), "Aparência", temaTxt)}
+        {row("privacidade", "#64748B", ic(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>), "Privacidade e trava", (resumo.discreto ? "Valores escondidos" : "Valores à mostra") + (resumo.pinOn ? ", trava ligada" : ", sem trava"))}
+        {row("lembretes", "#F59E0B", ic(<><path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7" /><path d="M10 20a2 2 0 0 0 4 0" /></>), "Lembretes no celular", resumo.notifOn ? "Ligados" : "Desligados")}
       </div>
-
-      {posicaoCard}
-
-      {wipeCard}
+      <div className="cfg-group">
+        {row("imposto", "#14B8A6", ic(<><line x1="19" y1="5" x2="5" y2="19" /><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" /></>), "Imposto padrão", contabAuto ? "Calculado pela Contabilidade" : (Number(taxRateGeral) || 0).toLocaleString("pt-BR") + "%")}
+        {row("carteira", "#22C55E", ic(<><polyline points="3 17 9 11 13 15 21 7" /><polyline points="15 7 21 7 21 13" /></>), "Posição inicial da carteira", "O que você já tinha investido")}
+        {row("backup", "#3B82F6", ic(<><path d="M12 4v11" /><polyline points="7 10 12 15 17 10" /><path d="M5 20h14" /></>), "Backup dos dados", "Baixar ou restaurar uma cópia")}
+        {row("apagar", "#EF4444", ic(<><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /></>), "Apagar dados", "Limpar lançamentos deste aparelho")}
+      </div>
+      {goTab && (
+        <div className="cfg-group">
+          {row("ir-metas", "#F59E0B", ic(<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></>), "Metas", null, () => goTab("metas"))}
+          {row("ir-relatorios", "#7C5CFC", ic(<><path d="M12 3a9 9 0 1 0 9 9h-9Z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15Z" /></>), "Relatórios", null, () => goTab("visao"))}
+          {row("ir-contabilidade", "#14B8A6", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /><line x1="8.5" y1="17" x2="12" y2="17" /></>), "Contabilidade", null, () => goTab("contabilidade"))}
+          {row("ir-importar", "#64748B", ic(<><path d="M12 15V4" /><polyline points="7 9 12 4 17 9" /><path d="M5 20h14" /></>), "Importar extrato, fatura ou nota", null, () => goTab("importar"))}
+        </div>
+      )}
     </div>
   );
 }
@@ -5485,6 +5755,9 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
                             {ab && g.itens.map((it, n) => <div key={n} className="xl-it"><span className="mono">{(it.dt || "").slice(8, 10)}/{(it.dt || "").slice(5, 7)}</span><span className="xl-it-d">{it.d}</span><b className="mono">{fmtBRL(it.v)}</b></div>)}
                           </div>
                         ); })}
+                        {Math.abs(e.ajuste || 0) >= 0.01 && (
+                          <div className="xl-it xl-aj"><span className="xl-it-d">{e.ajuste < 0 ? "Créditos, estornos e pagamentos a mais do mês anterior" : "Encargos e saldo que veio do mês anterior"}</span><b className="mono">{e.ajuste < 0 ? "− " : "+ "}{fmtBRL(Math.abs(e.ajuste))}</b></div>
+                        )}
                       </div>
                     </React.Fragment>
                   );
@@ -6107,9 +6380,11 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
   const [fatNome, setFatNome] = useState("Cartão de crédito");
   const [fatVenc, setFatVenc] = useState("");
   const [fatPago, setFatPago] = useState(null);
+  const [fatInfo, setFatInfo] = useState(null);
+  const [fatTotal, setFatTotal] = useState("");
   const fileRef = useRef(null);
 
-  const reset = () => { setRaw([]); setB3raw([]); setB3info(null); setEdits({}); setLabel(""); setError(""); setInvert(false); setPwdFile(null); setPassword(""); setFatNome("Cartão de crédito"); setFatVenc(""); setFatPago(null); };
+  const reset = () => { setRaw([]); setB3raw([]); setB3info(null); setEdits({}); setLabel(""); setError(""); setInvert(false); setPwdFile(null); setPassword(""); setFatNome("Cartão de crédito"); setFatVenc(""); setFatPago(null); setFatInfo(null); setFatTotal(""); };
 
   const handleFiles = async (files, pwd) => {
     setError(""); setDone(null);
@@ -6166,6 +6441,8 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
         if (ext === "pdf" || f.type === "application/pdf") {
           const lines = await pdfToLines(await f.arrayBuffer(), pwd);
           rows = parseStatementLines(lines, guessYear(lines.join(" ")), today);
+          const fi = faturaInfo(lines, guessYear(lines.join(" ")));
+          if (fi.total || fi.venc) setFatInfo(fi);
         } else {
           const txt = await readTextSmart(f);
           if (/<OFX>|<STMTTRN>/i.test(txt) || ext === "ofx" || ext === "ofc" || ext === "qfx") rows = parseOFX(txt);
@@ -6202,7 +6479,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
       if (importedKeys[key]) auto = { action: "ignorar", reason: "Já importado antes" };
       else if (out && source === "extrato" && CARD_PAY_RE.test(r.desc)) auto = { action: "ignorar", reason: "Pagamento de fatura. Importe a fatura do cartão para ver cada gasto" };
       else if (!out && source === "fatura") auto = { action: "ignorar", reason: "Crédito na fatura (pagamento ou estorno)" };
-      else if (INVEST_RE.test(r.desc)) auto = { action: "ignorar", reason: "Parece aplicação ou resgate de investimento" };
+      else if (source !== "fatura" && INVEST_RE.test(r.desc)) auto = { action: "ignorar", reason: "Parece aplicação ou resgate de investimento" };
       let row = auto ? { ...base, ...auto } : base;
       if (!auto) {
         const [y, m] = monthOf(r.date);
@@ -6299,9 +6576,15 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
 
   const ehFatura = source === "fatura" && novos.length > 0;
   const fatVencDef = useMemo(() => { const ds = novos.map((r) => r.date).sort(); return ds.length ? addDaysIso(ds[ds.length - 1], 10) : todayStr(); }, [rows]);
-  const fatVencV = fatVenc || fatVencDef, fatPagoV = fatPago === null ? fatVencV < todayStr() : fatPago;
+  const fatVencV = fatVenc || (fatInfo && fatInfo.venc) || fatVencDef, fatPagoV = fatPago === null ? fatVencV < todayStr() : fatPago;
+  // valor da fatura: o que você digitar; se não, o total a pagar lido do PDF; se não houver, a soma das compras
+  const fatSoma = Math.round(novos.reduce((a, r) => a + Math.abs(r.amount), 0) * 100) / 100;
+  const fatDigitado = fatTotal.trim() === "" ? NaN : parseAmountBR(fatTotal.includes(",") ? fatTotal : fatTotal.replace(".", ","));
+  const fatLido = fatInfo && fatInfo.total ? fatInfo.total : null;
+  const fatTotV = fatDigitado > 0 ? fatDigitado : (fatLido || fatSoma);
+  const fatDif = Math.round((fatTotV - fatSoma) * 100) / 100;
   const doImport = () => {
-    const entry = commitImport(rows, label || "Importação", ehFatura ? { nome: fatNome, dueDate: fatVencV, paid: fatPagoV } : null);
+    const entry = commitImport(rows, label || "Importação", ehFatura ? { nome: fatNome, dueDate: fatVencV, paid: fatPagoV, total: fatTotV } : null);
     setDone(entry); reset();
   };
 
@@ -6476,8 +6759,10 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
               {error && <div className="note-bad">{error}</div>}
               {ehFatura && (
                 <div className="fat-box" id="fat-box">
-                  <b>Tudo entra como uma despesa só: {fmtBRL(sum(novos))}</b>
-                  <span>As {novos.length} compras ficam guardadas dentro dela. Em Despesas, toque na fatura para ver os gastos por categoria.</span>
+                  <b id="fat-total-txt">Tudo entra como uma despesa só: {fmtBRL(fatTotV)}</b>
+                  <span>{fatLido && !(fatDigitado > 0) ? "Esse é o total a pagar que está na fatura. " : ""}As {novos.length} compras ficam guardadas dentro dela. Em Despesas, toque na fatura para ver os gastos por categoria.</span>
+                  {Math.abs(fatDif) >= 0.01 && <span id="fat-dif">As compras marcadas somam {fmtBRL(fatSoma)}. A diferença de {fmtBRL(Math.abs(fatDif))} {fatDif < 0 ? "são créditos, estornos e pagamentos a mais do mês anterior" : "são encargos ou saldo que veio do mês anterior"}, e fica anotada dentro da fatura.</span>}
+                  <div className="field" style={{ marginTop: 8 }}><label htmlFor="fat-total">Valor a pagar neste mês (R$)</label><input id="fat-total" inputMode="decimal" value={fatTotal} onChange={(e) => setFatTotal(e.target.value)} placeholder={fatTotV.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} /><div className="field-hint">Deixe em branco para usar {fatLido ? "o total lido do PDF" : "a soma das compras"}.</div></div>
                   <div className="form-grid" style={{ marginTop: 8 }}>
                     <div className="field"><label>Nome</label><input id="fat-nome" value={fatNome} onChange={(e) => setFatNome(e.target.value)} placeholder="Cartão de crédito" /></div>
                     <div className="field"><label>Vencimento da fatura</label><input id="fat-venc" type="date" value={fatVencV} onChange={(e) => setFatVenc(e.target.value)} /></div>
