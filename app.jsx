@@ -1705,6 +1705,22 @@ function App() {
 
   // Lembretes: o que vence ou cai nos próximos 40 dias e ainda está em aberto. A opção fica só neste aparelho.
   const [notifOn, setNotifOnState] = useState(() => { try { return localStorage.getItem("mediplan-notif") === "1"; } catch (e) { return false; } });
+  const [tema, setTemaState] = useState(() => lsGet("mediplan-tema") || "claro");
+  const setTema = (t) => { lsSet("mediplan-tema", t); setTemaState(t); };
+  useEffect(() => {
+    const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+    const aplicar = () => {
+      const escuro = tema === "escuro" || (tema === "auto" && mq && mq.matches);
+      document.documentElement.setAttribute("data-theme", escuro ? "dark" : "light");
+      document.documentElement.style.colorScheme = escuro ? "dark" : "light";
+      const m = document.querySelector('meta[name="theme-color"]');
+      if (m) { if (!m.dataset.claro) m.dataset.claro = m.getAttribute("content") || "#ffffff"; m.setAttribute("content", escuro ? "#0B1220" : m.dataset.claro); }
+    };
+    aplicar();
+    if (tema !== "auto" || !mq) return;
+    if (mq.addEventListener) mq.addEventListener("change", aplicar); else mq.addListener(aplicar);
+    return () => { if (mq.removeEventListener) mq.removeEventListener("change", aplicar); else mq.removeListener(aplicar); };
+  }, [tema]);
   const [discreto, setDiscretoState] = useState(() => lsGet("mediplan-discreto") === "1");
   DISCRETO = discreto;
   const setDiscreto = (v) => { lsSet("mediplan-discreto", v ? "1" : null); setDiscretoState(!!v); };
@@ -1749,6 +1765,11 @@ function App() {
   const monthPresencas = presencas.filter((p) => inMonth(p.date, viewYear, viewMonth));
   const monthIncomeItems = buildIncomeItems(viewYear, viewMonth);
   const monthExpenseItems = buildExpenseItems(viewYear, viewMonth);
+  // dinheiro por dia do mês em tela: o que entra (líquido) e o que sai, para colorir o calendário
+  const fluxoDia = {};
+  const fluxoAdd = (iso, item) => { const d = Number(String(iso).slice(8, 10)); if (!d) return; const f = (fluxoDia[d] = fluxoDia[d] || { entra: 0, sai: 0, itens: [] }); if (item.in) f.entra += item.v; else f.sai += item.v; f.itens.push(item); };
+  monthIncomeItems.forEach((it) => fluxoAdd(it.dateIso, { k: it.key, nome: it.nome, v: Number(it.net) || 0, in: true, ok: !!it.recebido }));
+  monthExpenseItems.forEach((it) => fluxoAdd(it.dateIso, { k: it.key, nome: it.description, v: Number(it.amount) || 0, in: false, ok: !!it.paid }));
   const monthInvestments = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, viewYear, viewMonth));
 
   const totalGross = monthIncomeItems.reduce((a, i) => a + i.gross, 0);
@@ -1950,7 +1971,7 @@ function App() {
   }));
 
   // ---- CRUD: metas ----
-  const addGoal = (data) => setGoals((prev) => [...prev, { id: uid(), nome: data.nome, valorAlvo: Number(data.valorAlvo) || 0, valorAtual: Number(data.valorAtual) || 0, prazo: data.prazo || null, cor: data.cor || GOLD }]);
+  const addGoal = (data) => setGoals((prev) => [...prev, { id: uid(), nome: data.nome, valorAlvo: Number(data.valorAlvo) || 0, valorAtual: Number(data.valorAtual) || 0, fonte: ["carteira", "patrimonio"].includes(data.fonte) ? data.fonte : "manual", prazo: data.prazo || null, cor: data.cor || GOLD }]);
   const removeGoal = (id) => setGoals((prev) => prev.filter((g) => g.id !== id));
   const contributeGoal = (id, amount) => setGoals((prev) => prev.map((g) => g.id === id ? { ...g, valorAtual: Number(g.valorAtual || 0) + Number(amount || 0) } : g));
 
@@ -2107,6 +2128,11 @@ function App() {
   // os ajustes de preço médio entram aqui para o patrimônio não mudar quando o custo da posição é corrigido
   const posicaoInicialTotal = investments.filter((i) => i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0) + ajustesPM(investments);
   const portfolio = useMemo(() => computePortfolio(investments, cotacoes), [investments, cotacoes]);
+  // meta: valor informado à mão, o valor atual dos investimentos ou o patrimônio total (os dois últimos mudam sozinhos)
+  // ---- patrimônio total (recebido - pago, independente de estar em caixa ou investido) ----
+  const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + posicaoInicialTotal + portfolio.unrealized;
+  const valorDaMeta = (g) => (g.fonte === "carteira" ? (portfolio.totalValue || 0) : g.fonte === "patrimonio" ? Math.max(0, patrimonioTotal) : Number(g.valorAtual) || 0);
+  const setGoalFonte = (id, fonte) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, fonte } : g)));
   const saldoRealizado = totalRecebidoAllTime - totalPagoAllTime - totalInvestedAllTime;
 
   const scopedExpenseAmounts = chartScope === "all" ? expenses.concat(recurringExpenses.map(r => ({ description: r.description, amount: r.amount }))) : monthExpenseItems;
@@ -2283,8 +2309,8 @@ function App() {
 
     // 11. metas
     const avgSave = avg(past.concat([{ ...cur }]).filter((x) => x.net > 0), (x) => x.net - x.expTotal);
-    goals.filter((g) => g.valorAtual < g.valorAlvo).slice(0, 2).forEach((g) => {
-      const falta = g.valorAlvo - g.valorAtual;
+    goals.filter((g) => valorDaMeta(g) < g.valorAlvo).slice(0, 2).forEach((g) => {
+      const falta = g.valorAlvo - valorDaMeta(g);
       if (g.prazo) {
         const t = new Date(), d = new Date(g.prazo + "T12:00:00");
         const ml = Math.max(1, (d.getFullYear() - t.getFullYear()) * 12 + d.getMonth() - t.getMonth());
@@ -2417,8 +2443,6 @@ function App() {
     setWipeUndo(null);
   };
 
-  // ---- patrimônio total (recebido - pago, independente de estar em caixa ou investido) ----
-  const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + posicaoInicialTotal + portfolio.unrealized;
 
   // ---- alertas / notificações ----
   const alerts = useMemo(() => {
@@ -2449,7 +2473,7 @@ function App() {
       if (it.tipo === "plantao" && !it.recebido && it.dateIso < todayIso) list.push({ id: "atraso-" + it.key, level: "danger", text: `${it.nome}: pagamento previsto para ${fmtDatePt(it.dateIso)} ainda não foi marcado como recebido` });
     });
     goals.forEach((g) => {
-      if (g.prazo && g.valorAtual < g.valorAlvo && g.prazo < todayIso) list.push({ id: "goal-" + g.id, level: "warning", text: `Meta "${g.nome}" passou do prazo e ainda não foi concluída` });
+      if (g.prazo && valorDaMeta(g) < g.valorAlvo && g.prazo < todayIso) list.push({ id: "goal-" + g.id, level: "warning", text: `Meta "${g.nome}" passou do prazo e ainda não foi concluída` });
     });
     return list;
   }, [monthExpenseItems, monthIncomeItems, goals, viewMonth, limits]);
@@ -3466,7 +3490,140 @@ function App() {
         .pl-rep { border-top: 1px dashed var(--border); margin: 4px 0 12px; padding-top: 10px; } .pl-rep .escala-q:first-child { margin-top: 0; }
         .add-box input[type=text], .add-box input:not([type]) { background: #fff; }
         .serie-tag { font-size: 10.5px; font-weight: 700; color: #1D4ED8; background: #DBEAFE; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
-      `}</style>
+      
+        /* ================= v27: calendário pela cor do dinheiro ================= */
+        .cal-cell.fx-in1, .fx-legend i.fx-in1 { background-color: rgba(22,163,74,.12); } .cal-cell.fx-in2, .fx-legend i.fx-in2 { background-color: rgba(22,163,74,.26); } .cal-cell.fx-in3, .fx-legend i.fx-in3 { background-color: rgba(22,163,74,.46); }
+        .cal-cell.fx-out1, .fx-legend i.fx-out1 { background-color: rgba(220,38,38,.11); } .cal-cell.fx-out2 { background-color: rgba(220,38,38,.24); } .cal-cell.fx-out3, .fx-legend i.fx-out3 { background-color: rgba(220,38,38,.42); }
+        .cal-cell.fut[class*="fx-"], .fx-legend i.fut { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--surface) 62%, transparent) 0 4px, transparent 4px 8px); }
+        .cal-cell[class*="fx-"] .cal-day-num, .cal-cell[class*="fx-"] .cal-hours { color: var(--text); }
+        .cal-cell.selected[class*="fx-"] { box-shadow: 0 0 0 2px var(--text); }
+        .fx-legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+        .fx-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin: 0 1px; vertical-align: -3px; } .fx-legend i.fx-zero { background: var(--surface); border: 1px solid var(--border); }
+        .fx-day { margin: 4px 0 16px; padding: 12px 14px 4px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); } .fx-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; font-size: 14px; } .fx-net { font-weight: 700; font-size: 14px; } .fx-net.in, .fx-line b.in { color: #15803D; } .fx-net.out { color: #B91C1C; }
+        .fx-line { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
+        .fx-line i { width: 8px; height: 8px; border-radius: 50%; background: #DC2626; } .fx-line i.in { background: #16A34A; }
+        .fx-nome { min-width: 0; font-weight: 500; } .fx-nome small { display: block; font-size: 12px; color: var(--text-dim); font-weight: 400; } .fx-line b { white-space: nowrap; }
+
+        /* ================= v27: tema escuro ================= */
+        :root[data-theme="dark"] { --bg: #0B1220; --surface: #141D2F; --surface-2: #1A2539; --surface-3: #223049; --text: #E6EDF7; --text-dim: #94A3B8; --border: #2A3950; }
+        :root[data-theme="dark"] body { background: #0B1220; color: #E6EDF7; }
+        :root[data-theme="dark"] input, :root[data-theme="dark"] select, :root[data-theme="dark"] textarea { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+        :root[data-theme="dark"] input::placeholder { color: #64748B; }
+        :root[data-theme="dark"] .stub-tear { border-top:2px dashed var(--border) }
+        :root[data-theme="dark"] .btn-ghost:hover { background:var(--surface-3) }
+        :root[data-theme="dark"] .topbar { background:rgba(11,18,32,.92) }
+        :root[data-theme="dark"] .exp-bar > div { background:var(--surface) }
+        :root[data-theme="dark"] .inv-cat-btn.active { background:var(--surface) }
+        @media (max-width: 720px) { :root[data-theme="dark"] .bottom-nav { background:rgba(20,29,47,.97) } }
+        :root[data-theme="dark"] .topbar { background:rgba(11,18,32,.94) }
+        :root[data-theme="dark"] .cal-cell.selected { background:var(--surface) }
+        :root[data-theme="dark"] .tbl tbody tr:hover td { background:var(--surface-2) }
+        :root[data-theme="dark"] .cell-input { background:var(--surface) }
+        :root[data-theme="dark"] .field input, :root[data-theme="dark"] .field select { background:var(--surface) }
+        :root[data-theme="dark"] .chip { background:var(--surface) }
+        :root[data-theme="dark"] .bottom-nav { background:var(--surface) }
+        :root[data-theme="dark"] .note-info { color:#93C5FD }
+        :root[data-theme="dark"] .imp-ctrl select { background:var(--surface) }
+        :root[data-theme="dark"] .imp-actions { background:var(--surface) }
+        :root[data-theme="dark"] .sidebar { background:var(--surface) }
+        :root[data-theme="dark"] .sb-item { color:#CBD5E1 }
+        :root[data-theme="dark"] .sb-item.active { background:rgba(34,197,94,.12); color:#4ADE80 }
+        :root[data-theme="dark"] .sb-item.active svg { color:#4ADE80 }
+        :root[data-theme="dark"] .topbar2 { background:rgba(11,18,32,.92) }
+        :root[data-theme="dark"] .month-pill { background:var(--surface) }
+        :root[data-theme="dark"] .link-btn { color:#4ADE80 }
+        :root[data-theme="dark"] .alert-danger { background:rgba(239,68,68,.13); color:#FCA5A5 }
+        :root[data-theme="dark"] .alert-warning { background:rgba(245,158,11,.12); color:#FBBF24 }
+        :root[data-theme="dark"] .alert-info { background:rgba(34,197,94,.12); color:#4ADE80 }
+        :root[data-theme="dark"] .balance-card { background:var(--surface) }
+        :root[data-theme="dark"] .flow-ico.in { background:rgba(34,197,94,.20); color:#4ADE80 }
+        :root[data-theme="dark"] .flow-ico.out { background:rgba(239,68,68,.22); color:#F87171 }
+        :root[data-theme="dark"] .flow-ico.inv { background:rgba(59,130,246,.24); color:#93C5FD }
+        :root[data-theme="dark"] .lim-chip.ok { background:rgba(34,197,94,.20); color:#4ADE80 }
+        :root[data-theme="dark"] .lim-chip.warn { background:rgba(245,158,11,.22); color:#FBBF24 }
+        :root[data-theme="dark"] .lim-chip.over { background:rgba(239,68,68,.22); color:#FCA5A5 }
+        :root[data-theme="dark"] .lim-add select { background:var(--surface) }
+        :root[data-theme="dark"] .tx-status.paid { background:rgba(34,197,94,.20); color:#4ADE80 }
+        :root[data-theme="dark"] .tx-status.open { color:#CBD5E1 }
+        :root[data-theme="dark"] .tx-status.open:hover { background:rgba(34,197,94,.20); color:#4ADE80 }
+        :root[data-theme="dark"] .due.late { background:rgba(239,68,68,.22); color:#FCA5A5 }
+        :root[data-theme="dark"] .due.warn { background:rgba(245,158,11,.22); color:#FBBF24 }
+        :root[data-theme="dark"] .due.paid { background:rgba(34,197,94,.20); color:#4ADE80 }
+        :root[data-theme="dark"] .badge-paid { background:rgba(34,197,94,.20); color:#4ADE80 }
+        :root[data-theme="dark"] .badge-pending { background:rgba(245,158,11,.22); color:#FBBF24 }
+        :root[data-theme="dark"] .btn-ghost { background:var(--surface) }
+        :root[data-theme="dark"] .chip { color:#CBD5E1 }
+        :root[data-theme="dark"] .chip.active, :root[data-theme="dark"] .seg-btn.active, :root[data-theme="dark"] .scope-btn.active { background:#334155; border-color:#475569 }
+        :root[data-theme="dark"] .seg-btn { color:#CBD5E1 }
+        :root[data-theme="dark"] .segmented .seg-btn.active { background:var(--surface) }
+        :root[data-theme="dark"] .field label { color:#CBD5E1 }
+        :root[data-theme="dark"] .cat-btn { background:var(--surface); color:#CBD5E1 }
+        :root[data-theme="dark"] .cat-btn.active { background:rgba(34,197,94,.12) }
+        :root[data-theme="dark"] .chart-tip { background:#334155 }
+        :root[data-theme="dark"] .note-info { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.35); color:#86EFAC }
+        @media (max-width: 720px) { :root[data-theme="dark"] .topbar2 { background:var(--surface) } :root[data-theme="dark"] .bottom-nav { background:var(--surface) } :root[data-theme="dark"] .bn-center { border:4px solid var(--surface) } }
+        :root[data-theme="dark"] .ins-good .ins-ico { background:rgba(34,197,94,.20); color:#4ADE80 }
+        :root[data-theme="dark"] .ins-bad .ins-ico { background:rgba(239,68,68,.22); color:#F87171 }
+        :root[data-theme="dark"] .ins-warn .ins-ico { background:rgba(245,158,11,.22); color:#FBBF24 }
+        :root[data-theme="dark"] .ins-info .ins-ico { background:rgba(59,130,246,.24); color:#93C5FD }
+        :root[data-theme="dark"] .cloud-dot { background:#475569 }
+        :root[data-theme="dark"] .cloud-foot i, :root[data-theme="dark"] .cloud-pill i { background:#475569 }
+        :root[data-theme="dark"] .cloud-pill { color:#CBD5E1 }
+        :root[data-theme="dark"] .mp-arrow { background:var(--surface) }
+        :root[data-theme="dark"] .mp-cell { background:var(--surface) }
+        :root[data-theme="dark"] .mp-cell.sel { background:rgba(34,197,94,.12) }
+        :root[data-theme="dark"] .mp-now { color:#4ADE80; background:rgba(34,197,94,.20) }
+        :root[data-theme="dark"] .mp-now.fut { color:#94A3B8 }
+        :root[data-theme="dark"] .topwrap { background:rgba(20,29,47,.96) }
+        :root[data-theme="dark"] .ns-ind { background:#334155 }
+        :root[data-theme="dark"] .quote-msg { color:#CBD5E1 }
+        :root[data-theme="dark"] .quote-msg.ok { background:rgba(34,197,94,.12); color:#86EFAC }
+        :root[data-theme="dark"] .quote-msg.warn { background:rgba(245,158,11,.12); color:#FCD34D }
+        :root[data-theme="dark"] .quote-msg.bad { background:rgba(239,68,68,.13); color:#FCA5A5 }
+        :root[data-theme="dark"] .token-box { border:1px solid rgba(245,158,11,.4); background:rgba(245,158,11,.12); color:#FCD34D }
+        :root[data-theme="dark"] .token-box a { color:#FCD34D }
+        :root[data-theme="dark"] .token-box label { color:#FCD34D }
+        :root[data-theme="dark"] .token-box input { background:var(--surface) }
+        :root[data-theme="dark"] .sort-pick select { background:var(--surface) }
+        :root[data-theme="dark"] .asset-card { background:var(--surface) }
+        :root[data-theme="dark"] .asset-card.open { border-color:#475569 }
+        :root[data-theme="dark"] .qmark.ok { color:#4ADE80 }
+        :root[data-theme="dark"] .qmark.token { color:#FBBF24 }
+        :root[data-theme="dark"] .qmark.fail { color:#FCA5A5 }
+        :root[data-theme="dark"] .wr-main { background:rgba(34,197,94,.12) }
+        :root[data-theme="dark"] .wr-main > span { color:#86EFAC }
+        :root[data-theme="dark"] .wr-main > b { color:#86EFAC }
+        :root[data-theme="dark"] .wr-cmp small, :root[data-theme="dark"] .wr-none { color:#86EFAC }
+        :root[data-theme="dark"] .wr-note, :root[data-theme="dark"] .note-warn { background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.4); color:#FCD34D }
+        :root[data-theme="dark"] .regime-desc { color:#CBD5E1 }
+        :root[data-theme="dark"] .ct-steps li::before { color:#CBD5E1 }
+        :root[data-theme="dark"] .fr-track em { background:#334155; color:var(--text) }
+        :root[data-theme="dark"] .tax-l .tax-pay { color:#CBD5E1 }
+        :root[data-theme="dark"] .cmp-col.best { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.35) }
+        :root[data-theme="dark"] .notes { color:#CBD5E1 }
+        :root[data-theme="dark"] .escala-slot { background:var(--surface) }
+        :root[data-theme="dark"] .escala-row select, :root[data-theme="dark"] .escala-row input { background:var(--surface) }
+        :root[data-theme="dark"] .ct-mais summary { color:#CBD5E1 }
+        :root[data-theme="dark"] .ct-details > summary { color:#CBD5E1 }
+        :root[data-theme="dark"] .add-tip { background:var(--surface) }
+        :root[data-theme="dark"] .add-box select, :root[data-theme="dark"] .add-box input[type=number] { background:var(--surface) }
+        :root[data-theme="dark"] .lb-on { color:#86EFAC; background:rgba(34,197,94,.20) }
+        :root[data-theme="dark"] .imp-ctrl .tk-in { background:var(--surface) }
+        :root[data-theme="dark"] .xl { background:var(--surface) }
+        :root[data-theme="dark"] .xl-sec.pagas b { color:#4ADE80 }
+        :root[data-theme="dark"] .xl-check { border:2px solid #475569; background:var(--surface) }
+        :root[data-theme="dark"] .pm-edit input { background:var(--surface) }
+        :root[data-theme="dark"] .xl-grp { background:var(--surface) }
+        :root[data-theme="dark"] .fat-box { background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.35) }
+        :root[data-theme="dark"] .fat-box input:not([type=checkbox]) { background:var(--surface) }
+        :root[data-theme="dark"] .choice em { color:#86EFAC; background:rgba(34,197,94,.20) }
+        :root[data-theme="dark"] .add-box input[type=text], :root[data-theme="dark"] .add-box input:not([type]) { background:var(--surface) }
+        :root[data-theme="dark"] .serie-tag { color:#93C5FD; background:rgba(59,130,246,.24) }
+        :root[data-theme="dark"] .segmented .seg-btn.active { background: #334155; color: #fff; }
+        :root[data-theme="dark"] .fx-net.in, :root[data-theme="dark"] .fx-line b.in { color: #4ADE80; } :root[data-theme="dark"] .fx-net.out { color: #FCA5A5; }
+        :root[data-theme="dark"] .cal-cell.fx-in1 { background-color: rgba(34,197,94,.16); } :root[data-theme="dark"] .cal-cell.fx-in2 { background-color: rgba(34,197,94,.32); } :root[data-theme="dark"] .cal-cell.fx-in3 { background-color: rgba(34,197,94,.52); }
+        :root[data-theme="dark"] .cal-cell.fx-out1 { background-color: rgba(239,68,68,.16); } :root[data-theme="dark"] .cal-cell.fx-out2 { background-color: rgba(239,68,68,.30); } :root[data-theme="dark"] .cal-cell.fx-out3 { background-color: rgba(239,68,68,.48); }
+`}</style>
 
       <div className="main">
       <div className="topwrap">
@@ -3524,7 +3681,7 @@ function App() {
             viewYear={viewYear} viewMonth={viewMonth} vinculos={vinculos} addVinculo={addVinculo}
             addShift={addShift} addPlantao={addPlantao} removeShiftSerie={removeShiftSerie} shifts={shifts} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
             addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff}
-            vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab}
+            vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab} fluxoDia={fluxoDia}
           />
         )}
         {activeTab === "despesas" && (
@@ -3540,7 +3697,7 @@ function App() {
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} />
         )}
         {activeTab === "metas" && (
-          <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} />
+          <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} />
         )}
         {activeTab === "visao" && (
           <OverviewTab chartScope={chartScope} setChartScope={setChartScope} expensesByDesc={expensesByDesc} investByCategory={investByCategory}
@@ -3557,7 +3714,7 @@ function App() {
         {activeTab === "backup" && (
           <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
             notifCard={<LembretesCard on={notifOn} setOn={setNotifOn} itens={lembretes} />}
-            privacyCard={<PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} />}
+            privacyCard={<><ThemeCard tema={tema} setTema={setTema} /><PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} /></>}
             posicaoCard={<PosicaoInicialCard investments={investments} onToggle={setPosicaoInicial} />}
             wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
             cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
@@ -4101,6 +4258,19 @@ function PinGate({ hash, bioId, onOk, onForget }) {
         <button className="btn btn-primary" style={{ marginTop: 14, width: "100%" }} disabled={pin.length !== 4} onClick={tentar}>Entrar</button>
         {bioId && <button className="btn btn-ghost" style={{ marginTop: 10, width: "100%" }} onClick={usarDigital}>Usar digital ou rosto</button>}
         <div style={{ marginTop: 14 }}><button className="link-btn" onClick={onForget}>Esqueci o código</button></div>
+      </div>
+    </div>
+  );
+}
+
+function ThemeCard({ tema, setTema }) {
+  return (
+    <div className="day-panel">
+      <div className="day-panel-title"><span>Aparência</span></div>
+      <div className="chip-row" role="group" aria-label="Tema">
+        {[["claro", "Claro"], ["escuro", "Escuro"], ["auto", "Igual ao celular"]].map(([k, l]) => (
+          <button key={k} type="button" data-tema={k} className={`chip sm ${tema === k ? "active" : ""}`} aria-pressed={tema === k} onClick={() => setTema(k)}>{l}</button>
+        ))}
       </div>
     </div>
   );
@@ -4840,12 +5010,13 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           <div className="card-head"><h3 className="card-title">Metas</h3><button className="link-btn" onClick={() => setActiveTab("metas")}>{goals.length ? "ver todas" : "criar meta"}</button></div>
           {goals.length === 0 ? <div className="empty-state" style={{ padding: "8px 0" }}>Defina uma meta para acompanhar o progresso aqui.</div> : (
             [...goals].slice(0, 3).map((g) => {
-              const pct = Math.min(100, (g.valorAtual / Math.max(g.valorAlvo, 1)) * 100);
+              const atualMeta = g.fonte === "carteira" ? (portfolio.totalValue || 0) : g.fonte === "patrimonio" ? Math.max(0, patrimonioTotal) : Number(g.valorAtual) || 0;
+              const pct = Math.min(100, (atualMeta / Math.max(g.valorAlvo, 1)) * 100);
               return (
                 <div key={g.id} className="goal-line">
                   <div className="goal-top"><span className="rank-name">{g.nome}</span><span className="mono">{pct.toFixed(0)}%</span></div>
                   <div className="lim-bar" style={{ margin: "6px 0" }}><div style={{ width: `${pct}%`, background: g.cor }} /></div>
-                  <div className="line-sub mono">{fmtBRL(g.valorAtual)} de {fmtBRL(g.valorAlvo)}</div>
+                  <div className="line-sub mono">{fmtBRL(atualMeta)} de {fmtBRL(g.valorAlvo)}</div>
                 </div>
               );
             })
@@ -4858,19 +5029,21 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   );
 }
 
-function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
+function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte }) {
+  const FONTES = [["manual", "Eu informo"], ["carteira", "Meus investimentos"], ["patrimonio", "Meu patrimônio"]];
   const [showForm, setShowForm] = useState(goals.length === 0);
   const [nome, setNome] = useState("");
   const [valorAlvo, setValorAlvo] = useState("");
   const [valorAtual, setValorAtual] = useState("");
+  const [fonte, setFonte] = useState("manual");
   const [prazo, setPrazo] = useState("");
   const [cor, setCor] = useState(PALETTE[0]);
   const [contributions, setContributions] = useState({});
 
   const submit = () => {
     if (!nome || !valorAlvo) return;
-    addGoal({ nome, valorAlvo, valorAtual, prazo, cor });
-    setNome(""); setValorAlvo(""); setValorAtual(""); setPrazo(""); setShowForm(false);
+    addGoal({ nome, valorAlvo, valorAtual, fonte, prazo, cor });
+    setNome(""); setValorAlvo(""); setValorAtual(""); setFonte("manual"); setPrazo(""); setShowForm(false);
   };
 
   const monthsUntil = (prazo) => {
@@ -4886,9 +5059,10 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
       {goals.length === 0 && <div className="empty-state" style={{ marginBottom: 12 }}>Nenhuma meta cadastrada ainda — crie a primeira abaixo.</div>}
 
       {goals.map((g) => {
-        const pct = Math.min(100, (g.valorAtual / Math.max(g.valorAlvo, 1)) * 100);
+        const atual = valorDaMeta(g);
+        const pct = Math.min(100, (atual / Math.max(g.valorAlvo, 1)) * 100);
         const m = monthsUntil(g.prazo);
-        const faltam = Math.max(0, g.valorAlvo - g.valorAtual);
+        const faltam = Math.max(0, g.valorAlvo - atual);
         const mensal = m ? faltam / m : null;
         return (
           <div key={g.id} className="chart-card">
@@ -4899,8 +5073,10 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
             <div style={{ display: "flex", alignItems: "center", gap: 16, margin: "12px 0 6px" }}>
               <Ring pct={pct} size={84} stroke={9} color={g.cor}><b>{pct.toFixed(0)}%</b></Ring>
               <div>
-                <div className="big-num mono" style={{ fontSize: 20 }}>{fmtBRL(g.valorAtual)}</div>
-                <div className="big-sub">de {fmtBRL(g.valorAlvo)} · faltam {fmtBRL(Math.max(0, g.valorAlvo - g.valorAtual))}</div>
+                <div className="big-num mono" style={{ fontSize: 20 }}>{fmtBRL(atual)}</div>
+                <div className="big-sub">de {fmtBRL(g.valorAlvo)} · faltam {fmtBRL(Math.max(0, g.valorAlvo - atual))}</div>
+                {g.fonte === "carteira" && <div className="field-hint">Acompanha seus investimentos</div>}
+                {g.fonte === "patrimonio" && <div className="field-hint">Acompanha seu patrimônio total</div>}
               </div>
             </div>
             <div className="stub-row" style={{ marginTop: 10 }}>
@@ -4909,15 +5085,25 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
             {mensal !== null && (
               <div className="stub-row"><span className="k">Necessário por mês</span><span className="v mono" style={{ color: "var(--gold)" }}>{fmtBRL(mensal)}</span></div>
             )}
-            <div className="form-grid" style={{ marginTop: 10, marginBottom: 8 }}>
-              <div className="field">
-                <label>Aportar nesta meta</label>
-                <input type="number" value={contributions[g.id] || ""} onChange={(e) => setContributions((p) => ({ ...p, [g.id]: e.target.value }))} placeholder="0,00" />
+            <div className="field" style={{ marginTop: 10 }}>
+              <label>De onde vem o valor</label>
+              <div className="chip-row" role="group" aria-label={"Origem do valor de " + g.nome}>
+                {FONTES.map(([k, l]) => <button key={k} type="button" className={`chip sm ${(g.fonte || "manual") === k ? "active" : ""}`} aria-pressed={(g.fonte || "manual") === k} onClick={() => setGoalFonte(g.id, k)}>{l}</button>)}
               </div>
             </div>
-            <button className="btn btn-ghost" onClick={() => { const v = Number(contributions[g.id]) || 0; if (v > 0) { contributeGoal(g.id, v); setContributions((p) => ({ ...p, [g.id]: "" })); } }}>
-              <IconPlus size={14} /> Adicionar aporte
-            </button>
+            {(g.fonte || "manual") === "manual" && (
+              <>
+                <div className="form-grid" style={{ marginTop: 10, marginBottom: 8 }}>
+                  <div className="field">
+                    <label>Aportar nesta meta</label>
+                    <input type="number" value={contributions[g.id] || ""} onChange={(e) => setContributions((p) => ({ ...p, [g.id]: e.target.value }))} placeholder="0,00" />
+                  </div>
+                </div>
+                <button className="btn btn-ghost" onClick={() => { const v = Number(contributions[g.id]) || 0; if (v > 0) { contributeGoal(g.id, v); setContributions((p) => ({ ...p, [g.id]: "" })); } }}>
+                  <IconPlus size={14} /> Adicionar aporte
+                </button>
+              </>
+            )}
           </div>
         );
       })}
@@ -4927,7 +5113,13 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
           <div className="form-grid">
             <div className="field"><label>Nome da meta</label><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Reserva de emergência" /></div>
             <div className="field"><label>Valor alvo (R$)</label><input type="number" value={valorAlvo} onChange={(e) => setValorAlvo(e.target.value)} placeholder="0,00" /></div>
-            <div className="field"><label>Valor já acumulado (R$)</label><input type="number" value={valorAtual} onChange={(e) => setValorAtual(e.target.value)} placeholder="0,00" /></div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label>De onde vem o valor?</label>
+              <div className="chip-row">
+                {FONTES.map(([k, l]) => <button key={k} type="button" className={`chip sm ${fonte === k ? "active" : ""}`} aria-pressed={fonte === k} onClick={() => setFonte(k)}>{l}</button>)}
+              </div>
+            </div>
+            {fonte === "manual" && <div className="field"><label>Valor já acumulado (R$)</label><input type="number" value={valorAtual} onChange={(e) => setValorAtual(e.target.value)} placeholder="0,00" /></div>}
             <div className="field"><label>Prazo</label><input type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} /></div>
             <div className="field color-field"><label>Cor</label><div className="color-input-wrap"><input type="color" value={cor} onChange={(e) => setCor(e.target.value)} /></div></div>
           </div>
@@ -4939,8 +5131,11 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal }) {
 }
 
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
-  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff }) {
+  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, fluxoDia = {} }) {
   const [modo, setModo] = useState("plantao");
+  const fxMax = Object.values(fluxoDia).reduce((a, f) => Math.max(a, Math.abs(f.entra - f.sai)), 0);
+  const fxClasse = (day) => { const f = fluxoDia[day]; if (!f || !fxMax) return ""; const net = f.entra - f.sai; if (Math.abs(net) < 0.005) return ""; const r = Math.abs(net) / fxMax; return (net > 0 ? "fx-in" : "fx-out") + (r < 0.34 ? 1 : r < 0.67 ? 2 : 3); };
+  const fxSel = selectedDay ? fluxoDia[selectedDay] : null;
   const [local, setLocal] = useState("");
   const [rep, setRep] = useState("nao");
   const [repMeses, setRepMeses] = useState(60);
@@ -4991,7 +5186,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
           const dEntries = entriesByDay[day] || [];
           const isToday = iso === today, isSelected = selectedDay === day;
           return (
-            <div key={idx} className={`cal-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}`} onClick={() => setSelectedDay(day)}>
+            <div key={idx} className={`cal-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""} ${fxClasse(day)} ${iso > today ? "fut" : ""}`} onClick={() => setSelectedDay(day)}>
               <span className="cal-day-num mono">{day}</span>
               {dEntries.length > 0 && (
                 <div className="cal-dots">{dEntries.slice(0, 4).map((e) => { const v = vinculoMap[e.vinculoId]; return <span key={e.id} className={`cal-dot ${e._kind === "escala" ? "esc" : ""} ${e.off ? "off" : ""}`} style={{ background: v ? v.cor : GOLD }} />; })}</div>
@@ -5002,6 +5197,10 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
         })}
       </div>
 
+      <div className="fx-legend">
+        <span>saiu mais <i className="fx-out3" /><i className="fx-out1" /><i className="fx-zero" /><i className="fx-in1" /><i className="fx-in3" /> entrou mais</span>
+        <span><i className="fx-in2 fut" /> listrado é previsão</span>
+      </div>
       {usedVinc.length > 0 && (
         <div className="legend inline" style={{ marginTop: 10 }}>{usedVinc.map((v) => <span key={v.id}><i style={{ background: v.cor }} />{v.nome}</span>)}</div>
       )}
@@ -5010,6 +5209,18 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
         <div className="sheet-backdrop" onClick={() => setSelectedDay(null)}><div className="sheet tall" onClick={(e) => e.stopPropagation()}><div className="sheet-handle" />
         <div className="day-panel flat">
           <div className="day-panel-title"><span>Lançamentos em {pad(selectedDay)}/{pad(viewMonth + 1)}/{viewYear}</span><button className="btn-icon" onClick={() => setSelectedDay(null)}><IconX size={16} /></button></div>
+          {fxSel && (
+            <div className="fx-day">
+              <div className="fx-head"><b>Dinheiro neste dia</b><span className={`fx-net ${fxSel.entra - fxSel.sai >= 0 ? "in" : "out"}`}>{fxSel.entra - fxSel.sai >= 0 ? "+ " : "− "}{fmtBRL(Math.abs(fxSel.entra - fxSel.sai))}</span></div>
+              {fxSel.itens.map((it) => (
+                <div key={it.k} className="fx-line">
+                  <i className={it.in ? "in" : "out"} />
+                  <span className="fx-nome">{it.nome}<small>{it.in ? (it.ok ? "recebido" : "a receber") : (it.ok ? "pago" : "a pagar")}</small></span>
+                  <b className={it.in ? "in" : ""}>{it.in ? "+ " : "− "}{fmtBRL(it.v)}</b>
+                </div>
+              ))}
+            </div>
+          )}
 
           {dayEntries.length === 0 && <div className="empty-state">Nenhum lançamento neste dia ainda.</div>}
 
