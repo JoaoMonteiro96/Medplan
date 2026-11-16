@@ -656,7 +656,8 @@ const IconHome = (p) => <Ico {...p}><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v
 const IconTarget = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></Ico>;
 const IconBell = (p) => <Ico {...p}><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></Ico>;
 const IconFileText = (p) => <Ico {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></Ico>;
-const IconLogo = (p) => (<svg width={p.size||22} height={p.size||22} viewBox="0 0 24 24"><path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7V3z" fill={p.color || "#FFFFFF"} /></svg>);
+// logo: o "M" de Mediplan dentro do anel de progresso das metas
+const IconLogo = (p) => (<svg width={p.size||22} height={p.size||22} viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="#273244" strokeWidth="10" /><circle cx="50" cy="50" r="40" fill="none" stroke="#34D399" strokeWidth="10" strokeLinecap="round" strokeDasharray="188 252" transform="rotate(-90 50 50)" /><path d="M32 68 V34 L50 55 L68 34 V68" fill="none" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 
 // ---- self-contained SVG charts (no external charting library) ----
 
@@ -1302,7 +1303,7 @@ const AUTH_CSS = `
   .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #F6F7F9; padding: 20px; font-family: 'Inter', system-ui, sans-serif; color: #0F172A; }
   .auth-card { width: 100%; max-width: 400px; background: #fff; border: 1px solid #E7EBF0; border-radius: 20px; padding: 28px 24px; box-shadow: 0 10px 30px rgba(15,23,42,0.06); }
   .auth-logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; letter-spacing: -0.03em; margin-bottom: 6px; }
-  .auth-logo span { width: 36px; height: 36px; border-radius: 10px; background: #16A34A; display: inline-flex; align-items: center; justify-content: center; }
+  .auth-logo span { width: 36px; height: 36px; border-radius: 10px; background: #111827; display: inline-flex; align-items: center; justify-content: center; }
   .auth-sub { color: #64748B; font-size: 14px; margin: 0 0 20px; }
   .auth-tabs { display: flex; background: #F1F5F9; border-radius: 10px; padding: 3px; margin-bottom: 16px; }
   .auth-tabs button { flex: 1; border: none; background: none; padding: 9px; border-radius: 8px; font-weight: 600; font-size: 14px; color: #475569; cursor: pointer; font-family: inherit; }
@@ -1342,7 +1343,7 @@ function AuthScreen({ cfg, onSkip, recovery, onRecovered }) {
     <div className="auth-wrap">
       <style>{AUTH_CSS}</style>
       <div className="auth-card">
-        <div className="auth-logo"><span><IconLogo size={18} /></span>Mediplan</div>
+        <div className="auth-logo"><span><IconLogo size={26} /></span>Mediplan</div>
         <p className="auth-sub">{mode === "nova" ? "Crie uma nova senha para sua conta." : mode === "esqueci" ? "Vamos enviar um link para você criar uma nova senha." : "Entre para ver seus dados em qualquer aparelho."}</p>
         {(mode === "entrar" || mode === "criar") && (
           <div className="auth-tabs">
@@ -3169,7 +3170,7 @@ function App() {
 
         .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 244px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px 16px; z-index: 40; overflow-y: auto; }
         .sb-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -0.03em; padding: 2px 8px 18px; }
-        .sb-brand .brand-icon, .tb-logo { width: 32px; height: 32px; border-radius: 10px; background: var(--teal); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .sb-brand .brand-icon, .tb-logo { width: 32px; height: 32px; border-radius: 10px; background: #111827; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .sb-new { display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px; border: none; border-radius: 10px; background: var(--teal); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; font-family: inherit; margin-bottom: 6px; }
         .sb-new:hover { background: #15803D; }
         .sb-group { font-size: 12px; color: #94A3B8; font-weight: 600; padding: 16px 10px 6px; }
@@ -3599,6 +3600,31 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v37: investimentos por classe (modelo A) ================= */
+        .cl-tot { margin: 2px 0 12px; } .cl-tot b { display: block; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; } .cl-tot small { display: block; font-size: 13px; margin-top: 2px; }
+        .cl-bar { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 12px; background: var(--surface-3); } .cl-bar i { display: block; height: 100%; }
+        .cl-card { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
+        .cl-head { display: grid; grid-template-columns: 10px 1fr auto 18px; gap: 12px; align-items: center; width: 100%; padding: 14px 16px; background: none; border: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+        .cl-head:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+        .cl-dot { width: 10px; height: 10px; border-radius: 3px; }
+        .cl-name b { display: block; font-size: 15.5px; } .cl-name small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+        .cl-val { text-align: right; } .cl-val b { display: block; font-size: 15px; font-weight: 700; } .cl-val small { display: block; font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+        .cl-chev { color: var(--text-dim); transition: transform .18s; display: inline-flex; } .cl-card.open .cl-chev { transform: rotate(180deg); }
+        .cl-card .asset-grid { display: block; gap: 0; padding: 0; margin: 0; }
+        .cl-card .asset-card.cl-row { border: none; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; transform: none; animation: none; background: transparent; }
+        .cl-row .ac-top { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 11px 16px; }
+        .cl-row .ac-id b { font-size: 14.5px; } .cl-row .ac-id span { font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+        .cl-row .ac-val { text-align: right; display: block; } .cl-row .ac-val b { display: block; font-size: 14.5px; } .cl-row .ac-val small { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-top: 1px; }
+        .cl-row.open { background: var(--surface-2, #F8FAFB); }
+        .cl-row .ac-stats, .cl-row .ac-foot, .cl-row .ac-more { padding-left: 16px; padding-right: 16px; }
+        .cl-row .ac-stats, .cl-row .ac-stats.three { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; padding-top: 4px; padding-bottom: 6px; }
+        .cl-row .ac-stat span { white-space: nowrap; } .cl-row .ac-id span { font-weight: 500; }
+        @media (min-width: 700px) { .cl-row .ac-stats { grid-template-columns: repeat(4, 1fr); } .cl-row .ac-stats.three { grid-template-columns: repeat(3, 1fr); } }
+        .pm-in { font-weight: 700; border-color: var(--teal) !important; }
+        .pm-bar { margin: 4px 16px 10px; padding: 12px; border-radius: 12px; background: var(--surface-3); font-size: 13.5px; line-height: 1.45; }
+        .pm-bar .pm-btns { display: flex; gap: 8px; margin: 10px 0 6px; flex-wrap: wrap; } .pm-bar small { color: var(--text-dim); font-size: 12px; }
+        .cl-more { display: block; width: 100%; text-align: left; padding: 12px 16px; border: none; border-top: 1px solid var(--border); background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--teal); cursor: pointer; }
+
         /* ================= v36: teto de gastos, metas compactas, print ================= */
         .tt-big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 2px; }
         .tt-big b { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; } .tt-big span { color: var(--text-dim); font-weight: 600; }
@@ -3618,6 +3644,7 @@ function App() {
         .mt-aporte { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 4px; } .mt-aporte .field { flex: 1; min-width: 160px; margin: 0; }
         .xl-edit { padding: 0 6px; }
         .inv-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+        .gp-rend { display: flex; align-items: center; gap: 8px; margin-top: 8px; } .gp-rend input { width: 110px; } .gp-rend span { color: var(--text-dim); font-size: 14px; }
         .pr-res { margin-top: 14px; }
         .pr-top { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; font-size: 13.5px; line-height: 1.45; } .pr-top b { display: block; } .pr-top span { color: var(--text-dim); }
         .pr-thumb { width: 72px; height: 120px; object-fit: cover; object-position: top; border-radius: 10px; border: 1px solid var(--border); flex-shrink: 0; }
@@ -3856,7 +3883,7 @@ function App() {
       <div className="topwrap">
         <header className="topbar2">
           <div className="tb-left">
-            <div className="tb-logo"><IconLogo size={15} /></div>
+            <div className="tb-logo"><IconLogo size={22} /></div>
             <div>
               <h1 className="tb-title">{(PAGE_TITLES[activeTab] || [""])[0]}<button className={`cloud-dot ${cloud.status}`} title={cloudLabel} aria-label={cloudLabel} onClick={() => goTab("backup")} /></h1>
               <p className="tb-sub">{(PAGE_TITLES[activeTab] || ["", ""])[1]}</p>
@@ -3926,7 +3953,7 @@ function App() {
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun}
-            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} abrirPrint={() => { setImportSrc("print"); goTab("importar"); }} />
+            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} />
         )}
         {activeTab === "metas" && (
           <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
@@ -5031,7 +5058,6 @@ function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCale
             </>
           )}
           {cur.semHoras > 0 && <div className="wr-note">{cur.semHoras} {cur.semHoras === 1 ? "plantão sem horas ficou" : "plantões sem horas ficaram"} fora da conta ({fmtBRL(cur.semHorasNet)}). Informe as horas no Calendário para incluir.</div>}
-          {!compact && cur.mensalSemHoras.length > 0 && <div className="wr-note">Sem horas lançadas em {monthName.toLowerCase()}: {cur.mensalSemHoras.join(", ")}. Defina a escala fixa no lápis do cargo, em Faturamento, ou lance as horas no Calendário.</div>}
           {!compact && <div className="field-hint">A conta divide o valor líquido dos plantões e dos vínculos com horas lançadas pelas horas trabalhadas no mês, mesmo que o pagamento caia depois.</div>}
         </>
       )}
@@ -5835,6 +5861,9 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
   const r = rAno > 0 ? Math.pow(1 + rAno / 100, 1 / 12) - 1 : 0;
   const [txt, setTxt] = useState(manual ? Number(g.aporteMensal) || 0 : "");
   const salvar = () => { onPatch({ aporteMensal: txt === "" ? null : Math.max(0, Number(txt) || 0) }); };
+  const [outroRend, setOutroRend] = useState(![0, 6, 10, 12].includes(Number(g.rendimentoAno) || 0));
+  const [rendTxt, setRendTxt] = useState(Number(g.rendimentoAno) ? String(g.rendimentoAno).replace(".", ",") : "");
+  const salvarRend = () => { const v = Math.min(100, Math.max(0, parseFloat(String(rendTxt).replace(",", ".")) || 0)); onPatch({ rendimentoAno: Math.round(v * 100) / 100 }); };
 
   const serie = [Math.max(0, atual)]; let n = serie[0] >= alvo ? 0 : null;
   for (let k = 1; k <= 600 && n === null; k++) { const v = serie[k - 1] * (1 + r) + aporte; serie.push(v); if (v >= alvo) n = k; }
@@ -5898,8 +5927,17 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
         <div className="field">
           <label>Rendimento estimado</label>
           <div className="chip-row" role="group" aria-label="Rendimento estimado ao ano">
-            {[[0, "Sem rendimento"], [6, "6% ao ano"], [10, "10% ao ano"], [12, "12% ao ano"]].map(([v, l]) => <button key={v} type="button" className={`chip sm ${rAno === v ? "active" : ""}`} aria-pressed={rAno === v} onClick={() => onPatch({ rendimentoAno: v })}>{l}</button>)}
+            {[[0, "Sem rendimento"], [6, "6% ao ano"], [10, "10% ao ano"], [12, "12% ao ano"]].map(([v, l]) => <button key={v} type="button" className={`chip sm ${!outroRend && rAno === v ? "active" : ""}`} aria-pressed={!outroRend && rAno === v} onClick={() => { setOutroRend(false); onPatch({ rendimentoAno: v }); }}>{l}</button>)}
+            <button type="button" className={`chip sm ${outroRend ? "active" : ""}`} aria-pressed={outroRend} onClick={() => { setOutroRend(true); setRendTxt(rAno ? String(rAno).replace(".", ",") : ""); }}>Outro valor</button>
           </div>
+          {outroRend && (
+            <div className="gp-rend">
+              <input id={"gp-rend-" + g.id} inputMode="decimal" value={rendTxt} placeholder="Ex.: 8,5" aria-label="Rendimento ao ano, em %"
+                onChange={(e) => setRendTxt(e.target.value.replace(/[^0-9,.]/g, ""))}
+                onBlur={salvarRend} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+              <span>% ao ano</span>
+            </div>
+          )}
         </div>
       </div>
       <div className="field-hint">É uma estimativa. Rendimento passado não garante rendimento futuro.</div>
@@ -6477,6 +6515,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const [catFilter, setCatFilter] = useState("todas");
   const [sortBy, setSortBy] = useState("valor");
   const [openKey, setOpenKey] = useState(null);
+  const [catsAbertas, setCatsAbertas] = useState(null); // null = só a maior classe aberta
+  const [catsTodas, setCatsTodas] = useState({});
+  const [pmDraft, setPmDraft] = useState({});
   const [pmEdit, setPmEdit] = useState(null); // { key, value, erro }
   const formRef = useRef(null);
   const todayIso = todayStr();
@@ -6542,6 +6583,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
     az: (a, b) => a.description.localeCompare(b.description),
   };
   const grouped = presentCats.filter((c) => catFilter === "todas" || c === catFilter).map((c) => ({ cat: c, items: positions.filter((p) => p.category === c).sort(sorters[sortBy] || sorters.valor) }));
+  const somaG = (g) => g.items.reduce((a, p) => a + p.value, 0);
+  const gruposOrd = [...grouped].sort((x, y) => somaG(y) - somaG(x));
+  const maiorCat = gruposOrd.length ? gruposOrd[0].cat : null;
   const tickerCount = positions.filter((p) => p.isQty && p.meta.kind === "ticker").length;
   // posição que o lançamento em preenchimento vai alterar, para mostrar o efeito antes de salvar
   const held = needsDesc && description.trim() ? positions.find((p) => p.category === category && p.description.toUpperCase() === description.trim().toUpperCase()) : null;
@@ -6570,7 +6614,6 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
           ))}
         </div>
         <div className="inv-acoes">
-          {abrirPrint && <button className="btn btn-ghost" id="inv-print" onClick={abrirPrint}>Adicionar por print</button>}
           <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "Fechar" : "Novo lançamento"}</button>
         </div>
       </div>
@@ -6695,12 +6738,21 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
         <div>
           <div className="card" id="quotes-card">
             <div className="card-head">
-              <h3 className="card-title">Meus ativos</h3>
+              <h3 className="card-title">Carteira</h3>
               <button className="btn btn-ghost quote-btn" disabled={quoteRun.busy} onClick={refreshQuotes}>
                 <span className={quoteRun.busy ? "spin" : ""} style={{ display: "inline-flex" }}><IconRefresh size={15} /></span>
                 {quoteRun.busy ? `Buscando ${quoteRun.done} de ${quoteRun.total}` : "Atualizar cotações"}
               </button>
             </div>
+            {positions.length > 0 && (
+              <div className="cl-tot">
+                <b className="mono">{fmtBRL(totalValue)}</b>
+                <small className="mono" style={{ color: profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(profit)} {fmtBRL(Math.abs(profit))} ({signPct(profitPct)}) sobre o custo</small>
+                <div className="cl-bar" role="img" aria-label="Divisão da carteira por classe">
+                  {presentCats.map((c) => { const v = positions.filter((p) => p.category === c).reduce((a, p) => a + p.value, 0); return totalValue > 0 && v > 0 ? <i key={c} title={c + " " + pctOf(v)} style={{ width: (v / totalValue) * 100 + "%", background: invCatMeta(c).color }} /> : null; })}
+                </div>
+              </div>
+            )}
             {quoteRun.busy && <div className="progress-track quote-track"><div className="quote-fill" style={{ width: `${quoteRun.total ? (quoteRun.done / quoteRun.total) * 100 : 0}%` }} /></div>}
             {quoteStatus && !quoteRun.busy && <div className={`quote-msg ${quoteRun.kind}`} role="status">{quoteStatus}</div>}
             {!brapiToken ? (
@@ -6729,13 +6781,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             <div className="field-hint" style={{ marginTop: 8 }}>A busca automática vale para {tickerCount} {tickerCount === 1 ? "ativo" : "ativos"} entre ações, FIIs e ETFs. Para Tesouro, renda fixa e outros, digite o valor atual no cartão do ativo.</div>
             {positions.length > 0 && (
               <div className="asset-tools">
-                {presentCats.length > 1 && (
-                  <div className="chip-row">
-                    <button className={`chip ${catFilter === "todas" ? "active" : ""}`} onClick={() => setCatFilter("todas")}>Todas</button>
-                    {presentCats.map((c) => <button key={c} className={`chip ${catFilter === c ? "active" : ""}`} onClick={() => setCatFilter(c)}>{c}</button>)}
-                  </div>
-                )}
-                <label className="sort-pick">Ordenar por
+                <label className="sort-pick">Ordenar ativos por
                   <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                     <option value="valor">Maior valor</option>
                     <option value="alta">Maior alta</option>
@@ -6747,18 +6793,24 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             )}
           </div>
 
-          {positions.length === 0 ? <div className="card"><div className="empty-state">Nenhuma posição ainda. Toque em “Novo lançamento”.</div></div> : grouped.map((g) => {
+          {positions.length === 0 ? <div className="card"><div className="empty-state">Nenhuma posição ainda. Toque em “Novo lançamento”.</div></div> : gruposOrd.map((g, gi) => {
             const sub = g.items.reduce((a, p) => a + p.value, 0);
             const subProfit = sub - g.items.reduce((a, p) => a + p.cost, 0);
+            const aberta = catsAbertas === null ? gi === 0 : catsAbertas.includes(g.cat);
+            const alternar = () => setCatsAbertas((prev) => { const atual = prev === null ? [maiorCat] : prev; return atual.includes(g.cat) ? atual.filter((c) => c !== g.cat) : [...atual, g.cat]; });
+            const LIM = 5, todas = catsTodas[g.cat] || g.items.length <= LIM + 1;
+            const itens = todas ? g.items : g.items.slice(0, LIM);
             return (
-              <section key={g.cat} className="asset-group">
-                <div className="ag-head">
-                  <span className="legend-dot" style={{ background: invCatMeta(g.cat).color, display: "inline-block", flexShrink: 0 }} />
-                  <div className="ag-name"><b>{g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)} da carteira</small></div>
-                  <div className="ag-right"><b className="mono">{fmtBRL(sub)}</b><small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</small></div>
-                </div>
+              <section key={g.cat} className={`cl-card ${aberta ? "open" : ""}`} data-classe={g.cat}>
+                <button type="button" className="cl-head" aria-expanded={aberta} onClick={alternar}>
+                  <span className="cl-dot" style={{ background: invCatMeta(g.cat).color }} />
+                  <span className="cl-name"><b>{g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}</small></span>
+                  <span className="cl-val"><b className="mono">{fmtBRL(sub)}</b><small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</small></span>
+                  <span className="cl-chev" aria-hidden="true"><IconChevronDown size={18} /></span>
+                </button>
+                {aberta && (
                 <div className="asset-grid">
-                  {g.items.map((p) => {
+                  {itens.map((p) => {
                     const open = openKey === p.key;
                     const hasQuote = p.cotacao > 0;
                     const mark = quoteRun.marks[p.description];
@@ -6769,21 +6821,20 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                         value={cotacoes[p.description] ?? ""} placeholder={p.isQty ? p.avg.toFixed(2) : p.cost.toFixed(2)} onChange={(e) => setCotacao(p.description, e.target.value)} />
                     );
                     return (
-                      <article key={p.key} className={`asset-card ${open ? "open" : ""}`} data-asset={p.description}>
+                      <article key={p.key} className={`asset-card cl-row ${open ? "open" : ""}`} data-asset={p.description}>
                         <button className="ac-top" aria-expanded={open} onClick={() => setOpenKey(open ? null : p.key)}>
-                          <span className="tile sm" style={{ background: p.meta.color + "1f", color: p.meta.color }}>{initialsOf(p.description)}</span>
-                          <span className="ac-id"><b>{p.description}</b><span>{p.assetName || p.category}</span></span>
+                          <span className="ac-id"><b>{p.description}</b><span className="mono">{p.isQty ? `${fmtQty(p.qty)} · PM ${fmtBRL(p.avg)}${hasQuote ? " · hoje " + fmtBRL(p.cotacao) : ""}` : `aplicado ${fmtBRL(p.cost)}`}</span></span>
                           <span className="ac-val">
                             <b className="mono">{fmtBRL(p.value)}</b>
-                            {hasQuote ? <span className={`pill ${p.profit >= 0 ? "up" : "down"}`}>{signPct(p.profitPct)}</span> : <span className="pill flat">sem cotação</span>}
+                            {hasQuote ? <small className="mono" style={{ color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{signPct(p.profitPct)}</small> : <small>sem cotação</small>}
                           </span>
-                          <span className="ac-chev"><IconChevronDown size={18} /></span>
                         </button>
+                        {open && (<>
                         <div className={`ac-stats ${p.isQty ? "" : "three"}`}>
                           {p.isQty ? (
                             <>
                               <div className="ac-stat"><span>Quantidade</span><b className="mono" title={fmtQty(p.qty)}>{fmtQty(p.qty)}</b></div>
-                              <div className="ac-stat"><span>Preço médio</span><b className="mono" title={fmtBRL(p.avg)}>{fmtBRL(p.avg)}</b></div>
+                              <div className="ac-stat"><span>Preço médio (R$)</span><MoneyInput className="cell-input ac-input pm-in" aria-label={"Preço médio de " + p.description} value={pmDraft[p.key] !== undefined ? pmDraft[p.key] : Math.round(p.avg * 100) / 100} onChange={(v) => setPmDraft((d) => ({ ...d, [p.key]: v }))} /></div>
                               <div className="ac-stat"><span>Cotação (R$)</span>{quoteInput}</div>
                             </>
                           ) : (
@@ -6794,28 +6845,24 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                           )}
                           <div className="ac-stat"><span>Resultado</span><b className="mono" style={hasQuote ? { color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" } : null}>{hasQuote ? sgn(p.profit) + " " + fmtBRL(Math.abs(p.profit)) : "—"}</b></div>
                         </div>
-                        <div className="ac-weight"><i style={{ width: `${Math.min(100, Math.max(weight, 1))}%`, background: p.meta.color }} /></div>
+                        {p.isQty && pmDraft[p.key] !== undefined && Math.abs((Number(pmDraft[p.key]) || 0) - Math.round(p.avg * 100) / 100) >= 0.005 && (
+                          <div className="pm-bar" data-pm-bar>
+                            <p>{Number(pmDraft[p.key]) > 0 ? <>Preço médio passa de {fmtBRL(p.avg)} para <b>{fmtBRL(Number(pmDraft[p.key]))}</b>. Total investido fica {fmtBRL(Number(pmDraft[p.key]) * p.qty)}.</> : "Digite um preço maior que zero."}</p>
+                            <div className="pm-btns">
+                              <button type="button" className="btn btn-primary sm" data-pm-salvar disabled={!(Number(pmDraft[p.key]) > 0)} onClick={() => { if (adjustAvg(p, pmDraft[p.key])) setPmDraft((d) => { const n = { ...d }; delete n[p.key]; return n; }); }}>Salvar preço médio</button>
+                              <button type="button" className="btn btn-ghost sm" onClick={() => setPmDraft((d) => { const n = { ...d }; delete n[p.key]; return n; })}>Cancelar</button>
+                            </div>
+                            <small>Use para igualar ao preço médio da corretora. Não mexe no seu caixa. Para desfazer, apague o ajuste em Lançamentos.</small>
+                          </div>
+                        )}
                         <div className="ac-foot">
                           <span>{pctOf(p.value)} da carteira</span>
                           {mark && <span className={`qmark ${mark}`}>{mark === "ok" ? "cotação atualizada" : mark === "token" ? "precisa de token" : "sem retorno"}</span>}
                         </div>
+                        </>)}
                         {open && (
                           <div className="ac-more">
                             {p.isQty && <div className="kv-line"><span>Quantidade</span><b className="mono">{fmtQty(p.qty)}</b></div>}
-                            {p.isQty && <div className="kv-line"><span>Preço médio{!(pmEdit && pmEdit.key === p.key) && <button type="button" className="link-btn" data-pm-ajustar onClick={() => setPmEdit({ key: p.key, value: String(Math.round(p.avg * 100) / 100).replace(".", ","), erro: "" })}>ajustar</button>}</span><b className="mono">{fmtBRL(p.avg)}</b></div>}
-                            {p.isQty && pmEdit && pmEdit.key === p.key && (
-                              <div className="pm-edit" data-pm-edit>
-                                <label>Novo preço médio (R$)</label>
-                                <input type="text" inputMode="decimal" value={pmEdit.value} onChange={(e) => setPmEdit({ ...pmEdit, value: e.target.value, erro: "" })} />
-                                {numOf(pmEdit.value) > 0 && <p data-pm-prev>Total investido passa de {fmtBRL(p.cost)} para <b>{fmtBRL(numOf(pmEdit.value) * p.qty)}</b>.</p>}
-                                {pmEdit.erro && <div className="note-bad" style={{ marginTop: 8 }}>{pmEdit.erro}</div>}
-                                <div className="pm-btns">
-                                  <button type="button" className="btn btn-primary sm" data-pm-salvar onClick={() => { if (adjustAvg(p, pmEdit.value)) setPmEdit(null); else setPmEdit({ ...pmEdit, erro: "Digite um preço maior que zero." }); }}>Salvar</button>
-                                  <button type="button" className="btn btn-ghost sm" onClick={() => setPmEdit(null)}>Cancelar</button>
-                                </div>
-                                <p>Use quando o preço médio do app estiver diferente do da corretora, por causa de taxas, desdobramentos ou compras antigas. Não mexe no seu caixa nem no patrimônio. Para desfazer, apague o ajuste em Lançamentos.</p>
-                              </div>
-                            )}
                             <div className="kv-line"><span>Total investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
                             <div className="kv-line"><span>Valor atual</span><b className="mono">{fmtBRL(p.value)}</b></div>
                             {Math.abs(p.realized) > 0.005 && <div className="kv-line"><span>Resultado de vendas</span><b className="mono" style={{ color: p.realized >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(p.realized)} {fmtBRL(Math.abs(p.realized))}</b></div>}
@@ -6848,7 +6895,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                       </article>
                     );
                   })}
+                  {!todas && <button type="button" className="cl-more" onClick={() => setCatsTodas((p) => ({ ...p, [g.cat]: true }))}>Ver os {g.items.length} ativos</button>}
                 </div>
+                )}
               </section>
             );
           })}
@@ -7221,7 +7270,6 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
             <button className={`choice ${source === "extrato" ? "on" : ""}`} onClick={() => setSource("extrato")}><b>Extrato da conta</b><em>Todo mês</em><span>Para conferir o que entrou e o que saiu da sua conta: pagamentos recebidos, contas, PIX e boletos</span></button>
             <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><em>Todo mês</em><span>Para lançar a fatura como uma despesa só. Os gastos ficam dentro dela, por categoria</span></button>
             <button className={`choice ${source === "b3" ? "on" : ""}`} onClick={() => setSource("b3")}><b>Planilha da B3</b><em>Uma vez, no começo</em><span>Para cadastrar a carteira de investimentos que você já tem: ações, FIIs, ETFs e Tesouro</span></button>
-            <button className={`choice ${source === "print" ? "on" : ""}`} id="src-print" onClick={() => setSource("print")}><b>Print da corretora</b><em>Quando quiser</em><span>Para adicionar ativos a partir de um print da carteira ou de uma compra: serve para a carteira inicial e para aportes novos</span></button>
             <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><em>Todo mês</em><span>Para adicionar os investimentos feitos no mês: as compras e vendas do PDF da corretora</span></button>
           </div>
 
