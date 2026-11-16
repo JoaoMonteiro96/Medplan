@@ -998,9 +998,9 @@ const PAGE_TITLES = {
   organizacao: ["Organização", "Quanto entrou, quanto falta pagar e quanto sobra"],
   faturamento: ["Faturamento", "Receitas por vínculo, impostos e recebimentos"],
   calendario: ["Calendário de plantões", "Lance plantões e horas trabalhadas"],
-  despesas: ["Despesas", "Contas do mês, limites por categoria"],
+  despesas: ["Despesas", "Contas fixas e gastos do mês"],
   investimentos: ["Investimentos", "Carteira, distribuição e rentabilidade"],
-  metas: ["Metas", "Acompanhe seus objetivos financeiros"],
+  metas: ["Metas", "Teto de gastos e seus objetivos"],
   visao: ["Relatórios", "Comparativos e ganho por hora"],
   contabilidade: ["Contabilidade", "Quanto a sua PJ paga de imposto"],
   backup: ["Configurações", "Conta, nuvem, tributação e backup"],
@@ -1109,7 +1109,7 @@ const limitStatus = (spent, limit) => {
 };
 
 function LimitRow({ catId, label, spent, limit, color, icon, editing, onEdit, onSave, onCancel }) {
-  const [val, setVal] = useState(limit ? String(limit) : "");
+  const [val, setVal] = useState(limit ? Number(limit) : "");
   const st = limitStatus(spent, limit);
   const pct = limit ? Math.min(100, (spent / limit) * 100) : 0;
   return (
@@ -1122,7 +1122,7 @@ function LimitRow({ catId, label, spent, limit, color, icon, editing, onEdit, on
       {limit > 0 && <div className="lim-bar"><div style={{ width: pct + "%", background: st.color }} /></div>}
       {editing ? (
         <div className="lim-edit">
-          <input type="number" inputMode="decimal" autoFocus value={val} onChange={(e) => setVal(e.target.value)} placeholder="Limite mensal (R$)" />
+          <MoneyInput autoFocus value={val} onChange={setVal} placeholder="Teto mensal (R$)" />
           <button className="btn btn-primary sm" onClick={() => onSave(val)}>Salvar</button>
           {limit > 0 && <button className="btn btn-ghost sm" onClick={() => onSave("")}>Remover</button>}
           <button className="btn btn-ghost sm" onClick={onCancel}>Cancelar</button>
@@ -1244,6 +1244,18 @@ const SYNCED_KEY = "mediplan-synced";
 const COLLECTIONS = ["vinculos", "shifts", "presencas", "extraRecurringIncomes", "expenses", "recurringExpenses", "investments", "goals", "oneOffIncomes"];
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} };
+// gavetas: cartões que abrem e fecham tocando no título; a escolha fica guardada neste aparelho (começam fechados)
+const GV_KEY = "mediplan-gavetas";
+const gvLer = () => { try { return JSON.parse(localStorage.getItem(GV_KEY) || "{}") || {}; } catch (e) { return {}; } };
+function useGv() {
+  const [st, setSt] = useState(gvLer);
+  const aberto = (id) => st[id] === true;
+  const toggle = (id) => { const cur = { ...gvLer() }; cur[id] = !(cur[id] === true); try { localStorage.setItem(GV_KEY, JSON.stringify(cur)); } catch (e) {} setSt(cur); };
+  return {
+    c: (id) => "gv" + (aberto(id) ? "" : " gv-closed"),
+    t: (id) => ({ role: "button", tabIndex: 0, "aria-expanded": aberto(id), onClick: () => toggle(id), onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(id); } } }),
+  };
+}
 const getCloudCfg = () => {
   try { const c = JSON.parse(lsGet(CLOUD_CFG_KEY) || "null"); if (c && c.url && c.key) return c; } catch (e) {}
   return CLOUD_DEFAULT.url && CLOUD_DEFAULT.key ? CLOUD_DEFAULT : null;
@@ -1684,7 +1696,7 @@ function App() {
       const delayed = payDateOf(s) !== s.date;
       items.push({ key: "shift-" + s.id, vinculoId: s.vinculoId, nome: v ? v.nome : "(vínculo removido)", cor: v ? v.cor : GOLD,
         tipo: "plantao", dateIso: payDateOf(s), dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: netOf(s.gross, v ? v.taxOverride : null),
-        recebido: !!s.recebido, toggle: () => toggleShiftReceived(s.id), removable: true, remove: () => removeShift(s.id) });
+        recebido: !!s.recebido, toggle: () => toggleShiftReceived(s.id), removable: true, remove: () => removeShift(s.id), ref: { t: "shift", id: s.id } });
     });
     const refLabel = (ck) => { const [cy, cm] = ck.split("-").map(Number); return MONTHS_ABBR_PT[cm - 1] + "/" + cy; };
     vinculos.filter((v) => v.tipo === "mensal").forEach((v) => {
@@ -1693,7 +1705,7 @@ function App() {
       if (v.startMonth > ck) return;
       items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, nome: v.nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, v.diaRecebimento || 5)),
         dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: netOf(v.valorMensal, v.taxOverride),
-        recebido: !!(v.recebidoMonths && v.recebidoMonths[ck]), toggle: () => toggleVinculoMensalRecebido(v.id, ck), removable: false });
+        recebido: !!(v.recebidoMonths && v.recebidoMonths[ck]), toggle: () => toggleVinculoMensalRecebido(v.id, ck), removable: false, ref: { t: "vinculo", id: v.id } });
     });
     extraRecurringIncomes.forEach((e) => {
       const d = Number(e.prazoMeses || 0);
@@ -1701,12 +1713,12 @@ function App() {
       if (e.startMonth > ck) return;
       items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, nome: e.description, cor: SLATE, tipo: "extra", dateIso: dateStr(y, m, clampDay(y, m, e.diaRecebimento || 5)),
         dateLabel: d > 0 ? `dia ${e.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${e.diaRecebimento || 5} · recorrente`, gross: Number(e.amount || 0), net: netOf(e.amount, e.taxOverride),
-        recebido: !!(e.recebidoMonths && e.recebidoMonths[ck]), toggle: () => toggleExtraIncomeRecebido(e.id, ck), removable: true, remove: () => removeExtraRecurringIncome(e.id) });
+        recebido: !!(e.recebidoMonths && e.recebidoMonths[ck]), toggle: () => toggleExtraIncomeRecebido(e.id, ck), removable: true, remove: () => removeExtraRecurringIncome(e.id), ref: { t: "extra", id: e.id } });
     });
     oneOffIncomes.filter((o) => inMonth(o.date, y, m)).forEach((o) => {
       items.push({ key: "one-" + o.id, vinculoId: null, nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · entrada avulsa",
         gross: Number(o.amount || 0), net: Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
-        removable: true, removeOne: () => setOneOffIncomes((prev) => prev.filter((x) => x.id !== o.id)) });
+        removable: true, removeOne: () => setOneOffIncomes((prev) => prev.filter((x) => x.id !== o.id)), ref: { t: "avulsa", id: o.id } });
     });
     return items;
   };
@@ -1716,13 +1728,15 @@ function App() {
     const items = [];
     expenses.filter((e) => inMonth(e.dueDate, y, m)).forEach((e) => {
       items.push({ key: "exp-" + e.id, description: e.description, category: e.category || guessExpCat(e.description), amount: Number(e.amount || 0), dateLabel: fmtDatePt(e.dueDate), dateIso: e.dueDate, itens: Array.isArray(e.itens) && e.itens.length ? e.itens : null, ajuste: Number(e.ajuste) || 0,
-        tipo: "pontual", paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id) });
+        tipo: "pontual", paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id), ref: { t: "exp", id: e.id } });
     });
-    recurringExpenses.filter((r) => r.startMonth <= mk).forEach((r) => {
-      const day = clampDay(y, m, r.diaVencimento || 5);
+    recurringExpenses.filter((r) => r.startMonth <= mk && (!r.endMonth || mk <= r.endMonth)).forEach((r) => {
+      const aj = (r.ajustes && r.ajustes[mk]) || {};
+      const day = clampDay(y, m, aj.diaVencimento || r.diaVencimento || 5);
       const info = r.paidMonths && r.paidMonths[mk];
-      items.push({ key: "rec-" + r.id + "-" + mk, description: r.description, category: r.category || guessExpCat(r.description), amount: Number(r.amount || 0), dateLabel: fmtDatePt(dateStr(y, m, day)), dateIso: dateStr(y, m, day),
-        tipo: "recorrente", paid: !!(info && info.paid), toggle: () => toggleRecurringExpensePaid(r.id, mk), remove: () => removeRecurringExpense(r.id) });
+      const desc = aj.description || r.description;
+      items.push({ key: "rec-" + r.id + "-" + mk, description: desc, category: aj.category || r.category || guessExpCat(desc), amount: Number(aj.amount !== undefined ? aj.amount : r.amount || 0), dateLabel: fmtDatePt(dateStr(y, m, day)), dateIso: dateStr(y, m, day),
+        tipo: "recorrente", paid: !!(info && info.paid), toggle: () => toggleRecurringExpensePaid(r.id, mk), remove: () => removeRecurringExpense(r.id), ref: { t: "rec", id: r.id, mk } });
     });
     return items;
   };
@@ -1825,6 +1839,7 @@ function App() {
 
   const goMonth = (y, m) => { setViewYear(y); setViewMonth(m); setSelectedDay(null); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} };
   const [cargoOpen, setCargoOpen] = useState(false);
+  const [importSrc, setImportSrc] = useState(null);
   const quickGo = (kind) => {
     setQuickOpen(false);
     if (kind === "cargo") { setCargoOpen(true); return; }
@@ -1860,6 +1875,29 @@ function App() {
     setPresencas((prev) => prev.filter((p) => p.vinculoId !== id));
   };
   const updateVinculoPrazo = (id, val) => setVinculos((prev) => prev.map((v) => v.id === id ? (v.tipo === "mensal" ? { ...v, prazoMeses: Number(val) || 0 } : { ...v, prazoPadrao: Number(val) || 0 }) : v));
+  const updateVinculo = (id, data) => setVinculos((prev) => prev.map((v) => {
+    if (v.id !== id) return v;
+    const n = { ...v, nome: data.nome, cor: data.cor, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) };
+    if (v.tipo === "plantao") n.prazoPadrao = Number(data.prazoPadrao) || 0;
+    else { n.prazoMeses = Number(data.prazoMeses) || 0; n.valorMensal = Number(data.valorMensal) || 0; n.diaRecebimento = Number(data.diaRecebimento) || 5; if (Array.isArray(data.escala) && data.escala.length) n.escala = data.escala; else delete n.escala; }
+    return n;
+  }));
+  const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, description: data.description, amount: Number(data.amount) || 0, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) } : e));
+  const updateShift = (id, data) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, gross: Number(data.gross) || 0, hours: Number(data.hours) || 0, date: data.date, prazoDias: Number(data.prazoDias) || 0, payDate: addDaysIso(data.date, Number(data.prazoDias) || 0) } : s));
+  const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date } : o));
+  const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category } : e));
+  // conta que se repete: "só este mês" guarda um ajuste no mês; "daqui em diante" encerra a antiga no mês anterior e cria outra a partir deste
+  const updateRecurringExpense = (id, d, mk, modo) => setRecurringExpenses((prev) => {
+    const r = prev.find((x) => x.id === id); if (!r) return prev;
+    const novo = { description: d.description, amount: Number(d.amount) || 0, diaVencimento: Number(d.diaVencimento) || 5, category: d.category };
+    if (modo === "mes") return prev.map((x) => x.id === id ? { ...x, ajustes: { ...(x.ajustes || {}), [mk]: novo } } : x);
+    if (mk <= r.startMonth) return prev.map((x) => x.id === id ? { ...x, ...novo, ajustes: {} } : x);
+    const pick = (o, f) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => f(k)));
+    const velho = { ...r, endMonth: shiftMonthKey(mk, -1), paidMonths: pick(r.paidMonths, (k) => k < mk), ajustes: pick(r.ajustes, (k) => k < mk) };
+    const nova = { ...r, ...novo, id: uid(), startMonth: mk, paidMonths: pick(r.paidMonths, (k) => k >= mk), ajustes: {} };
+    if (!r.endMonth) delete nova.endMonth;
+    return prev.map((x) => x.id === id ? velho : x).concat(nova);
+  });
   const updateExtraPrazo = (id, val) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, prazoMeses: Number(val) || 0 } : e));
   const updateShiftPrazo = (id, val) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, prazoDias: Number(val) || 0, payDate: addDaysIso(s.date, Number(val) || 0) } : s));
   const updateVinculoEscala = (id, escala) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, escala } : v));
@@ -1880,14 +1918,15 @@ function App() {
   };
   const removeShift = (id) => setShifts((prev) => prev.filter((s) => s.id !== id));
   // Plantão lançado direto pelo nome do local: o local é criado na hora se ainda não existir. Várias datas = plantão que se repete (uma série)
-  const addPlantao = ({ local, gross, hours, prazoDias, datas }) => {
+  const addPlantao = ({ local, gross, hours, prazoDias, datas, taxa }) => {
+    const tx = taxa === undefined || taxa === null || String(taxa).trim() === "" ? undefined : Number(taxa);
     const nome = String(local || "").replace(/\s+/g, " ").trim().slice(0, 60);
     if (!nome || !datas || !datas.length) return null;
     const prazo = Math.max(0, Number(prazoDias) || 0), chave = stripAcc(nome);
     const ja = vinculos.find((v) => v.tipo === "plantao" && stripAcc(v.nome).replace(/\s+/g, " ").trim() === chave);
     const vid = ja ? ja.id : uid();
-    if (ja) setVinculos((prev) => prev.map((v) => (v.id === vid ? { ...v, prazoPadrao: prazo } : v)));
-    else setVinculos((prev) => [...prev, { id: vid, nome, cor: PALETTE[prev.length % PALETTE.length], tipo: "plantao", taxOverride: null, prazoPadrao: prazo }]);
+    if (ja) setVinculos((prev) => prev.map((v) => (v.id === vid ? { ...v, prazoPadrao: prazo, ...(tx !== undefined ? { taxOverride: tx } : {}) } : v)));
+    else setVinculos((prev) => [...prev, { id: vid, nome, cor: PALETTE[prev.length % PALETTE.length], tipo: "plantao", taxOverride: tx !== undefined ? tx : null, prazoPadrao: prazo }]);
     const serie = datas.length > 1 ? uid() : null, base = uid();
     setShifts((prev) => [...prev, ...datas.map((date, n) => ({ id: base + "-" + n, date, vinculoId: vid, gross: Number(gross) || 0, hours: Number(hours) || 0, recebido: false, prazoDias: prazo, payDate: addDaysIso(date, prazo), ...(serie ? { serie } : {}) }))]);
     return vid;
@@ -2435,6 +2474,14 @@ function App() {
     setCotacoes((p) => ({ ...p, ...cot }));
     setImportedKeys((p) => { const n = { ...p }; keys.forEach((k) => { n[k] = bid; }); return n; });
     const entry = { id: bid, date: today, label, despesas: 0, entradas: 0, baixas: 0, investimentos: newInv.length, cotacoes: nC, total: 0 };
+    setImportLog((p) => [entry, ...p].slice(0, 30));
+    return entry;
+  };
+  const commitPrint = (rows, modo, date) => {
+    const bid = uid(); const d = date || todayStr();
+    const newInv = rows.map((r, n) => ({ id: uid() + n, batch: bid, description: r.ticker, assetName: ASSET_NAME[r.ticker] || "", category: b3Category(r.ticker), date: d, tipo: "compra", qty: r.qty, price: r.pm, amount: Math.round(r.qty * r.pm * 100) / 100, source: "print", ...(modo === "inicial" ? { posicaoInicial: true } : {}) }));
+    setInvestments((p) => [...p, ...newInv]);
+    const entry = { id: bid, date: todayStr(), label: modo === "inicial" ? "Print da corretora (carteira inicial)" : "Print da corretora (aporte)", despesas: 0, entradas: 0, baixas: 0, investimentos: newInv.length, cotacoes: 0, total: 0 };
     setImportLog((p) => [entry, ...p].slice(0, 30));
     return entry;
   };
@@ -3552,18 +3599,82 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v36: teto de gastos, metas compactas, print ================= */
+        .tt-big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 2px; }
+        .tt-big b { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; } .tt-big span { color: var(--text-dim); font-weight: 600; }
+        .tt-bar { height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; margin: 10px 0 6px; } .tt-bar i { display: block; height: 100%; border-radius: 5px; }
+        .tt-sub { font-size: 13.5px; color: var(--text-dim); } .tt-sub b { color: var(--text); } .tt-sub .tt-neg { color: #B91C1C; }
+        .tt .tt-cat { margin-top: 12px; border-top: 1px solid var(--border); }
+        .tt .tt-cat span small { display: block; font-size: 12px; font-weight: 400; color: var(--text-dim); margin-top: 1px; }
+        .mt-head { display: flex; justify-content: space-between; align-items: center; margin: 22px 4px 8px; } .mt-head h3 { margin: 0; font-size: 17px; }
+        .mt-meta { padding: 0; overflow: hidden; }
+        .mt-row { display: grid; grid-template-columns: 48px 1fr 18px; gap: 14px; align-items: center; width: 100%; padding: 14px 16px; border: none; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+        .mt-row:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+        .mt-txt { min-width: 0; } .mt-txt b { display: block; font-size: 15.5px; font-weight: 600; } .mt-txt small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
+        .mt-chev { color: var(--text-dim); font-size: 20px; transition: transform .18s; } .mt-meta.open .mt-chev { transform: rotate(90deg); }
+        .mt-body { padding: 0 16px 16px; border-top: 1px solid var(--border); }
+        .mt-body .gp { margin-top: 0; border-top: none; }
+        .mt-prazo { font-size: 13px; color: var(--text-dim); padding-top: 12px; }
+        .mt-aporte { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 4px; } .mt-aporte .field { flex: 1; min-width: 160px; margin: 0; }
+        .xl-edit { padding: 0 6px; }
+        .inv-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+        .pr-res { margin-top: 14px; }
+        .pr-top { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; font-size: 13.5px; line-height: 1.45; } .pr-top b { display: block; } .pr-top span { color: var(--text-dim); }
+        .pr-thumb { width: 72px; height: 120px; object-fit: cover; object-position: top; border-radius: 10px; border: 1px solid var(--border); flex-shrink: 0; }
+        .pr-row { display: grid; grid-template-columns: 22px 1fr 84px 120px; gap: 10px; align-items: end; padding: 10px 0; border-top: 1px solid var(--border); }
+        .pr-row > input[type=checkbox] { width: 18px; height: 18px; align-self: center; }
+        .pr-row .field { margin: 0; } .pr-row .field label { font-size: 11.5px; } .pr-row .field input { padding: 8px 9px; }
+        .pr-tk { align-self: center; } .pr-tk b { display: block; font-size: 15px; } .pr-tk small { color: var(--text-dim); font-size: 12px; }
+        .pr-row.off { opacity: .45; }
+        .pr-row.falta .field input[value=""] { border-color: #DC2626; background: #FEF2F2; }
+        @media (max-width: 420px) { .pr-row { grid-template-columns: 22px 1fr 1fr; } .pr-row > input[type=checkbox] { grid-row: 1; grid-column: 1; } .pr-row .pr-tk { grid-row: 1; grid-column: 2 / -1; } .pr-row .pr-q { grid-row: 2; grid-column: 2; } .pr-row .pr-p { grid-row: 2; grid-column: 3; } }
+        :root[data-theme="dark"] .pr-row.falta .field input[value=""] { background: rgba(239,68,68,.12); } :root[data-theme="dark"] .tt-sub .tt-neg { color: #F87171; }
+
+        /* ================= v35: editar lançamentos do faturamento ================= */
+        .fz-pen { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+        .fz-pen:hover { color: var(--text); } .fz-pen.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+        .fz-pen:focus-visible, .fz-add:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        tr.fz-aberta td { border-bottom-color: transparent; }
+        tr.fz-row td { padding: 0 12px 12px !important; }
+        .fz-ed { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin: 2px 0 10px; text-align: left; }
+        .fz-ed .mini-form { background: none; border: none; padding: 0; margin: 0; }
+        .fz-tit { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+        .fz-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; } .fz-btns .fz-del { color: var(--brick); }
+        .fz-add-wrap { padding: 2px 16px 6px; border-top: 1px solid var(--border); }
+        .fz-add { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 0; border: none; background: none; font: inherit; font-weight: 600; font-size: 14.5px; color: var(--teal); cursor: pointer; text-align: left; }
+        .fz-add-wrap > .fz-add ~ .fz-add { border-top: 1px solid var(--border); }
+        .fz-add i { width: 28px; height: 28px; border-radius: 9px; background: rgba(22,163,74,.12); display: grid; place-items: center; font-style: normal; font-size: 16px; flex-shrink: 0; }
+        .fz-add span { flex: 1; } .fz-add em { font-style: normal; color: var(--text-dim); font-size: 18px; transition: transform .15s; } .fz-add[aria-expanded="true"] em { transform: rotate(90deg); }
+        .fz-out { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; font-size: 14px; }
+        .fz-out + .fz-out, .fz-ed + .fz-out { border-top: 1px solid var(--border); }
+        .fz-out b { font-weight: 600; } .fz-out small { display: block; font-size: 12px; color: var(--text-dim); margin: 2px 0 0 18px; }
+        :root[data-theme="dark"] .fz-add { color: #4ADE80; } :root[data-theme="dark"] .fz-add i { background: rgba(74,222,128,.15); }
+        @media (prefers-reduced-motion: reduce) { .fz-add em { transition: none; } }
+
+        /* ================= v34: gavetas ================= */
+        .gv-t { cursor: pointer; display: inline-flex; align-items: center; gap: 10px; user-select: none; -webkit-user-select: none; border-radius: 6px; }
+        .gv-t::after { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); opacity: .45; transition: transform .18s; flex-shrink: 0; }
+        .gv-closed .gv-t::after { transform: rotate(-45deg); }
+        .gv-t:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+        .gv-closed > :not(.card-head):not(.gv-t) { display: none !important; }
+        .gv-closed > .card-head, .gv-closed > .gv-t { margin-bottom: 0 !important; }
+        .gv-closed > .card-head > .segmented, .gv-closed > .card-head > .card-note { display: none; }
+        .gv-closed.card { padding-top: 16px; padding-bottom: 16px; }
+        .gv-closed.card.flush > .card-head { padding-bottom: 16px; }
+        @media (prefers-reduced-motion: reduce) { .gv-t::after { transition: none; } }
+
         /* ================= v32: projeção das metas ================= */
         .gp { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
         .gp-tit { font-size: 14px; font-weight: 600; color: var(--text-dim); }
         .gp-res { font-size: 16px; line-height: 1.4; margin: 4px 0 8px; } .gp-res b { color: #15803D; }
         .gp-prazo { font-size: 13.5px; line-height: 1.4; padding: 9px 12px; border-radius: 10px; margin-bottom: 10px; }
         .gp-prazo.ok { background: #F0FDF4; color: #166534; } .gp-prazo.falta { background: #FFFBEB; color: #92400E; }
-        .gp-sel { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--text-dim); margin: 6px 0 2px; } .gp-sel b { font-size: 16px; color: var(--text); }
+        .gp-svg { display: block; max-height: 120px; margin: 2px 0 4px; } .gp-fim { fill: var(--surface); stroke-width: 3; }
         .gp-grid { stroke: var(--border); } .gp-alvo { stroke: #3B82F6; stroke-width: 1.6; stroke-dasharray: 5 5; }
         .gp-lbl { fill: var(--text-dim); font-size: 11px; font-family: inherit; }
-        .gp-bar { fill: #BBF7D0; } .gp-bar.ok { fill: #4ADE80; } .gp-bar.sel { stroke: var(--text); stroke-width: 2; }
+        
         .gp-campos { display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 12px; }
-        :root[data-theme="dark"] .gp-res b { color: #4ADE80; } :root[data-theme="dark"] .gp-bar { fill: rgba(74,222,128,.32); } :root[data-theme="dark"] .gp-bar.ok { fill: #4ADE80; } :root[data-theme="dark"] .gp-alvo { stroke: #60A5FA; }
+        :root[data-theme="dark"] .gp-res b { color: #4ADE80; } :root[data-theme="dark"] .gp-alvo { stroke: #60A5FA; }
         :root[data-theme="dark"] .gp-prazo.ok { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .gp-prazo.falta { background: rgba(245,158,11,.12); color: #FCD34D; }
 
         /* ================= v31: organização (caminho do dinheiro) ================= */
@@ -3789,6 +3900,7 @@ function App() {
             totalGross={totalGross} totalNet={totalNet}
             vinculos={vinculos} addVinculo={addVinculo} removeVinculo={removeVinculo} updateVinculoTax={updateVinculoTax} updateVinculoPrazo={updateVinculoPrazo} updateVinculoEscala={updateVinculoEscala}
             extraRecurringIncomes={extraRecurringIncomes} addExtraRecurringIncome={addExtraRecurringIncome} removeExtraRecurringIncome={removeExtraRecurringIncome} updateExtraPrazo={updateExtraPrazo}
+            shifts={shifts} oneOffIncomes={oneOffIncomes} updateVinculo={updateVinculo} updateExtra={updateExtra} updateShift={updateShift} updateOneOff={updateOneOff}
             netByVinculo={netByVinculo} gainScope={gainScope} setGainScope={setGainScope} history12={history12}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth}
             workCard={<WorkRateCard cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} goMonth={goMonth} />}
@@ -3807,17 +3919,17 @@ function App() {
         {activeTab === "despesas" && (
           <ExpensesTab
             monthExpenseItems={monthExpenseItems} addExpense={addExpense} addRecurringExpense={addRecurringExpense}
-            viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} limits={limits} setLimit={setLimit}
+            viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} limits={limits} setLimit={setLimit} updateExpense={updateExpense} updateRecurringExpense={updateRecurringExpense}
           />
         )}
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun}
-            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} />
+            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} abrirPrint={() => { setImportSrc("print"); goTab("importar"); }} />
         )}
         {activeTab === "metas" && (
-          <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} />
+          <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
         )}
         {activeTab === "visao" && (
           <OverviewTab chartScope={chartScope} setChartScope={setChartScope} expensesByDesc={expensesByDesc} investByCategory={investByCategory}
@@ -3829,7 +3941,7 @@ function App() {
         {activeTab === "importar" && (
           <ImportTab buildExpenseItems={buildExpenseItems} buildIncomeItems={buildIncomeItems} importedKeys={importedKeys}
             commitImport={commitImport} importLog={importLog} undoImport={undoImport} goTab={goTab}
-            commitB3={commitB3} portfolio={portfolio} investments={investments} />
+            commitB3={commitB3} portfolio={portfolio} investments={investments} commitPrint={commitPrint} fonteInicial={importSrc} limparFonte={() => setImportSrc(null)} />
         )}
         {activeTab === "backup" && (
           <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
@@ -3908,21 +4020,108 @@ function SectionShell({ icon, iconBg, title, subtitle, expanded, onToggle, child
   );
 }
 
-function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome }) {
-  const [nome, setNome] = useState(defaultNome || "");
-  const [cor, setCor] = useState(PALETTE[0]);
-  const [tipo, setTipo] = useState(fixo ? "mensal" : "plantao");
-  const [taxOverride, setTaxOverride] = useState("");
-  const [valorMensal, setValorMensal] = useState("");
-  const [diaRecebimento, setDiaRecebimento] = useState(5);
-  const [prazoPadrao, setPrazoPadrao] = useState(0);
-  const [prazoMeses, setPrazoMeses] = useState(0);
-  const [escala, setEscala] = useState([]);
+// valor em reais com ponto de milhar enquanto digita: os números entram pela direita (12480 vira 124,80; 1248000 vira 12.480,00)
+function MoneyInput({ value, onChange, id, placeholder = "0,00", ...rest }) {
+  const txt = value === "" || value === null || value === undefined ? "" : (Number(value) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return <input id={id} inputMode="numeric" autoComplete="off" value={txt} placeholder={placeholder} onChange={(e) => { const d = e.target.value.replace(/\D/g, "").replace(/^0+/, ""); onChange(d === "" ? "" : Number(d) / 100); }} {...rest} />;
+}
 
+function FormBtns({ label, onSubmit, onCancel, onDelete }) {
+  return (
+    <div className="fz-btns">
+      <button type="button" className="btn btn-primary" onClick={onSubmit}>{label}</button>
+      {onCancel && <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>}
+      {onDelete && <button type="button" className="btn btn-ghost fz-del" onClick={onDelete}><IconTrash size={14} /> Excluir</button>}
+    </div>
+  );
+}
+
+function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
+  const [description, setDescription] = useState(inicial ? inicial.description || "" : "");
+  const [amount, setAmount] = useState(inicial ? Number(inicial.amount) || 0 : "");
+  const [diaRecebimento, setDia] = useState(inicial ? inicial.diaRecebimento || 5 : 5);
+  const [taxOverride, setTax] = useState(inicial && inicial.taxOverride !== null && inicial.taxOverride !== undefined ? String(inicial.taxOverride) : "");
+  const [prazoMeses, setPrazo] = useState(inicial ? Number(inicial.prazoMeses) || 0 : 0);
+  const [erro, setErro] = useState("");
   const submit = () => {
-    if (!nome) return;
+    if (!description.trim()) { setErro("Dê um nome para a receita."); return; }
+    if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
+    if (String(taxOverride).trim() === "" || !(Number(taxOverride) >= 0)) { setErro("Informe a tributação. Use 0 se não tiver imposto."); return; }
+    onSubmit({ description: description.trim(), amount: Number(amount), diaRecebimento, taxOverride, prazoMeses });
+    if (!inicial) { setDescription(""); setAmount(""); setTax(""); setPrazo(0); }
+    setErro("");
+  };
+  return (
+    <div className="mini-form">
+      <div className="form-grid">
+        <div className="field"><label>Descrição</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Dividendos, aluguel de consultório" /></div>
+        <div className="field"><label>Valor (R$) *</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
+        <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDia(e.target.value)} /></div>
+        <div className="field"><label>Tributação (%) *</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0 para dividendos" /></div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Quando esse valor é pago?</label><PrazoPicker unit="meses" value={prazoMeses} onChange={setPrazo} /></div>
+      </div>
+      {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
+      <FormBtns label={inicial ? "Salvar alterações" : "Salvar receita recorrente"} onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+    </div>
+  );
+}
+
+function ShiftEditForm({ shift, onSubmit, onCancel, onDelete }) {
+  const [gross, setGross] = useState(Number(shift.gross) || 0);
+  const [hours, setHours] = useState(shift.hours || "");
+  const [date, setDate] = useState(shift.date);
+  const [prazo, setPrazo] = useState(Number(shift.prazoDias) || 0);
+  const submit = () => { if (!date) return; onSubmit({ gross: Number(gross) || 0, hours: Number(hours) || 0, date, prazoDias: Number(prazo) || 0 }); };
+  return (
+    <div className="mini-form">
+      <div className="form-grid">
+        <div className="field"><label>Valor bruto (R$)</label><MoneyInput value={gross} onChange={setGross} /></div>
+        <div className="field"><label>Horas</label><input type="number" min="0" value={hours} onChange={(e) => setHours(e.target.value)} /></div>
+        <div className="field"><label>Data do plantão</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Paga em quanto tempo?</label><PrazoPicker unit="dias" value={prazo} onChange={setPrazo} /></div>
+      </div>
+      <FormBtns label="Salvar alterações" onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+    </div>
+  );
+}
+
+function OneOffEditForm({ item, onSubmit, onCancel, onDelete }) {
+  const [description, setDescription] = useState(item.description || "");
+  const [amount, setAmount] = useState(Number(item.amount) || 0);
+  const [date, setDate] = useState(item.date);
+  const submit = () => { if (!description.trim() || !date) return; onSubmit({ description: description.trim(), amount: Number(amount) || 0, date }); };
+  return (
+    <div className="mini-form">
+      <div className="form-grid">
+        <div className="field"><label>Descrição</label><input value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+        <div className="field"><label>Valor (R$)</label><MoneyInput value={amount} onChange={setAmount} /></div>
+        <div className="field"><label>Data</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+      </div>
+      <FormBtns label="Salvar alterações" onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+    </div>
+  );
+}
+
+function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, onCancel, onDelete }) {
+  const ini = inicial || {};
+  const [nome, setNome] = useState(inicial ? ini.nome || "" : defaultNome || "");
+  const [cor, setCor] = useState(ini.cor || PALETTE[0]);
+  const [tipo, setTipo] = useState(inicial ? ini.tipo : fixo ? "mensal" : "plantao");
+  const [taxOverride, setTaxOverride] = useState(ini.taxOverride !== null && ini.taxOverride !== undefined ? String(ini.taxOverride) : "");
+  const [valorMensal, setValorMensal] = useState(inicial && ini.tipo === "mensal" ? Number(ini.valorMensal) || 0 : "");
+  const [diaRecebimento, setDiaRecebimento] = useState(ini.diaRecebimento || 5);
+  const [prazoPadrao, setPrazoPadrao] = useState(Number(ini.prazoPadrao) || 0);
+  const [prazoMeses, setPrazoMeses] = useState(Number(ini.prazoMeses) || 0);
+  const [escala, setEscala] = useState(Array.isArray(ini.escala) ? ini.escala : []);
+
+  const [erroV, setErroV] = useState("");
+  const submit = () => {
+    if (!String(nome).trim()) { setErroV("Dê um nome para o vínculo."); return; }
+    if (tipo === "mensal" && !(Number(valorMensal) > 0)) { setErroV("Informe o valor que você recebe por mês."); return; }
+    if (String(taxOverride).trim() === "" || !(Number(taxOverride) >= 0)) { setErroV("Informe a tributação. Use 0 se não tiver imposto."); return; }
+    setErroV("");
     onSubmit({ nome, cor, tipo, taxOverride, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, startMonth: defaultStartMonth });
-    setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0); setEscala([]);
+    if (!inicial) { setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0); setEscala([]); }
   };
 
   return (
@@ -3930,16 +4129,16 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome }) {
       <div className="form-grid">
         <div className="field"><label>Nome do vínculo</label><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Hospital São Lucas, UTI Municipal..." /></div>
         <div className="field color-field"><label>Cor</label><div className="color-input-wrap"><input type="color" value={cor} onChange={(e) => setCor(e.target.value)} /></div></div>
-        {!fixo && <div className="field"><label>Tipo</label>
+        {!fixo && !inicial && <div className="field"><label>Tipo</label>
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
             <option value="plantao">Plantão avulso (lançado no calendário)</option>
             <option value="mensal">Cargo fixo com salário mensal (diarista, contrato...)</option>
           </select>
         </div>}
-        <div className="field"><label>Tributação específica (%) — opcional</label><input type="number" value={taxOverride} onChange={(e) => setTaxOverride(e.target.value)} placeholder="usa a geral" /></div>
+        <div className="field"><label>Tributação (%) *</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTaxOverride(e.target.value); setErroV(""); }} placeholder="Ex.: 15" /></div>
         {tipo === "mensal" && (
           <>
-            <div className="field"><label>Valor mensal bruto (R$)</label><input type="number" value={valorMensal} onChange={(e) => setValorMensal(e.target.value)} placeholder="0,00" /></div>
+            <div className="field"><label>Valor mensal bruto (R$) *</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
             <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
             <div className="field" style={{ gridColumn: "1 / -1" }}><label>Escala fixa da semana (opcional)</label><EscalaEditor value={escala} onChange={setEscala} /></div>
           </>
@@ -3952,7 +4151,10 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome }) {
           <div className="field-hint">{tipo === "mensal" ? "Ex.: “1 mês depois” significa que o trabalho de outubro entra no caixa em novembro." : "Você ainda poderá ajustar o prazo de cada plantão na hora de lançar."}</div>
         </div>
       </div>
-      <button className="btn btn-primary" onClick={submit}><IconPlus size={15} /> {fixo ? "Salvar cargo fixo" : "Salvar vínculo"}</button>
+      {erroV && <div className="note-bad" style={{ marginTop: 8 }}>{erroV}</div>}
+      {inicial
+        ? <FormBtns label="Salvar alterações" onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+        : <button className="btn btn-primary" onClick={submit}><IconPlus size={15} /> {fixo ? "Salvar cargo fixo" : "Salvar vínculo"}</button>}
     </div>
   );
 }
@@ -4032,7 +4234,7 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
         <div className="mini-form">
           <div className="form-grid">
             <div className="field"><label>Descrição</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Aluguel de consultório" /></div>
-            <div className="field"><label>Valor (R$)</label><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" /></div>
+            <div className="field"><label>Valor (R$)</label><MoneyInput value={amount} onChange={setAmount} /></div>
             <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
             <div className="field"><label>Tributação (%) — opcional</label><input type="number" value={taxOverride} onChange={(e) => setTaxOverride(e.target.value)} placeholder="usa a geral" /></div>
             <div className="field" style={{ gridColumn: "1 / -1" }}><label>Quando esse valor é pago?</label><PrazoPicker unit="meses" value={prazoMeses} onChange={setPrazoMeses} /></div>
@@ -4047,9 +4249,30 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
 function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
+  shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff,
   netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto
 }) {
-  const [manage, setManage] = useState(vinculos.length === 0);
+  const gv = useGv();
+  const [editKey, setEditKey] = useState(null);
+  const [addOpen, setAddOpen] = useState(vinculos.length === 0 ? "vinculo" : null);
+  const fechar = () => setEditKey(null);
+  const confirmaVinculo = (v) => { if (window.confirm(`Excluir o vínculo "${v.nome}"? Os plantões e presenças dele também serão apagados.`)) { removeVinculo(v.id); fechar(); } };
+  const confirmaExtra = (e) => { if (window.confirm(`Excluir a receita "${e.description}"? Ela some de todos os meses.`)) { removeExtraRecurringIncome(e.id); fechar(); } };
+  const editorVinculo = (v) => <VinculoForm key={"v" + v.id} inicial={v} onSubmit={(d) => { updateVinculo(v.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaVinculo(v)} />;
+  const editorExtra = (e) => <ExtraIncomeForm key={"e" + e.id} inicial={e} onSubmit={(d) => { updateExtra(e.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaExtra(e)} />;
+  const editor = (it) => {
+    const r = it.ref || {};
+    if (r.t === "vinculo") { const v = vinculos.find((x) => x.id === r.id); return v ? <><div className="fz-tit">Editar {v.nome}</div>{editorVinculo(v)}<div className="field-hint" style={{ marginTop: 8 }}>A mudança vale para todos os meses deste cargo.</div></> : null; }
+    if (r.t === "extra") { const e = extraRecurringIncomes.find((x) => x.id === r.id); return e ? <><div className="fz-tit">Editar {e.description}</div>{editorExtra(e)}</> : null; }
+    if (r.t === "shift") { const s = shifts.find((x) => x.id === r.id); return s ? <><div className="fz-tit">Editar plantão de {fmtDatePt(s.date)} · {it.nome}</div><ShiftEditForm key={s.id} shift={s} onSubmit={(d) => { updateShift(s.id, d); fechar(); }} onCancel={fechar} onDelete={() => { if (window.confirm("Excluir este plantão?")) { it.remove(); fechar(); } }} /></> : null; }
+    if (r.t === "avulsa") { const o = oneOffIncomes.find((x) => x.id === r.id); return o ? <><div className="fz-tit">Editar entrada avulsa</div><OneOffEditForm key={o.id} item={o} onSubmit={(d) => { updateOneOff(o.id, d); fechar(); }} onCancel={fechar} onDelete={() => { if (window.confirm("Excluir esta entrada?")) { it.removeOne(); fechar(); } }} /></> : null; }
+    return null;
+  };
+  const vincNoMes = new Set(monthIncomeItems.map((i) => i.vinculoId).filter(Boolean));
+  const extraNoMes = new Set(monthIncomeItems.filter((i) => i.ref && i.ref.t === "extra").map((i) => i.ref.id));
+  const outros = [...vinculos.filter((v) => !vincNoMes.has(v.id)).map((v) => ({ k: "v-" + v.id, nome: v.nome, cor: v.cor, sub: v.tipo === "mensal" ? "cargo fixo" : "local de plantão", ed: () => editorVinculo(v) })),
+    ...extraRecurringIncomes.filter((e) => !extraNoMes.has(e.id)).map((e) => ({ k: "e-" + e.id, nome: e.description, cor: SLATE, sub: "receita recorrente", ed: () => editorExtra(e) }))];
+  const gavetas = [["vinculo", "Adicionar vínculo"], ["extra", "Adicionar receita recorrente"]].concat(outros.length ? [["outros", `Outros vínculos e receitas (${outros.length})`]] : []);
   const sorted = [...monthIncomeItems].sort((a, b) => a.tipo === b.tipo ? 0 : (a.tipo === "plantao" ? -1 : 1));
   const received = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0);
   const donutData = netByVinculo.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }));
@@ -4064,7 +4287,7 @@ function FaturamentoTab({
         <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do líquido" : null} />
       </div>
 
-      <div className="note-info">O valor aparece no mês em que cai no caixa. Se uma empresa paga depois, ajuste o prazo em “Vínculos e receitas fixas”, no fim da página.</div>
+      <div className="note-info">O valor aparece no mês em que cai no caixa. Se uma empresa paga depois, toque no lápis do lançamento e ajuste o prazo.</div>
 
       {workCard}
 
@@ -4091,32 +4314,42 @@ function FaturamentoTab({
               <thead><tr><th>Vínculo</th><th className="hide-sm">Data</th><th className="num hide-sm">Bruto</th><th className="num">Líquido</th><th>Status</th><th /></tr></thead>
               <tbody>
                 {sorted.map((it) => (
-                  <tr key={it.key}>
+                  <React.Fragment key={it.key}>
+                  <tr className={editKey === it.key ? "fz-aberta" : ""}>
                     <td><span className="asset-cell"><span className="legend-dot" style={{ background: it.cor }} /><span><b>{it.nome}</b><span className="cell-sub show-sm">{it.dateLabel}</span></span></span></td>
                     <td className="hide-sm">{it.dateLabel}{it.tipo !== "plantao" && !/ref\./.test(it.dateLabel) ? (it.tipo === "mensal" ? "" : "") : ""}</td>
                     <td className="num mono hide-sm">{fmtBRL(it.gross)}</td>
                     <td className="num mono">{fmtBRL(it.net)}</td>
                     <td><button className={`badge ${it.recebido ? "badge-paid" : "badge-pending"}`} onClick={it.toggle}>{it.recebido ? "Recebido" : "Pendente"}</button></td>
-                    <td className="num">{it.removeOne ? <button className="btn-icon" onClick={it.removeOne}><IconTrash size={15} /></button> : null}</td>
+                    <td className="num"><button type="button" className={`fz-pen ${editKey === it.key ? "on" : ""}`} aria-label={"Editar " + it.nome} aria-expanded={editKey === it.key} onClick={() => setEditKey(editKey === it.key ? null : it.key)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg></button></td>
                   </tr>
+                  {editKey === it.key && <tr className="fz-row"><td colSpan={6}><div className="fz-ed">{editor(it)}</div></td></tr>}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
-
-      <div className="card">
-        <div className="card-head"><h3 className="card-title">Vínculos e receitas fixas</h3><button className="link-btn" onClick={() => setManage((v) => !v)}>{manage ? "fechar" : "gerenciar"}</button></div>
-        {!manage && <div className="line-sub">{vinculos.length} vínculo(s) · {extraRecurringIncomes.length} receita(s) recorrente(s)</div>}
-        {manage && (
-          <>
-            <div className="sub-heading" style={{ marginTop: 0 }}>Vínculos de trabalho</div>
-            <VinculoManager vinculos={vinculos} addVinculo={addVinculo} removeVinculo={removeVinculo} updateVinculoTax={updateVinculoTax} updateVinculoPrazo={updateVinculoPrazo} updateVinculoEscala={updateVinculoEscala} monthKey={monthKey} />
-            <div className="sub-heading">Outras receitas recorrentes</div>
-            <ExtraIncomeManager extraRecurringIncomes={extraRecurringIncomes} addExtraRecurringIncome={addExtraRecurringIncome} removeExtraRecurringIncome={removeExtraRecurringIncome} updateExtraPrazo={updateExtraPrazo} monthKey={monthKey} />
-          </>
-        )}
+        <div className="fz-add-wrap">
+          {gavetas.map(([k, l]) => (
+            <React.Fragment key={k}>
+              <button type="button" className="fz-add" aria-expanded={addOpen === k} onClick={() => setAddOpen(addOpen === k ? null : k)}><i aria-hidden="true">{k === "outros" ? "≡" : addOpen === k ? "−" : "+"}</i><span>{l}</span><em aria-hidden="true">›</em></button>
+              {addOpen === k && (
+                <div className="fz-ed">
+                  {k === "vinculo" && <VinculoForm onSubmit={(d) => { addVinculo(d); setAddOpen(null); }} defaultStartMonth={monthKey} />}
+                  {k === "extra" && <ExtraIncomeForm onSubmit={(d) => { addExtraRecurringIncome({ ...d, startMonth: monthKey }); setAddOpen(null); }} />}
+                  {k === "outros" && outros.map((o) => (
+                    <React.Fragment key={o.k}>
+                      <div className="fz-out"><span><span className="legend-dot" style={{ background: o.cor, marginRight: 8 }} /><b>{o.nome}</b><small>{o.sub} · sem lançamento neste mês</small></span>
+                        <button type="button" className={`fz-pen ${editKey === o.k ? "on" : ""}`} aria-label={"Editar " + o.nome} aria-expanded={editKey === o.k} onClick={() => setEditKey(editKey === o.k ? null : o.k)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg></button></div>
+                      {editKey === o.k && <div className="fz-ed" style={{ marginTop: 0 }}>{o.ed()}</div>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -4386,6 +4619,7 @@ function PinGate({ hash, bioId, onOk, onForget }) {
 
 // ---- Organização financeira (modelo "caminho do dinheiro"): entra − contas − investido = livre para gastos extras ----
 function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invItems, goTab }) {
+  const gv = useGv();
   const [prev, setPrevState] = useState(() => lsGet("mediplan-org-previstos") !== "0");
   const setPrev = (v) => { lsSet("mediplan-org-previstos", v ? "1" : "0"); setPrevState(v); };
   const [verTudo, setVerTudo] = useState({});
@@ -4797,7 +5031,7 @@ function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCale
             </>
           )}
           {cur.semHoras > 0 && <div className="wr-note">{cur.semHoras} {cur.semHoras === 1 ? "plantão sem horas ficou" : "plantões sem horas ficaram"} fora da conta ({fmtBRL(cur.semHorasNet)}). Informe as horas no Calendário para incluir.</div>}
-          {!compact && cur.mensalSemHoras.length > 0 && <div className="wr-note">Sem horas lançadas em {monthName.toLowerCase()}: {cur.mensalSemHoras.join(", ")}. Defina a escala fixa em “Vínculos e receitas fixas”, no fim desta página, ou lance as horas no Calendário.</div>}
+          {!compact && cur.mensalSemHoras.length > 0 && <div className="wr-note">Sem horas lançadas em {monthName.toLowerCase()}: {cur.mensalSemHoras.join(", ")}. Defina a escala fixa no lápis do cargo, em Faturamento, ou lance as horas no Calendário.</div>}
           {!compact && <div className="field-hint">A conta divide o valor líquido dos plantões e dos vínculos com horas lançadas pelas horas trabalhadas no mês, mesmo que o pagamento caia depois.</div>}
         </>
       )}
@@ -4975,7 +5209,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   const num = (k, label, hint, extra) => (
     <div className="field">
       <label htmlFor={"ct-" + k}>{label}</label>
-      <input id={"ct-" + k} type="number" inputMode="decimal" value={contab[k]} onChange={(e) => set(k, e.target.value)} placeholder="0,00" />
+      <MoneyInput id={"ct-" + k} value={contab[k] === undefined || contab[k] === null ? "" : contab[k]} onChange={(v) => set(k, v)} />
       {extra}
       {hint && <div className="field-hint">{hint}</div>}
     </div>
@@ -5180,6 +5414,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
 }
 
 function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur }) {
+  const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
   const hello = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
@@ -5225,8 +5460,8 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
 
       {workCard}
 
-      <div className="card">
-        <div className="card-head"><h3 className="card-title">Insights do mês</h3>{insights.length > 4 && <button className="link-btn" onClick={() => setActiveTab("visao")}>ver todos ({insights.length})</button>}</div>
+      <div className={"card " + gv.c("insights")}>
+        <div className="card-head"><h3 className="card-title gv-t" {...gv.t("insights")}>Insights do mês</h3>{insights.length > 4 && <button className="link-btn" onClick={() => setActiveTab("visao")}>ver todos ({insights.length})</button>}</div>
         <InsightList items={insights} max={4} />
       </div>
 
@@ -5243,7 +5478,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
 
       <div className="grid-2">
         <div className="card">
-          <div className="card-head"><h3 className="card-title">Limites de gastos</h3><button className="link-btn" onClick={() => setActiveTab("despesas")}>{Object.keys(limits).length ? "gerenciar" : "definir"}</button></div>
+          <div className="card-head"><h3 className="card-title">Teto de gastos</h3><button className="link-btn" onClick={() => setActiveTab("metas")}>{Object.keys(limits).length ? "gerenciar" : "definir"}</button></div>
           {limits.__total > 0 && <LimitRow label="Limite geral do mês" spent={spentAll} limit={limits.__total} color={TEAL} />}
           {limited.map((x) => <LimitRow key={x.id} label={x.m.label} spent={x.sp} limit={x.lim} color={x.m.color} icon={<ExpIcon id={x.id} size={17} color={x.m.color} />} />)}
           {Object.keys(limits).length === 0 && <div className="empty-state" style={{ padding: "10px 0" }}>Defina quanto quer gastar por categoria. O app avisa quando chegar a 80% e quando passar do limite.</div>}
@@ -5296,6 +5531,300 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   );
 }
 
+function ExpenseEditForm({ item, onSubmit, onCancel, onDelete }) {
+  const rec = item.tipo === "recorrente";
+  const [description, setDescription] = useState(item.description || "");
+  const [amount, setAmount] = useState(Number(item.amount) || 0);
+  const [dueDate, setDueDate] = useState(item.dateIso);
+  const [dia, setDia] = useState(Number(String(item.dateIso || "").slice(8, 10)) || 5);
+  const [category, setCategory] = useState(item.category || "outros");
+  const [modo, setModo] = useState("diante");
+  const [erro, setErro] = useState("");
+  const submit = () => {
+    if (!description.trim()) { setErro("Dê um nome para a conta."); return; }
+    if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
+    onSubmit({ description: description.trim(), amount: Number(amount), dueDate, diaVencimento: Number(dia) || 5, category }, modo);
+  };
+  return (
+    <div className="mini-form">
+      <div className="form-grid">
+        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Descrição</label><input value={description} onChange={(e) => { setDescription(e.target.value); setErro(""); }} /></div>
+        <div className="field"><label>Valor (R$)</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
+        {rec
+          ? <div className="field"><label>Vence todo dia</label><input type="number" min="1" max="31" value={dia} onChange={(e) => setDia(e.target.value)} /></div>
+          : <div className="field"><label>Vencimento</label><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>}
+        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Categoria</label>
+          <select value={category} onChange={(e) => setCategory(e.target.value)}>{EXP_CATS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
+        </div>
+        {rec && (
+          <div className="field" style={{ gridColumn: "1 / -1" }}><label>A mudança vale para</label>
+            <div className="chip-row" role="group" aria-label="A mudança vale para">
+              {[["diante", "Este mês em diante"], ["mes", "Só este mês"]].map(([k, l]) => <button key={k} type="button" className={`chip sm ${modo === k ? "active" : ""}`} aria-pressed={modo === k} onClick={() => setModo(k)}>{l}</button>)}
+            </div>
+            <div className="field-hint">Os meses que já passaram não mudam.</div>
+          </div>
+        )}
+      </div>
+      {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
+      <FormBtns label="Salvar alterações" onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+    </div>
+  );
+}
+
+// ---- teto de gastos do mês (antes ficava em Despesas): geral no topo, por categoria em gaveta ----
+function TetoGastos({ monthExpenseItems = [], limits = {}, setLimit, viewYear, viewMonth }) {
+  const [editGeral, setEditGeral] = useState(false);
+  const [valor, setValor] = useState("");
+  const [catAberta, setCatAberta] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [addCat, setAddCat] = useState("");
+  const [extraCats, setExtraCats] = useState([]);
+  const total = monthExpenseItems.reduce((a, e) => a + (Number(e.amount) || 0), 0);
+  const spentBy = {}; monthExpenseItems.forEach((e) => { spentBy[e.category] = (spentBy[e.category] || 0) + (Number(e.amount) || 0); });
+  const catIds = [...new Set(Object.keys(spentBy).concat(Object.keys(limits).filter((c) => c !== "__total"), extraCats))]
+    .sort((a, b) => ((spentBy[b] || 0) / (limits[b] || 1e9)) - ((spentBy[a] || 0) / (limits[a] || 1e9)) || (spentBy[b] || 0) - (spentBy[a] || 0));
+  const freeCats = EXP_CATS.filter((c) => !catIds.includes(c.id));
+  const lim = Number(limits.__total) || 0, pct = lim ? total / lim : 0, falta = lim - total;
+  const agora = new Date(), N = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const rel = viewYear * 12 + viewMonth - (agora.getFullYear() * 12 + agora.getMonth());
+  const diasRest = rel === 0 ? N - agora.getDate() + 1 : rel > 0 ? N : 0;
+  const cor = pct >= 1 ? "#DC2626" : pct >= 0.8 ? "#F59E0B" : "#16A34A";
+  const comLimite = catIds.filter((c) => limits[c]);
+  const passou = comLimite.filter((c) => (spentBy[c] || 0) > limits[c]);
+  return (
+    <div className="card tt" id="teto-card">
+      <div className="card-head"><h3 className="card-title">Teto de gastos do mês</h3>{lim > 0 && !editGeral && <button className="link-btn" onClick={() => { setValor(lim); setEditGeral(true); }}>editar</button>}</div>
+      {editGeral ? (
+        <div>
+          <div className="field"><label htmlFor="tt-valor">Quanto você quer gastar no mês (R$)</label><MoneyInput id="tt-valor" value={valor} onChange={setValor} /></div>
+          <FormBtns label="Salvar teto" onSubmit={() => { setLimit("__total", Number(valor) || 0); setEditGeral(false); }} onCancel={() => setEditGeral(false)} onDelete={lim ? () => { setLimit("__total", 0); setEditGeral(false); } : null} />
+        </div>
+      ) : !lim ? (
+        <div>
+          <p className="line-sub" style={{ marginTop: 0 }}>Defina quanto quer gastar por mês. O app avisa quando você passar de 80% e de 100%.</p>
+          <button className="btn btn-primary" onClick={() => { setValor(""); setEditGeral(true); }}>Definir teto</button>
+        </div>
+      ) : (
+        <div>
+          <div className="tt-big"><b className="mono">{fmtBRL(total)}</b><span className="mono">de {fmtBRL(lim)}</span></div>
+          <div className="tt-bar"><i style={{ width: Math.min(100, pct * 100) + "%", background: cor }} /></div>
+          <div className="tt-sub">{Math.round(pct * 100)}% usado · {falta >= 0
+            ? <>faltam <b>{fmtBRL(falta)}</b>{diasRest > 0 && falta > 0 ? <>, cerca de {fmtBRL(falta / diasRest)} por dia</> : null}</>
+            : <>passou <b className="tt-neg">{fmtBRL(-falta)}</b> do teto</>}</div>
+          <div className="field-hint">O app avisa quando você passar de 80% e de 100% do teto.</div>
+        </div>
+      )}
+      <button type="button" className="fz-add tt-cat" aria-expanded={catAberta} onClick={() => setCatAberta(!catAberta)}>
+        <i aria-hidden="true">≡</i><span>Teto por categoria<small>{comLimite.length ? `${comLimite.length} ${comLimite.length === 1 ? "categoria" : "categorias"}${passou.length ? ` · ${passou.length} ${passou.length === 1 ? "passou" : "passaram"} do teto` : ""}` : "nenhuma definida"}</small></span><em aria-hidden="true">›</em>
+      </button>
+      {catAberta && (
+        <div className="tt-cats">
+          {catIds.length === 0 && <div className="field-hint">Ainda não há despesas neste mês.</div>}
+          {catIds.map((c) => { const m = EXP_CAT_MAP[c] || EXP_CAT_MAP.outros; return (
+            <LimitRow key={c} catId={c} label={m.label} spent={spentBy[c] || 0} limit={limits[c] || 0} color={m.color} icon={<ExpIcon id={c} size={17} color={m.color} />}
+              editing={editing === c} onEdit={() => setEditing(c)} onCancel={() => setEditing(null)} onSave={(v) => { setLimit(c, v); setEditing(null); }} />
+          ); })}
+          {freeCats.length > 0 && (
+            <div className="lim-add">
+              <select value={addCat} onChange={(e) => setAddCat(e.target.value)}>
+                <option value="">Teto para outra categoria…</option>
+                {freeCats.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+              <button className="btn btn-ghost sm" disabled={!addCat} onClick={() => { setExtraCats((p) => [...p, addCat]); setEditing(addCat); setAddCat(""); }}>Adicionar</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GoalEditForm({ g, onSave, onCancel, onDelete }) {
+  const [nome, setNome] = useState(g.nome || "");
+  const [valorAlvo, setValorAlvo] = useState(Number(g.valorAlvo) || 0);
+  const [valorAtual, setValorAtual] = useState(Number(g.valorAtual) || 0);
+  const [prazo, setPrazo] = useState(g.prazo || "");
+  const [cor, setCor] = useState(g.cor || GOLD);
+  const manual = (g.fonte || "manual") === "manual";
+  return (
+    <div className="mini-form">
+      <div className="form-grid">
+        <div className="field"><label>Nome da meta</label><input value={nome} onChange={(e) => setNome(e.target.value)} /></div>
+        <div className="field"><label>Valor alvo (R$)</label><MoneyInput value={valorAlvo} onChange={setValorAlvo} /></div>
+        {manual && <div className="field"><label>Valor já acumulado (R$)</label><MoneyInput value={valorAtual} onChange={setValorAtual} /></div>}
+        <div className="field"><label>Prazo</label><input type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} /></div>
+        <div className="field color-field"><label>Cor</label><div className="color-input-wrap"><input type="color" value={cor} onChange={(e) => setCor(e.target.value)} /></div></div>
+      </div>
+      <FormBtns label="Salvar alterações" onSubmit={() => { if (!nome.trim() || !(Number(valorAlvo) > 0)) return; onSave({ nome: nome.trim(), valorAlvo: Number(valorAlvo), ...(manual ? { valorAtual: Number(valorAtual) || 0 } : {}), prazo: prazo || null, cor }); }} onCancel={onCancel} onDelete={onDelete} />
+    </div>
+  );
+}
+
+// em quantos meses a meta chega, com o aporte e o rendimento escolhidos (mesma conta da projeção)
+const mesesAteMeta = (g, atual, aporteSugerido) => {
+  const alvo = Number(g.valorAlvo) || 0;
+  const manualAp = g.aporteMensal !== null && g.aporteMensal !== undefined && g.aporteMensal !== "";
+  const aporte = manualAp ? Math.max(0, Number(g.aporteMensal) || 0) : Math.max(0, Math.round(aporteSugerido || 0));
+  const rAno = Number(g.rendimentoAno) || 0, r = rAno > 0 ? Math.pow(1 + rAno / 100, 1 / 12) - 1 : 0;
+  let v = Math.max(0, atual); if (v >= alvo) return 0;
+  for (let k = 1; k <= 600; k++) { v = v * (1 + r) + aporte; if (v >= alvo) return k; }
+  return null;
+};
+
+// ---- print da corretora: o texto é lido no próprio aparelho (Tesseract), sem enviar a imagem para ninguém ----
+const TESS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+async function loadTesseract() {
+  if (window.Tesseract) return window.Tesseract;
+  await new Promise((res, rej) => {
+    const sc = document.createElement("script");
+    sc.src = TESS_URL; sc.onload = res;
+    sc.onerror = () => rej(new Error("Não consegui carregar o leitor de imagem. Verifique a internet e tente de novo."));
+    document.head.appendChild(sc);
+  });
+  return window.Tesseract;
+}
+// deixa o print mais fácil de ler: aumenta, passa para cinza e clareia o fundo escuro (modo escuro das corretoras)
+async function prepararPrint(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("Não consegui abrir essa imagem.")); i.src = url; });
+    const esc = Math.min(3, Math.max(1, 1600 / Math.max(1, img.width)));
+    const cv = document.createElement("canvas"); cv.width = Math.round(img.width * esc); cv.height = Math.round(img.height * esc);
+    const cx = cv.getContext("2d"); cx.drawImage(img, 0, 0, cv.width, cv.height);
+    const d = cx.getImageData(0, 0, cv.width, cv.height), px = d.data; let soma = 0;
+    for (let i = 0; i < px.length; i += 4) { const y = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; px[i] = px[i + 1] = px[i + 2] = y; soma += y; }
+    if (soma / (px.length / 4) < 115) for (let i = 0; i < px.length; i += 4) { px[i] = px[i + 1] = px[i + 2] = 255 - px[i]; }
+    cx.putImageData(d, 0, 0);
+    return cv;
+  } finally { URL.revokeObjectURL(url); }
+}
+async function lerPrint(file, onProg) {
+  const imagem = await prepararPrint(file);
+  if (window.__mediplanOCR) return window.__mediplanOCR(imagem, file);
+  const T = await loadTesseract();
+  const worker = await T.createWorker("por", 1, { logger: (m) => { if (m && m.status === "recognizing text" && onProg) onProg(m.progress || 0); } });
+  try { const { data } = await worker.recognize(imagem); return (data && data.text) || ""; } finally { try { await worker.terminate(); } catch (e) {} }
+}
+// encontra os ativos no texto do print: código (PETR4, HGLG11…), quantidade e preço médio
+const SUF_OK = /^(3|4|5|6|7|8|11|12|13|3[1-9])$/;
+function parsePrintCarteira(texto) {
+  const linhas = String(texto || "").split(/\r?\n/).map((l) => l.replace(/[|_]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const hits = [];
+  linhas.forEach((l, i) => {
+    const re = /\b([A-Z0-9]{4})\s?([0-9OIl]{1,2})F?\b/gi; let m;
+    while ((m = re.exec(l))) {
+      const letras = m[1].toUpperCase().replace(/0/g, "O").replace(/1/g, "I").replace(/5/g, "S").replace(/8/g, "B");
+      const nums = m[2].toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1");
+      const t = letras + nums;
+      if (/^[A-Z]{4}$/.test(letras) && /\d/.test(m[2]) && SUF_OK.test(nums) && (m[1] === m[1].toUpperCase()) && !hits.some((h) => h.t === t)) hits.push({ i, t, fim: m.index + m[0].length });
+    }
+  });
+  const dinheiro = /(?:R\$\s*)?(-?\d{1,3}(?:\.\d{3})+,\d{2,8}|-?\d+,\d{2,8})/g;
+  return hits.map((h, n) => {
+    const ate = n + 1 < hits.length ? Math.max(hits[n + 1].i, h.i + 1) : Math.min(linhas.length, h.i + 4);
+    const bloco = [linhas[h.i].slice(h.fim)].concat(linhas.slice(h.i + 1, Math.min(ate, h.i + 4))).join(" \n ");
+    const plano = stripAcc(bloco.toLowerCase());
+    let qty = null, pm = null, mt;
+    if ((mt = plano.match(/(?:quantidade|qtde?\.?|qnt\.?|quant\.?)\s*:?\s*(\d{1,3}(?:\.\d{3})+|\d+)(?![\d,])/))) qty = Number(mt[1].replace(/\./g, ""));
+    else if ((mt = plano.match(/(\d{1,3}(?:\.\d{3})+|\d+)(?![\d,])\s*(?:cotas?|acoes|acao|unidades?|un\b|papeis)/))) qty = Number(mt[1].replace(/\./g, ""));
+    if ((mt = plano.match(/(?:preco medio|p\.?\s?medio|pm|custo medio|medio)\s*:?\s*(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+,\d{2,8}|\d+,\d{2,8})/))) pm = parseAmountBR(mt[1]);
+    const valores = []; let v; dinheiro.lastIndex = 0; while ((v = dinheiro.exec(bloco))) valores.push(parseAmountBR(v[1]));
+    if (qty === null) {
+      const semDinheiro = bloco.replace(dinheiro, " ").replace(/\d{2}\/\d{2}(\/\d{2,4})?/g, " ");
+      const ints = (semDinheiro.match(/\b\d{1,3}(?:\.\d{3})+\b|\b\d{1,7}\b/g) || []).map((x) => Number(x.replace(/\./g, ""))).filter((x) => x > 0 && x < 10000000);
+      if (ints.length) qty = ints[0];
+    }
+    if (pm === null && qty && valores.length >= 2) {
+      // se um valor vezes a quantidade dá outro valor do bloco (o total), esse valor é o preço
+      const cand = valores.find((a) => valores.some((b) => b !== a && b > 0 && Math.abs(a * qty - b) / b < 0.015));
+      if (cand && valores.filter((a) => valores.some((b) => b !== a && b > 0 && Math.abs(a * qty - b) / b < 0.015)).length === 1) pm = cand;
+    }
+    return { ticker: h.t, qty: qty || "", pm: pm || "" };
+  });
+}
+
+function PrintImport({ commitPrint, investments = [], goTab }) {
+  const [img, setImg] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [erro, setErro] = useState("");
+  const [rows, setRows] = useState([]);
+  const [modo, setModo] = useState("inicial");
+  const [data, setData] = useState(todayStr());
+  const [feito, setFeito] = useState(null);
+  const ref = useRef(null);
+  const jaTem = new Set(investments.map((i) => String(i.description || "").toUpperCase()));
+  const abrir = async (file) => {
+    if (!file) return;
+    setErro(""); setRows([]); setFeito(null);
+    setImg(URL.createObjectURL(file));
+    setBusy("Lendo o print… na primeira vez o leitor é baixado, pode levar alguns segundos.");
+    try {
+      const txt = await lerPrint(file, (p) => setBusy(`Lendo o print… ${Math.round(p * 100)}%`));
+      const achados = parsePrintCarteira(txt);
+      if (!achados.length) setErro("Não encontrei códigos de ativos nesse print. Tente um print mais nítido, só da lista de ativos.");
+      setRows(achados.map((r) => ({ ...r, on: !jaTem.has(r.ticker) })));
+    } catch (e) { setErro(e.message || "Não consegui ler esse print."); }
+    setBusy("");
+  };
+  const setRow = (i, p) => setRows((prev) => prev.map((r, n) => (n === i ? { ...r, ...p } : r)));
+  const marcados = rows.filter((r) => r.on);
+  const faltando = marcados.filter((r) => !(Number(r.qty) > 0) || !(Number(r.pm) > 0));
+  const adicionar = () => {
+    if (!marcados.length || faltando.length) return;
+    const e = commitPrint(marcados.map((r) => ({ ticker: r.ticker, qty: Number(r.qty), pm: Number(r.pm) })), modo, modo === "aporte" ? data : todayStr());
+    setFeito(e); setRows([]); setImg(null);
+  };
+  return (
+    <div className="pr">
+      {feito && <div className="note-info" role="status">{feito.investimentos} {feito.investimentos === 1 ? "ativo adicionado" : "ativos adicionados"} {modo === "inicial" ? "como carteira inicial" : "como aporte"}. Dá para desfazer no histórico de importações, abaixo.{goTab && <> <button className="link-btn" onClick={() => goTab("investimentos")}>Ver investimentos</button></>}</div>}
+      <button className="drop" onClick={() => ref.current && ref.current.click()}>
+        <IconUpload size={26} color={TEAL} />
+        <b>{img ? "Trocar imagem" : "Escolher print"}</b>
+        <span>Print da tela de carteira ou de uma compra, na sua corretora.</span>
+      </button>
+      <input ref={ref} id="print-file" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { abrir(e.target.files[0]); e.target.value = ""; }} />
+      {busy && <div className="field-hint" style={{ marginTop: 10 }} role="status">{busy}</div>}
+      {erro && <div className="note-bad">{erro}</div>}
+      {rows.length > 0 && (
+        <div className="pr-res">
+          <div className="pr-top">
+            {img && <img src={img} alt="Print escolhido" className="pr-thumb" />}
+            <div><b>Encontrei {rows.length} {rows.length === 1 ? "ativo" : "ativos"}.</b><span>Confira a quantidade e o preço médio antes de adicionar. O que eu não consegui ler fica em vermelho.</span></div>
+          </div>
+          {rows.map((r, i) => {
+            const falta = r.on && (!(Number(r.qty) > 0) || !(Number(r.pm) > 0));
+            return (
+              <div key={r.ticker + i} className={`pr-row ${r.on ? "" : "off"} ${falta ? "falta" : ""}`}>
+                <input type="checkbox" checked={r.on} onChange={(e) => setRow(i, { on: e.target.checked })} aria-label={"Incluir " + r.ticker} />
+                <div className="pr-tk"><b>{r.ticker}</b><small>{jaTem.has(r.ticker) ? "já está na carteira" : b3Category(r.ticker)}</small></div>
+                <div className="field pr-q"><label>Qtd.</label><input inputMode="numeric" value={r.qty === "" ? "" : Number(r.qty).toLocaleString("pt-BR")} onChange={(e) => { const d = e.target.value.replace(/\D/g, ""); setRow(i, { qty: d === "" ? "" : Number(d) }); }} aria-label={"Quantidade de " + r.ticker} /></div>
+                <div className="field pr-p"><label>Preço médio</label><MoneyInput value={r.pm} onChange={(v) => setRow(i, { pm: v })} aria-label={"Preço médio de " + r.ticker} /></div>
+              </div>
+            );
+          })}
+          {faltando.length > 0 && <div className="note-bad">Complete a quantidade e o preço médio de {faltando.map((r) => r.ticker).join(", ")}.</div>}
+          <div className="field" style={{ marginTop: 12 }}><label>Adicionar como</label>
+            <div className="chip-row" role="group" aria-label="Adicionar como">
+              <button type="button" className={`chip sm ${modo === "inicial" ? "active" : ""}`} aria-pressed={modo === "inicial"} onClick={() => setModo("inicial")}>Carteira inicial</button>
+              <button type="button" className={`chip sm ${modo === "aporte" ? "active" : ""}`} aria-pressed={modo === "aporte"} onClick={() => setModo("aporte")}>Aporte novo</button>
+            </div>
+            <div className="field-hint">{modo === "inicial" ? "Para o que você já tinha antes de usar o app. Não conta como aporte do mês." : "Para uma compra nova. Entra como investimento na data abaixo."}</div>
+          </div>
+          {modo === "aporte" && <div className="field" style={{ maxWidth: 220 }}><label>Data da compra</label><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></div>}
+          <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={!marcados.length || faltando.length > 0} onClick={adicionar}>Adicionar {marcados.length} {marcados.length === 1 ? "ativo" : "ativos"}</button>
+        </div>
+      )}
+      <div className="tips">
+        <b>Como funciona</b>
+        <span>1. Na corretora, abra a tela da sua carteira (ou o comprovante de uma compra) e tire um print.</span>
+        <span>2. Escolha o print aqui. O app procura os códigos dos ativos, a quantidade e o preço médio.</span>
+        <span>3. Confira, corrija o que precisar e escolha se é carteira inicial ou aporte novo.</span>
+        <span>A imagem é lida no seu celular e não é enviada para lugar nenhum. Na primeira vez, o leitor de imagem é baixado da internet.</span>
+      </div>
+    </div>
+  );
+}
+
 // ---- projeção da meta: com o aporte mensal (e um rendimento opcional), em que mês a meta é alcançada ----
 const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
@@ -5304,9 +5833,8 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
   const aporte = manual ? Math.max(0, Number(g.aporteMensal) || 0) : Math.max(0, Math.round(aporteSugerido || 0));
   const rAno = Number(g.rendimentoAno) || 0;
   const r = rAno > 0 ? Math.pow(1 + rAno / 100, 1 / 12) - 1 : 0;
-  const [txt, setTxt] = useState(manual ? String(g.aporteMensal).replace(".", ",") : "");
-  const [sel, setSel] = useState(null);
-  const salvar = () => { const t = txt.trim(); onPatch({ aporteMensal: t === "" ? null : Math.max(0, parseAmountBR(t) || 0) }); };
+  const [txt, setTxt] = useState(manual ? Number(g.aporteMensal) || 0 : "");
+  const salvar = () => { onPatch({ aporteMensal: txt === "" ? null : Math.max(0, Number(txt) || 0) }); };
 
   const serie = [Math.max(0, atual)]; let n = serie[0] >= alvo ? 0 : null;
   for (let k = 1; k <= 600 && n === null; k++) { const v = serie[k - 1] * (1 + r) + aporte; serie.push(v); if (v >= alvo) n = k; }
@@ -5314,17 +5842,20 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
   const dataK = (k) => new Date(hoje.getFullYear(), hoje.getMonth() + k, 1);
   const horiz = n === null ? Math.min(serie.length - 1, 24) : Math.max(n, 6);
   while (serie.length <= horiz) serie.push(serie[serie.length - 1] * (1 + r) + aporte);
-  const anual = horiz > 24;
-  const ks = []; if (anual) { for (let k = 0; k < horiz; k += 12) ks.push(k); ks.push(horiz); } else for (let k = 0; k <= horiz; k++) ks.push(k);
-  const rot = (k) => { const d = dataK(k); return anual ? String(d.getFullYear()) : (k === 0 ? "hoje" : (MONTHS_ABBR_PT[d.getMonth()] || "").toLowerCase()); };
-  const W = 340, H = 176, pt = 22, pb = 22, ih = H - pt - pb;
-  const maxV = Math.max(alvo, serie[horiz], 1) * 1.08;
-  const bw = Math.min(30, (W - 8) / ks.length - 4), gap = (W - ks.length * bw) / (ks.length + 1);
-  const xs = (i) => gap + i * (bw + gap), ys = (v) => pt + ih * (1 - v / maxV);
-  const passo = Math.ceil(ks.length / 8);
-  const selI = sel !== null && sel < ks.length ? sel : (n !== null ? ks.indexOf(anual ? horiz : n) : ks.length - 1);
-  const kSel = ks[Math.max(0, selI)], dSel = dataK(kSel);
-
+  // curva suave (sem barras): um ponto por mês até a meta
+  const W = 340, H = 96, pt = 14, pb = 18, pl = 4, pr = 4, iw = W - pl - pr, ih = H - pt - pb;
+  const maxV = Math.max(alvo, serie[horiz], 1) * 1.06;
+  const minV = Math.max(0, serie[0] - (maxV - serie[0]) * 0.2);
+  const X = (k) => pl + (iw * k) / horiz, Y = (v) => pt + ih * (1 - (Math.max(minV, v) - minV) / Math.max(1, maxV - minV));
+  const pts = []; for (let k = 0; k <= horiz; k++) pts.push([X(k), Y(serie[k])]);
+  let curva = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    curva += ` C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  const area = `${curva} L${X(horiz).toFixed(1)},${pt + ih} L${X(0).toFixed(1)},${pt + ih} Z`;
+  const curto = (k) => { const d = dataK(k); return `${(MONTHS_ABBR_PT[d.getMonth()] || "").toLowerCase()}/${String(d.getFullYear()).slice(2)}`; };
+  const gid = "gpg-" + g.id;
   const tempo = (m) => { const a = Math.floor(m / 12), mm = m % 12; return [a ? `${a} ${a === 1 ? "ano" : "anos"}` : "", mm ? `${mm} ${mm === 1 ? "mês" : "meses"}` : ""].filter(Boolean).join(" e "); };
   const dN = n !== null ? dataK(n) : null;
   let precisa = null, mPrazo = null;
@@ -5347,26 +5878,21 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
           {precisa <= aporte + 0.5 ? <>Dá para chegar até o prazo ({fmtDatePt(g.prazo)}).</> : <>Para chegar até {fmtDatePt(g.prazo)}, você precisaria de <b>{fmtBRL(precisa)} por mês</b>.</>}
         </div>
       )}
-      <div className="gp-sel"><span>{anual ? dSel.getFullYear() : `${MES_LONGO[dSel.getMonth()]} de ${dSel.getFullYear()}`}{kSel === 0 ? " (hoje)" : ""}</span><b className="mono">{fmtBRL(serie[kSel])}</b></div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Projeção da meta ${g.nome}`} style={{ display: "block" }}>
-        <line className="gp-grid" x1="0" x2={W} y1={pt + ih} y2={pt + ih} />
-        <line className="gp-alvo" x1="0" x2={W} y1={ys(alvo)} y2={ys(alvo)} />
-        <text className="gp-lbl" x={W - 2} y={Math.max(11, ys(alvo) - 5)} textAnchor="end">meta {fmtBRL(alvo)}</text>
-        {ks.map((k, i) => {
-          const v = serie[k], chegou = n !== null && k >= n;
-          return (
-            <g key={k} onClick={() => setSel(i)} style={{ cursor: "pointer" }}>
-              <rect x={xs(i) - gap / 2} y={pt} width={bw + gap} height={ih} fill="transparent" />
-              <rect className={`gp-bar ${k === 0 ? "now" : chegou ? "ok" : ""} ${i === selI ? "sel" : ""}`} x={xs(i)} y={ys(v)} width={bw} height={Math.max(2, pt + ih - ys(v))} rx="4" style={k === 0 ? { fill: g.cor } : undefined} />
-              {(i % passo === 0 || i === ks.length - 1) && <text className="gp-lbl" x={xs(i) + bw / 2} y={H - 6} textAnchor="middle">{rot(k)}</text>}
-            </g>
-          );
-        })}
+      <svg className="gp-svg" viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Projeção da meta ${g.nome}`}>
+        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={g.cor} stopOpacity=".28" /><stop offset="1" stopColor={g.cor} stopOpacity="0" /></linearGradient></defs>
+        <line className="gp-alvo" x1={pl} x2={W - pr} y1={Y(alvo)} y2={Y(alvo)} />
+        <path d={area} fill={`url(#${gid})`} />
+        <path d={curva} fill="none" stroke={g.cor} strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx={X(0)} cy={Y(serie[0])} r="3.5" fill={g.cor} />
+        {n !== null && n > 0 && <circle className="gp-fim" cx={X(n)} cy={Y(serie[n])} r="5" stroke={g.cor} />}
+        <text className="gp-lbl" x={pl} y={H - 4}>hoje</text>
+        <text className="gp-lbl" x={W - pr} y={H - 4} textAnchor="end">{n !== null && n > 0 ? curto(n) : curto(horiz)}</text>
+        <text className="gp-lbl" x={pl} y={Math.max(10, Y(alvo) - 4)}>meta {fmtBRL(alvo)}</text>
       </svg>
       <div className="gp-campos">
         <div className="field">
           <label htmlFor={"gp-ap-" + g.id}>Aporte por mês (R$)</label>
-          <input id={"gp-ap-" + g.id} inputMode="decimal" value={txt} placeholder={Math.round(aporteSugerido || 0).toLocaleString("pt-BR")} onChange={(e) => setTxt(e.target.value)} onBlur={salvar} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+          <MoneyInput id={"gp-ap-" + g.id} value={txt} placeholder={Math.round(aporteSugerido || 0).toLocaleString("pt-BR")} onChange={setTxt} onBlur={salvar} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
           <div className="field-hint">{manual ? "Valor que você definiu." : `Em branco: média dos seus investimentos nos últimos 6 meses (${fmtBRL(aporteSugerido || 0)}).`}</div>
         </div>
         <div className="field">
@@ -5381,7 +5907,7 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
   );
 }
 
-function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0 }) {
+function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0, monthExpenseItems = [], limits = {}, setLimit, viewYear, viewMonth }) {
   const FONTES = [["manual", "Eu informo"], ["carteira", "Meus investimentos"], ["patrimonio", "Meu patrimônio"]];
   const [showForm, setShowForm] = useState(goals.length === 0);
   const [nome, setNome] = useState("");
@@ -5391,88 +5917,88 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, set
   const [prazo, setPrazo] = useState("");
   const [cor, setCor] = useState(PALETTE[0]);
   const [contributions, setContributions] = useState({});
-
+  const [aberta, setAberta] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [erro, setErro] = useState("");
   const submit = () => {
-    if (!nome || !valorAlvo) return;
-    addGoal({ nome, valorAlvo, valorAtual, fonte, prazo, cor });
-    setNome(""); setValorAlvo(""); setValorAtual(""); setFonte("manual"); setPrazo(""); setShowForm(false);
+    if (!nome.trim()) { setErro("Dê um nome para a meta."); return; }
+    if (!(Number(valorAlvo) > 0)) { setErro("Informe o valor alvo."); return; }
+    addGoal({ nome: nome.trim(), valorAlvo, valorAtual, fonte, prazo, cor });
+    setNome(""); setValorAlvo(""); setValorAtual(""); setFonte("manual"); setPrazo(""); setShowForm(false); setErro("");
   };
-
-  const monthsUntil = (prazo) => {
-    if (!prazo) return null;
-    const today = new Date();
-    const target = new Date(prazo);
-    const months = (target.getFullYear() - today.getFullYear()) * 12 + (target.getMonth() - today.getMonth());
-    return Math.max(1, months);
+  const quando = (g, atual) => {
+    const n = mesesAteMeta(g, atual, aporteMedio);
+    if (n === 0) return "meta alcançada";
+    if (n === null) return "defina o aporte mensal";
+    const d = new Date(); const t = new Date(d.getFullYear(), d.getMonth() + n, 1);
+    return `alcança em ${(MONTHS_ABBR_PT[t.getMonth()] || "").toLowerCase()}/${String(t.getFullYear()).slice(2)}`;
   };
-
   return (
-    <div>
-      {goals.length === 0 && <div className="empty-state" style={{ marginBottom: 12 }}>Nenhuma meta cadastrada ainda — crie a primeira abaixo.</div>}
+    <div className="mt">
+      <TetoGastos monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
 
-      {goals.map((g) => {
-        const atual = valorDaMeta(g);
-        const pct = Math.min(100, (atual / Math.max(g.valorAlvo, 1)) * 100);
-        return (
-          <div key={g.id} className="chart-card">
-            <div className="stub-head">
-              <span className="stub-hospital"><span className="color-dot" style={{ background: g.cor }} /> {g.nome}</span>
-              <button className="btn-icon" onClick={() => { if (window.confirm(`Remover a meta "${g.nome}"?`)) removeGoal(g.id); }}><IconTrash size={15} /></button>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, margin: "12px 0 6px" }}>
-              <Ring pct={pct} size={84} stroke={9} color={g.cor}><b>{pct.toFixed(0)}%</b></Ring>
-              <div>
-                <div className="big-num mono" style={{ fontSize: 20 }}>{fmtBRL(atual)}</div>
-                <div className="big-sub">de {fmtBRL(g.valorAlvo)} · faltam {fmtBRL(Math.max(0, g.valorAlvo - atual))}</div>
-                {g.fonte === "carteira" && <div className="field-hint">Acompanha seus investimentos</div>}
-                {g.fonte === "patrimonio" && <div className="field-hint">Acompanha seu patrimônio total</div>}
-              </div>
-            </div>
-            <div className="stub-row" style={{ marginTop: 10 }}>
-              <span className="k">Prazo</span><span className="v">{g.prazo ? fmtDatePt(g.prazo) : "sem prazo definido"}</span>
-            </div>
-            <div className="field" style={{ marginTop: 10 }}>
-              <label>De onde vem o valor</label>
-              <div className="chip-row" role="group" aria-label={"Origem do valor de " + g.nome}>
-                {FONTES.map(([k, l]) => <button key={k} type="button" className={`chip sm ${(g.fonte || "manual") === k ? "active" : ""}`} aria-pressed={(g.fonte || "manual") === k} onClick={() => setGoalFonte(g.id, k)}>{l}</button>)}
-              </div>
-            </div>
-            <GoalProjection g={g} atual={atual} aporteSugerido={aporteMedio} onPatch={(p) => setGoalPatch(g.id, p)} />
-            {(g.fonte || "manual") === "manual" && (
-              <>
-                <div className="form-grid" style={{ marginTop: 10, marginBottom: 8 }}>
-                  <div className="field">
-                    <label>Aportar nesta meta</label>
-                    <input type="number" value={contributions[g.id] || ""} onChange={(e) => setContributions((p) => ({ ...p, [g.id]: e.target.value }))} placeholder="0,00" />
-                  </div>
-                </div>
-                <button className="btn btn-ghost" onClick={() => { const v = Number(contributions[g.id]) || 0; if (v > 0) { contributeGoal(g.id, v); setContributions((p) => ({ ...p, [g.id]: "" })); } }}>
-                  <IconPlus size={14} /> Adicionar aporte
-                </button>
-              </>
-            )}
-          </div>
-        );
-      })}
-
-      {showForm ? (
-        <div className="mini-form">
+      <div className="mt-head"><h3>Metas</h3><button type="button" className="link-btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Fechar" : "+ Nova meta"}</button></div>
+      {showForm && (
+        <div className="card">
           <div className="form-grid">
-            <div className="field"><label>Nome da meta</label><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Reserva de emergência" /></div>
-            <div className="field"><label>Valor alvo (R$)</label><input type="number" value={valorAlvo} onChange={(e) => setValorAlvo(e.target.value)} placeholder="0,00" /></div>
+            <div className="field"><label>Nome da meta</label><input value={nome} onChange={(e) => { setNome(e.target.value); setErro(""); }} placeholder="Ex: Reserva de emergência" /></div>
+            <div className="field"><label>Valor alvo (R$)</label><MoneyInput value={valorAlvo} onChange={(v) => { setValorAlvo(v); setErro(""); }} /></div>
             <div className="field" style={{ gridColumn: "1 / -1" }}>
               <label>De onde vem o valor?</label>
               <div className="chip-row">
                 {FONTES.map(([k, l]) => <button key={k} type="button" className={`chip sm ${fonte === k ? "active" : ""}`} aria-pressed={fonte === k} onClick={() => setFonte(k)}>{l}</button>)}
               </div>
             </div>
-            {fonte === "manual" && <div className="field"><label>Valor já acumulado (R$)</label><input type="number" value={valorAtual} onChange={(e) => setValorAtual(e.target.value)} placeholder="0,00" /></div>}
+            {fonte === "manual" && <div className="field"><label>Valor já acumulado (R$)</label><MoneyInput value={valorAtual} onChange={setValorAtual} /></div>}
             <div className="field"><label>Prazo</label><input type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} /></div>
             <div className="field color-field"><label>Cor</label><div className="color-input-wrap"><input type="color" value={cor} onChange={(e) => setCor(e.target.value)} /></div></div>
           </div>
-          <button className="btn btn-primary" onClick={submit}><IconPlus size={15} /> Criar meta</button>
+          {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
+          <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={submit}><IconPlus size={15} /> Criar meta</button>
         </div>
-      ) : <button className="subtle-link" onClick={() => setShowForm(true)}><IconPlus size={13} /> Nova meta</button>}
+      )}
+      {goals.length === 0 && !showForm && <div className="empty-state">Nenhuma meta cadastrada ainda. Toque em “Nova meta”.</div>}
+
+      {goals.map((g) => {
+        const atual = valorDaMeta(g);
+        const pct = Math.min(100, (atual / Math.max(g.valorAlvo, 1)) * 100);
+        const ab = aberta === g.id;
+        return (
+          <div key={g.id} className={`card mt-meta ${ab ? "open" : ""}`}>
+            <button type="button" className="mt-row" aria-expanded={ab} onClick={() => { setAberta(ab ? null : g.id); setEditando(null); }}>
+              <Ring pct={pct} size={48} stroke={6} color={g.cor}><b style={{ fontSize: 11 }}>{pct.toFixed(0)}%</b></Ring>
+              <span className="mt-txt"><b>{g.nome}</b><small><span className="mono">{fmtBRL(atual)}</span> de <span className="mono">{fmtBRL(g.valorAlvo)}</span> · {quando(g, atual)}</small></span>
+              <span className="mt-chev" aria-hidden="true">›</span>
+            </button>
+            {ab && (
+              <div className="mt-body">
+                {editando === g.id ? (
+                  <GoalEditForm g={g} onSave={(p) => { setGoalPatch(g.id, p); setEditando(null); }} onCancel={() => setEditando(null)}
+                    onDelete={() => { if (window.confirm(`Excluir a meta "${g.nome}"?`)) { removeGoal(g.id); setAberta(null); setEditando(null); } }} />
+                ) : (
+                  <>
+                    {g.prazo && <div className="mt-prazo">Prazo: {fmtDatePt(g.prazo)}</div>}
+                    <GoalProjection g={g} atual={atual} aporteSugerido={aporteMedio} onPatch={(p) => setGoalPatch(g.id, p)} />
+                    <div className="field" style={{ marginTop: 12 }}>
+                      <label>De onde vem o valor</label>
+                      <div className="chip-row" role="group" aria-label={"Origem do valor de " + g.nome}>
+                        {FONTES.map(([k, l]) => <button key={k} type="button" className={`chip sm ${(g.fonte || "manual") === k ? "active" : ""}`} aria-pressed={(g.fonte || "manual") === k} onClick={() => setGoalFonte(g.id, k)}>{l}</button>)}
+                      </div>
+                    </div>
+                    {(g.fonte || "manual") === "manual" && (
+                      <div className="mt-aporte">
+                        <div className="field"><label>Adicionar aporte (R$)</label><MoneyInput value={contributions[g.id] || ""} onChange={(v) => setContributions((p) => ({ ...p, [g.id]: v }))} /></div>
+                        <button className="btn btn-ghost" onClick={() => { const v = Number(contributions[g.id]) || 0; if (v > 0) { contributeGoal(g.id, v); setContributions((p) => ({ ...p, [g.id]: "" })); } }}><IconPlus size={14} /> Adicionar</button>
+                      </div>
+                    )}
+                    <div className="fz-btns"><button type="button" className="btn btn-ghost" onClick={() => setEditando(g.id)}>Editar meta</button></div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -5484,6 +6010,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   const fxClasse = (day) => { const f = fluxoDia[day]; if (!f || !fxMax) return ""; const net = f.entra - f.sai; if (Math.abs(net) < 0.005) return ""; const r = Math.abs(net) / fxMax; return (net > 0 ? "fx-in" : "fx-out") + (r < 0.34 ? 1 : r < 0.67 ? 2 : 3); };
   const fxSel = selectedDay ? fluxoDia[selectedDay] : null;
   const [local, setLocal] = useState("");
+  const [taxa, setTaxa] = useState("");
   const [rep, setRep] = useState("nao");
   const [repMeses, setRepMeses] = useState(60);
   const [fixoId, setFixoId] = useState("");
@@ -5508,7 +6035,8 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   const submitPlantao = () => {
     if (!String(local).trim()) { setErro("Digite onde foi o plantão."); return; }
     if (!(Number(gross) > 0)) { setErro("Informe o valor do plantão."); return; }
-    addPlantao({ local, gross, hours, prazoDias, datas });
+    if (String(taxa).trim() === "" || !(Number(taxa) >= 0)) { setErro("Informe a tributação do plantão. Use 0 se não tiver imposto."); return; }
+    addPlantao({ local, gross, hours, prazoDias, datas, taxa });
     setGross(""); setHours(""); setErro(""); setRep("nao");
   };
   const submitFixo = () => {
@@ -5627,13 +6155,14 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                   <input id="pl-local" value={local} onChange={(e) => { setLocal(e.target.value); setErro(""); }} placeholder="Ex.: Hospital São Lucas, UPA Centro" autoComplete="off" />
                   {plLocais.length > 0 && (
                     <div className="chip-row pl-chips" role="group" aria-label="Locais já usados">
-                      {plLocais.map((v) => { const on = stripAcc(local).trim() === stripAcc(v.nome).trim(); return <button key={v.id} type="button" data-local={v.nome} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => { setLocal(v.nome); setPrazoDias(Number(v.prazoPadrao) || 0); setErro(""); }}><i style={{ background: v.cor }} />{v.nome}</button>; })}
+                      {plLocais.map((v) => { const on = stripAcc(local).trim() === stripAcc(v.nome).trim(); return <button key={v.id} type="button" data-local={v.nome} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => { setLocal(v.nome); setPrazoDias(Number(v.prazoPadrao) || 0); setTaxa(v.taxOverride !== null && v.taxOverride !== undefined ? String(v.taxOverride) : ""); setErro(""); }}><i style={{ background: v.cor }} />{v.nome}</button>; })}
                     </div>
                   )}
                   <div className="field-hint">{plLocais.length ? "Toque em um local já usado ou digite um novo. Local novo fica guardado sozinho." : "É só digitar o nome. O local fica guardado para as próximas vezes."}</div>
                 </div>
                 <div className="form-grid" style={{ marginTop: 10 }}>
-                  <div className="field"><label htmlFor="pl-valor">Valor do plantão (R$)</label><input id="pl-valor" type="number" inputMode="decimal" value={gross} onChange={(e) => { setGross(e.target.value); setErro(""); }} placeholder="0,00" /></div>
+                  <div className="field"><label htmlFor="pl-valor">Valor do plantão (R$) *</label><MoneyInput id="pl-valor" value={gross} onChange={(v) => { setGross(v); setErro(""); }} /></div>
+                  <div className="field"><label htmlFor="pl-taxa">Tributação (%) *</label><input id="pl-taxa" type="number" inputMode="decimal" min="0" value={taxa} onChange={(e) => { setTaxa(e.target.value); setErro(""); }} placeholder="Ex.: 20" /></div>
                   <div className="field">
                     <label htmlFor="pl-horas">Horas trabalhadas (opcional)</label>
                     <input id="pl-horas" type="number" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="12" />
@@ -5704,7 +6233,9 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   );
 }
 
-function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit }) {
+function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense }) {
+  const [editKey, setEditKey] = useState(null);
+  const gv = useGv();
   const [showForm, setShowForm] = useState(false);
   useEffect(() => { if (openSignal) setShowForm(true); }, [openSignal]);
   const [mode, setMode] = useState("recorrente");
@@ -5814,12 +6345,20 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
                       <span className="xl-tipo">{e.tipo === "recorrente" ? "Todo mês" : "Pontual"}</span>
                       <span className="xl-amt"><span className="mono">{fmtBRL(e.amount)}</span>{!e.paid && di.cls !== "open" && <small className={`due ${di.cls}`}>{di.text}</small>}</span>
                       <span className="xl-st"><span className={`due ${di.cls}`}>{e.paid ? "Paga" : di.text}</span></span>
-                      <button className="btn-icon" onClick={e.remove} aria-label={`Excluir ${e.description}`}><IconTrash size={15} /></button>
+                      <button type="button" className={`fz-pen ${editKey === e.key ? "on" : ""}`} aria-label={`Editar ${e.description}`} aria-expanded={editKey === e.key} onClick={() => setEditKey(editKey === e.key ? null : e.key)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg></button>
                     </div>
                   );
+                  const ed = editKey === e.key && e.ref ? (
+                    <div className="xl-edit" key={e.key + "-ed"}><div className="fz-ed">
+                      <div className="fz-tit">Editar {e.description}</div>
+                      <ExpenseEditForm item={e} onCancel={() => setEditKey(null)}
+                        onDelete={() => { if (e.tipo === "recorrente") { e.remove(); } else if (window.confirm(`Excluir "${e.description}"?`)) e.remove(); setEditKey(null); }}
+                        onSubmit={(d, modo) => { if (e.ref.t === "exp") updateExpense(e.ref.id, d); else updateRecurringExpense(e.ref.id, d, e.ref.mk, modo); setEditKey(null); }} />
+                    </div></div>
+                  ) : null;
                   if (e.itens && openFat === e.key) return (
                     <React.Fragment key={e.key}>
-                      {linha}
+                      {linha}{ed}
                       <div className="xl-fat" data-fat={e.description}>
                         <div className="xl-fat-h">Gastos desta fatura por categoria</div>
                         {faturaGrupos(e.itens).map((g) => { const gk = e.key + "|" + g.id, ab = !!openGrp[gk]; return (
@@ -5838,7 +6377,7 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
                       </div>
                     </React.Fragment>
                   );
-                  return linha;
+                  return ed ? <React.Fragment key={e.key}>{linha}{ed}</React.Fragment> : linha;
                 })}
               </div>
             ))}
@@ -5863,7 +6402,7 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
               </div>
               <div className="form-grid">
                 <div className="field" style={{ gridColumn: "1 / -1" }}><label>Descrição</label><input value={description} onChange={(e) => onDesc(e.target.value)} placeholder="Ex: Aluguel, energia, Netflix..." /></div>
-                <div className="field"><label>Valor (R$)</label><input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" /></div>
+                <div className="field"><label>Valor (R$)</label><MoneyInput value={amount} onChange={setAmount} /></div>
                 {mode === "pontual" ? (
                   <div className="field"><label>Vencimento</label><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
                 ) : (
@@ -5881,24 +6420,6 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
                 </div>
               </div>
               <button className="btn btn-primary" onClick={submit}><IconPlus size={15} color="#fff" /> Salvar despesa</button>
-            </div>
-          )}
-        </div>
-        <div className="card">
-          <div className="card-head"><h3 className="card-title">Limites por categoria</h3></div>
-          <LimitRow catId="__total" label="Limite geral do mês" spent={total} limit={limits.__total || 0} color={TEAL}
-            editing={editing === "__total"} onEdit={() => setEditing("__total")} onCancel={() => setEditing(null)} onSave={(v) => { setLimit("__total", v); setEditing(null); }} />
-          {catIds.map((c) => { const m = EXP_CAT_MAP[c] || EXP_CAT_MAP.outros; return (
-            <LimitRow key={c} catId={c} label={m.label} spent={spentBy[c] || 0} limit={limits[c] || 0} color={m.color} icon={<ExpIcon id={c} size={17} color={m.color} />}
-              editing={editing === c} onEdit={() => setEditing(c)} onCancel={() => setEditing(null)} onSave={(v) => { setLimit(c, v); setEditing(null); }} />
-          ); })}
-          {freeCats.length > 0 && (
-            <div className="lim-add">
-              <select value={addCat} onChange={(e) => setAddCat(e.target.value)}>
-                <option value="">Limite para outra categoria…</option>
-                {freeCats.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-              <button className="btn btn-ghost sm" disabled={!addCat} onClick={() => { setExtraCats((p) => [...p, addCat]); setEditing(addCat); setAddCat(""); }}>Adicionar</button>
             </div>
           )}
         </div>
@@ -5948,7 +6469,8 @@ function AssetInput({ value, onChange, onPick, options, placeholder, showAllOnEm
 }
 
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
-  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto }) {
+  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint }) {
+  const gv = useGv();
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
   useEffect(() => { if (openSignal) { setShowForm(true); setTab("resumo"); } }, [openSignal]);
@@ -6047,7 +6569,10 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             <button key={k} className={`subtab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "Fechar" : "Novo lançamento"}</button>
+        <div className="inv-acoes">
+          {abrirPrint && <button className="btn btn-ghost" id="inv-print" onClick={abrirPrint}>Adicionar por print</button>}
+          <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>{showForm ? "Fechar" : "Novo lançamento"}</button>
+        </div>
       </div>
 
       {showForm && (
@@ -6094,10 +6619,10 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             {useQty ? (
               <>
                 <div className="field"><label>Quantidade</label><input type="number" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" /></div>
-                <div className="field"><label>Preço unitário (R$)</label><input type="number" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" /></div>
+                <div className="field"><label>Preço unitário (R$)</label><MoneyInput value={price} onChange={setPrice} /></div>
               </>
             ) : (
-              <div className="field"><label>{tipo === "venda" ? "Valor resgatado / vendido (R$)" : "Valor investido (R$)"}</label><input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" /></div>
+              <div className="field"><label>{tipo === "venda" ? "Valor resgatado / vendido (R$)" : "Valor investido (R$)"}</label><MoneyInput value={amount} onChange={setAmount} /></div>
             )}
             <div className="field"><label>Data</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
@@ -6440,10 +6965,11 @@ function parseNotaCorretagem(lines) {
   return { rows, outros, ehNota: ehNota || rows.length > 0, datas: [...new Set(rows.map((r) => r.date))].sort() };
 }
 
-function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitImport, importLog, undoImport, goTab, commitB3, portfolio, investments }) {
+function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitImport, importLog, undoImport, goTab, commitB3, portfolio, investments, commitPrint, fonteInicial, limparFonte }) {
   const [b3raw, setB3raw] = useState([]);
   const [b3info, setB3info] = useState(null);
-  const [source, setSource] = useState("extrato");
+  const [source, setSource] = useState(fonteInicial || "extrato");
+  useEffect(() => { if (fonteInicial && limparFonte) limparFonte(); }, []);
   const [raw, setRaw] = useState([]);
   const [label, setLabel] = useState("");
   const [invert, setInvert] = useState(false);
@@ -6695,10 +7221,12 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
             <button className={`choice ${source === "extrato" ? "on" : ""}`} onClick={() => setSource("extrato")}><b>Extrato da conta</b><em>Todo mês</em><span>Para conferir o que entrou e o que saiu da sua conta: pagamentos recebidos, contas, PIX e boletos</span></button>
             <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><em>Todo mês</em><span>Para lançar a fatura como uma despesa só. Os gastos ficam dentro dela, por categoria</span></button>
             <button className={`choice ${source === "b3" ? "on" : ""}`} onClick={() => setSource("b3")}><b>Planilha da B3</b><em>Uma vez, no começo</em><span>Para cadastrar a carteira de investimentos que você já tem: ações, FIIs, ETFs e Tesouro</span></button>
+            <button className={`choice ${source === "print" ? "on" : ""}`} id="src-print" onClick={() => setSource("print")}><b>Print da corretora</b><em>Quando quiser</em><span>Para adicionar ativos a partir de um print da carteira ou de uma compra: serve para a carteira inicial e para aportes novos</span></button>
             <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><em>Todo mês</em><span>Para adicionar os investimentos feitos no mês: as compras e vendas do PDF da corretora</span></button>
           </div>
 
-          <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">2. Anexe o arquivo</h3></div>
+          <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">{source === "print" ? "2. Escolha o print" : "2. Anexe o arquivo"}</h3></div>
+          {source === "print" ? <PrintImport commitPrint={commitPrint} investments={investments} goTab={goTab} /> : (<>
           <button className="drop" onClick={() => fileRef.current && fileRef.current.click()}>
             <IconUpload size={26} color={TEAL} />
             <b>Escolher arquivo</b>
@@ -6740,6 +7268,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
             <span>Nada é gravado antes de você confirmar, e o arquivo não sai do seu celular.</span>
           </div>
           )}
+          </>)}
         </div>
       )}
 
@@ -6893,10 +7422,11 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
 }
 
 function OverviewTab({ chartScope, setChartScope, expensesByDesc, investByCategory, hourlyRate, leftover, scopedHours, history12, insights }) {
+  const gv = useGv();
   return (
     <div>
-      <div className="card">
-        <div className="card-head"><h3 className="card-title">Insights</h3><span className="card-note">calculados no seu aparelho</span></div>
+      <div className={"card " + gv.c("insightsrel")}>
+        <div className="card-head"><h3 className="card-title gv-t" {...gv.t("insightsrel")}>Insights</h3><span className="card-note">calculados no seu aparelho</span></div>
         <InsightList items={insights} />
       </div>
       <div className="chart-scope">
