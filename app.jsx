@@ -1216,11 +1216,11 @@ const IconGear = (p) => <Ico {...p}><circle cx="12" cy="12" r="3"/><path d="M19.
 const IconScale = (p) => <Ico {...p}><path d="M12 3v18"/><path d="M5 21h14"/><path d="M3 7h18"/><path d="M6 7 3 14a3.5 3.5 0 0 0 6 0Z"/><path d="M18 7l-3 7a3.5 3.5 0 0 0 6 0Z"/></Ico>;
 const NAV_MAIN = [
   { id: "inicio", short: "Início", long: "Início", icon: IconHome },
-  { id: "organizacao", short: "Organizar", long: "Organização", icon: IconScale },
   { id: "faturamento", short: "Receitas", long: "Faturamento", icon: IconReceipt },
   { id: "calendario", short: "Agenda", long: "Calendário", icon: IconCalendar },
   { id: "despesas", short: "Despesas", long: "Despesas", icon: IconWallet },
   { id: "investimentos", short: "Investir", long: "Investimentos", icon: IconTrending },
+  { id: "organizacao", short: "Organizar", long: "Organização", icon: IconScale },
 ];
 const NAV_MORE = [
   { id: "metas", short: "Metas", long: "Metas", icon: IconTarget },
@@ -3539,55 +3539,42 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
-        /* ================= v30: organização financeira ================= */
-        .org { max-width: 720px; }
-        .org-hero { padding: 20px 20px 16px; }
-        .org-lbl { font-size: 15px; font-weight: 600; color: var(--text-dim); }
-        .org-big-row { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; margin: 4px 0 6px; }
-        .org-big { font-size: 38px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
-        .org-of { font-size: 18px; font-weight: 600; color: var(--text-dim); }
-        .org .pos { color: #15803D; } .org .neg { color: #B91C1C; } .org-big.pos { color: #16A34A; } .org-big.neg { color: #DC2626; }
-        .org-pace { margin: 0 0 14px; font-size: 14.5px; line-height: 1.5; color: var(--text-dim); }
-        .org-pace b { color: var(--text); }
-        .org-sw { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); font-size: 15px; color: var(--text-dim); font-weight: 500; }
-        .org-switch { width: 50px; height: 30px; border-radius: 999px; border: none; background: #CBD5E1; position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; }
-        .org-switch i { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s; }
-        .org-switch.on { background: #22C55E; } .org-switch.on i { transform: translateX(20px); }
-        .org-switch:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-        .org-chart { position: relative; border: 1.5px solid rgba(34,197,94,.5); border-radius: 16px; padding: 8px 8px 4px; background: var(--surface); box-shadow: 0 0 0 4px rgba(34,197,94,.08); cursor: crosshair; user-select: none; -webkit-user-select: none; }
-        .og-grid { stroke: var(--border); stroke-width: 1; }
-        .og-area { fill: rgba(22,163,74,.13); }
-        .og-ideal { stroke: #3B82F6; stroke-width: 2.2; stroke-dasharray: 6 6; stroke-linecap: round; }
-        .og-real { fill: none; stroke: #16A34A; stroke-width: 3.2; stroke-linejoin: round; stroke-linecap: round; }
-        .og-prev { fill: none; stroke: #16A34A; stroke-width: 2.6; stroke-dasharray: 5 6; stroke-linecap: round; opacity: .8; }
-        .og-today { stroke: var(--text-dim); stroke-width: 1; stroke-dasharray: 3 4; opacity: .7; }
-        .og-sel { stroke: var(--text); stroke-width: 1; opacity: .35; }
-        .og-halo { fill: rgba(148,163,184,.22); stroke: rgba(148,163,184,.55); stroke-width: 1.5; }
-        .og-dot { fill: var(--surface); stroke: #15803D; stroke-width: 3.2; }
-        .og-end { fill: var(--surface); stroke: #16A34A; stroke-width: 2.5; }
-        .og-lbl { fill: var(--text-dim); font-size: 11.5px; font-family: inherit; } .og-hoje { fill: var(--text); font-weight: 700; }
-        .org-tip { position: absolute; top: 10px; display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(15,23,42,.12); font-size: 12.5px; pointer-events: none; max-width: 62%; }
-        .org-tip b { font-size: 13px; } .org-tip .org-tip-i { color: var(--text-dim); } .org-tip .up { color: #C2410C; font-weight: 600; } .org-tip .down { color: #15803D; font-weight: 600; }
-        .org-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-dim); margin-top: 10px; }
-        .org-leg i { display: inline-block; width: 18px; height: 0; border-top: 3px solid #16A34A; vertical-align: middle; margin-right: 6px; }
-        .org-leg i.l-prev { border-top-style: dashed; opacity: .8; } .org-leg i.l-ideal { border-top: 2.5px dashed #3B82F6; }
-        .org-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; font-size: 15px; }
-        .org-row span { display: flex; align-items: center; gap: 10px; color: var(--text-dim); }
-        .org-row b { font-weight: 600; }
-        .org-row.tot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px; } .org-row.tot span { color: var(--text); font-weight: 700; } .org-row.tot b { font-size: 17px; font-weight: 700; }
-        .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; flex-shrink: 0; }
-        .sw.real { background: #4ADE80; } .sw.inv { background: #60A5FA; } .sw.prev { background: repeating-linear-gradient(135deg, #4ADE80 0 3px, transparent 3px 6px); border: 1px solid rgba(74,222,128,.6); }
-        .org-eq > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; font-size: 14.5px; }
-        .org-eq > div span { color: var(--text-dim); } .org-eq > div b { font-weight: 600; white-space: nowrap; }
-        .org-eq > div.off { opacity: .45; } .org-eq > div.off b { text-decoration: line-through; }
-        .org-eq > div.res { border-top: 1.5px solid var(--text); margin-top: 6px; padding-top: 12px; } .org-eq > div.res span { color: var(--text); font-weight: 700; } .org-eq > div.res b { font-size: 19px; font-weight: 800; }
-        .org-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-        :root[data-theme="dark"] .org .pos, :root[data-theme="dark"] .org-big.pos { color: #4ADE80; } :root[data-theme="dark"] .org .neg, :root[data-theme="dark"] .org-big.neg { color: #F87171; }
-        :root[data-theme="dark"] .og-real, :root[data-theme="dark"] .og-prev, :root[data-theme="dark"] .og-end { stroke: #4ADE80; } :root[data-theme="dark"] .og-dot { stroke: #4ADE80; }
-        :root[data-theme="dark"] .og-ideal, :root[data-theme="dark"] .org-leg i.l-ideal { stroke: #60A5FA; border-top-color: #60A5FA; }
-        :root[data-theme="dark"] .og-area { fill: rgba(74,222,128,.14); } :root[data-theme="dark"] .org-switch { background: #475569; } :root[data-theme="dark"] .org-switch.on { background: #22C55E; }
-        :root[data-theme="dark"] .org-tip { box-shadow: 0 6px 18px rgba(0,0,0,.4); } :root[data-theme="dark"] .org-tip .up { color: #FDBA74; } :root[data-theme="dark"] .org-tip .down { color: #4ADE80; }
-        :root[data-theme="dark"] .org-leg i { border-top-color: #4ADE80; }
+        /* ================= v31: organização (caminho do dinheiro) ================= */
+        .oa { max-width: 640px; }
+        .oa-chips { display: flex; gap: 8px; margin-bottom: 12px; }
+        .oa-chips button { flex: 1; font: inherit; font-size: 13.5px; font-weight: 600; padding: 10px 8px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); cursor: pointer; }
+        .oa-chips button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+        .oa-chips button:focus-visible, .oa-li-r button:focus-visible, .oa-ir:focus-visible, .oa-mais:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        .oa-h { margin: 0 0 6px; font-size: 14.5px; font-weight: 600; color: var(--text-dim); }
+        .oa-st { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 6px 12px; padding: 12px 0; }
+        .oa-st + .oa-st { border-top: 1px dashed var(--border); }
+        .oa-lb { font-size: 15px; color: var(--text); font-weight: 500; min-width: 0; }
+        .oa-lb small { display: block; font-size: 12.5px; color: var(--text-dim); font-weight: 400; margin-top: 2px; }
+        .oa-v { font-size: 17px; font-weight: 700; white-space: nowrap; text-align: right; }
+        .oa .in { color: #15803D; } .oa .out { color: #B91C1C; } .oa .inv { color: #1D4ED8; }
+        .oa-bar { grid-column: 1 / -1; display: flex; height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; }
+        .oa-bar i { display: block; height: 100%; }
+        .oa-bar i.in { background: #16A34A; } .oa-bar i.in2 { background: #BBF7D0; } .oa-bar i.out { background: #EF4444; } .oa-bar i.out2 { background: #FECACA; } .oa-bar i.inv { background: #3B82F6; }
+        .oa-res { margin-top: 10px; padding: 14px 16px; border-radius: 14px; background: #F0FDF4; border: 1.5px solid #86EFAC; }
+        .oa-res-lb { font-size: 14.5px; font-weight: 600; color: #166534; }
+        .oa-res-v { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; color: #15803D; margin: 2px 0 4px; }
+        .oa-res-sub { font-size: 13.5px; line-height: 1.45; color: #166534; }
+        .oa-res.neg { background: #FEF2F2; border-color: #FCA5A5; } .oa-res.neg .oa-res-lb, .oa-res.neg .oa-res-sub { color: #991B1B; } .oa-res.neg .oa-res-v { color: #B91C1C; }
+        .oa-li { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; }
+        .oa-li + .oa-li { border-top: 1px solid var(--border); }
+        .oa-li time { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 44px; border-radius: 11px; background: var(--surface-3); font-size: 11px; color: var(--text-dim); line-height: 1.1; }
+        .oa-li time b { font-size: 16px; color: var(--text); }
+        .oa-li-n { min-width: 0; } .oa-li-n b { display: block; font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .oa-li-n small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 1px; } .oa-li-n small.late { color: #B91C1C; font-weight: 600; }
+        .oa-li-r { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; } .oa-li-r b { font-size: 14.5px; font-weight: 700; white-space: nowrap; }
+        .oa-li-r button { font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+        .oa-vazio { font-size: 14px; color: var(--text-dim); padding: 8px 0 4px; }
+        .oa-mais, .oa-ir { display: block; width: 100%; font: inherit; font-size: 13.5px; font-weight: 600; background: none; border: none; cursor: pointer; padding: 10px 0 2px; text-align: left; }
+        .oa-mais { color: var(--text-dim); } .oa-ir { color: #15803D; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 12px; }
+        :root[data-theme="dark"] .oa .in, :root[data-theme="dark"] .oa-ir { color: #4ADE80; } :root[data-theme="dark"] .oa .out, :root[data-theme="dark"] .oa-li-n small.late { color: #F87171; } :root[data-theme="dark"] .oa .inv { color: #93C5FD; }
+        :root[data-theme="dark"] .oa-bar i.in2 { background: rgba(74,222,128,.35); } :root[data-theme="dark"] .oa-bar i.out2 { background: rgba(248,113,113,.35); }
+        :root[data-theme="dark"] .oa-res { background: rgba(34,197,94,.12); border-color: rgba(74,222,128,.45); } :root[data-theme="dark"] .oa-res-lb, :root[data-theme="dark"] .oa-res-sub { color: #86EFAC; } :root[data-theme="dark"] .oa-res-v { color: #4ADE80; }
+        :root[data-theme="dark"] .oa-res.neg { background: rgba(239,68,68,.12); border-color: rgba(248,113,113,.45); } :root[data-theme="dark"] .oa-res.neg .oa-res-lb, :root[data-theme="dark"] .oa-res.neg .oa-res-sub { color: #FCA5A5; } :root[data-theme="dark"] .oa-res.neg .oa-res-v { color: #F87171; }
 
         /* ================= v29: configurações em menu ================= */
         .cfg { max-width: 640px; }
@@ -4370,127 +4357,110 @@ function PinGate({ hash, bioId, onOk, onForget }) {
   );
 }
 
-// ---- Organização financeira: quanto entrou, quanto falta pagar e quanto sobra para extras e investimentos ----
+// ---- Organização financeira (modelo "caminho do dinheiro"): entra − contas − investido = livre para gastos extras ----
 function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invItems, goTab }) {
   const [prev, setPrevState] = useState(() => lsGet("mediplan-org-previstos") !== "0");
   const setPrev = (v) => { lsSet("mediplan-org-previstos", v ? "1" : "0"); setPrevState(v); };
+  const [verTudo, setVerTudo] = useState({});
   const N = new Date(viewYear, viewMonth + 1, 0).getDate();
   const agora = new Date();
   const rel = viewYear * 12 + viewMonth - (agora.getFullYear() * 12 + agora.getMonth());
-  const hoje = rel < 0 ? N : rel > 0 ? 0 : agora.getDate();
-  const dia = (iso) => Math.min(N, Math.max(1, Number(String(iso || "").slice(8, 10)) || 1));
+  const hojeIso = todayStr();
   const soma = (l, f) => l.reduce((a, x) => a + (Number(f(x)) || 0), 0);
-
   const recebido = soma(incomeItems.filter((i) => i.recebido), (i) => i.net);
   const aReceber = soma(incomeItems.filter((i) => !i.recebido), (i) => i.net);
   const pagas = soma(expenseItems.filter((e) => e.paid), (e) => e.amount);
   const aPagar = soma(expenseItems.filter((e) => !e.paid), (e) => e.amount);
   const investido = soma(invItems, (i) => i.amount);
-  const receita = recebido + (prev ? aReceber : 0);
+  const nAportes = invItems.filter((i) => Number(i.amount) > 0).length;
+  const entra = recebido + (prev ? aReceber : 0);
   const contas = pagas + (prev ? aPagar : 0);
-  const sobra = receita - contas - investido;
-
-  // saídas acumuladas por dia: o que já foi pago ou investido, e o previsto (contas em aberto; atrasadas contam em "hoje")
-  const real = Array(N + 1).fill(0), prevD = Array(N + 1).fill(0);
-  expenseItems.forEach((e) => { if (e.paid) real[dia(e.dateIso)] += Number(e.amount) || 0; else prevD[Math.max(dia(e.dateIso), hoje || 1)] += Number(e.amount) || 0; });
-  invItems.forEach((i) => { real[dia(i.date)] += Number(i.amount) || 0; });
-  const R = [0], P = [0];
-  for (let d = 1; d <= N; d++) { R[d] = R[d - 1] + real[d]; P[d] = P[d - 1] + prevD[d]; }
-  const F = R.map((v, d) => v + P[d]);
-  const ideal = (d) => (receita * d) / N;
-  const valorDia = (d) => (d <= hoje ? R[d] : prev ? F[d] : null);
-
-  const [sel, setSel] = useState(null);
-  const selD = sel && sel <= N ? sel : Math.max(1, hoje);
-  const W = 340, H = 236, pl = 4, pr = 4, pt = 30, pb = 26, iw = W - pl - pr, ih = H - pt - pb;
-  const maxV = Math.max(receita, prev ? F[N] : R[N], 1) * 1.08;
-  const X = (d) => pl + (iw * d) / N, Y = (v) => pt + ih * (1 - Math.max(0, v) / maxV);
-  const path = (from, to, arr) => { const pts = []; for (let d = from; d <= to; d++) pts.push(`${X(d).toFixed(1)},${Y(arr[d]).toFixed(1)}`); return pts.length > 1 ? "M" + pts.join(" L") : ""; };
-  const realPath = hoje >= 1 ? path(0, hoje, R) : "";
-  const areaPath = realPath ? `${realPath} L${X(hoje).toFixed(1)},${(pt + ih).toFixed(1)} L${X(0).toFixed(1)},${(pt + ih).toFixed(1)} Z` : "";
-  const prevPath = prev && hoje < N ? (() => { const arr = F.slice(); if (hoje >= 1) arr[hoje] = F[hoje]; return `M${X(Math.max(hoje, 0)).toFixed(1)},${Y(hoje >= 1 ? R[hoje] : 0).toFixed(1)} L` + path(Math.max(hoje, 0), N, arr).slice(1); })() : "";
-  const escolher = (ev) => {
-    const r = ev.currentTarget.getBoundingClientRect(); if (!r.width) return;
-    const px = ((ev.clientX - r.left) / r.width) * W;
-    setSel(Math.min(N, Math.max(1, Math.round(((px - pl) / iw) * N))));
-  };
-  const vSel = valorDia(selD), iSel = ideal(selD), dif = vSel === null ? 0 : vSel - iSel;
-  const pctX = (X(selD) / W) * 100;
-
+  const livre = entra - contas - investido;
+  const base = Math.max(entra, contas + Math.max(0, investido), 1);
+  const pct = (v) => `${Math.max(0, Math.min(100, (v / base) * 100))}%`;
   const mes = MONTHS_PT[viewMonth].toLowerCase(), abr = (MONTHS_ABBR_PT[viewMonth] || "").toLowerCase();
-  const gastoHoje = R[Math.max(hoje, 0)], idealHoje = ideal(hoje), difHoje = gastoHoje - idealHoje;
-  const diasRest = rel === 0 ? N - hoje + 1 : rel > 0 ? N : 0;
-  const porDia = diasRest > 0 && sobra > 0 ? sobra / diasRest : 0;
-
+  const diasRest = rel === 0 ? N - agora.getDate() + 1 : 0;
+  const diaBox = (iso) => <time><b>{Number(String(iso).slice(8, 10))}</b>{(MONTHS_ABBR_PT[Number(String(iso).slice(5, 7)) - 1] || "").toLowerCase()}</time>;
+  const subRec = (it) => it.tipo === "plantao" ? (String(it.dateLabel || "").startsWith("plantão ") ? "plantão de " + String(it.dateLabel).slice(8, 13) : "plantão") : it.tipo === "mensal" ? "cargo fixo" : it.tipo === "extra" ? "renda recorrente" : "entrada avulsa";
+  const subPag = (iso) => {
+    const d = Math.round((new Date(iso + "T12:00:00") - new Date(hojeIso + "T12:00:00")) / 86400000);
+    if (d < -1) return { t: `atrasada há ${-d} dias`, late: true };
+    if (d === -1) return { t: "venceu ontem", late: true };
+    if (d === 0) return { t: "vence hoje", late: true };
+    if (d === 1) return { t: "vence amanhã" };
+    return { t: `vence em ${d} dias` };
+  };
+  const vaiCair = incomeItems.filter((i) => !i.recebido).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso)));
+  const vaiSair = expenseItems.filter((e) => !e.paid).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso)));
+  const lista = (id, itens, render, vazio, aba, txtAba) => {
+    const max = verTudo[id] ? itens.length : 5;
+    return (
+      <>
+        {itens.length === 0 && <div className="oa-vazio">{vazio}</div>}
+        {itens.slice(0, max).map(render)}
+        {itens.length > 5 && <button type="button" className="oa-mais" onClick={() => setVerTudo((p) => ({ ...p, [id]: !p[id] }))}>{verTudo[id] ? "Mostrar menos" : `Mostrar mais ${itens.length - 5}`}</button>}
+        <button type="button" className="oa-ir" onClick={() => goTab(aba)}>{txtAba}</button>
+      </>
+    );
+  };
   return (
-    <div className="org">
-      <div className="card org-hero">
-        <div className="org-lbl">{sobra >= 0 ? "Você ainda pode gastar ou investir" : "Falta para fechar as contas do mês"}</div>
-        <div className="org-big-row"><span className={`org-big mono ${sobra >= 0 ? "pos" : "neg"}`}>{fmtBRL(Math.abs(sobra))}</span><span className="org-of mono">de {fmtBRL(receita)}</span></div>
-        <p className="org-pace">
-          {rel === 0 && receita > 0 && (difHoje <= 0
-            ? <>Você gastou <b className="pos">{fmtBRL(-difHoje)}</b> a menos que o ritmo ideal até hoje.</>
-            : <>Você gastou <b className="neg">{fmtBRL(difHoje)}</b> a mais que o ritmo ideal até hoje.</>)}
-          {rel < 0 && <>Em {mes}, {sobra >= 0 ? <>sobraram <b className="pos">{fmtBRL(sobra)}</b> depois das contas e dos investimentos.</> : <>as saídas passaram as entradas em <b className="neg">{fmtBRL(-sobra)}</b>.</>}</>}
-          {rel > 0 && <>Previsão para {mes}, com o que já está lançado.</>}
-          {receita <= 0 && rel === 0 && <>Ainda não há receita {prev ? "prevista" : "recebida"} neste mês. Lance plantões, cargos fixos ou outras entradas para ver o seu limite.</>}
-          {porDia > 0 && <> Dá para usar até <b>{fmtBRL(porDia)}</b> por dia {rel === 0 ? "até o fim do mês" : "no mês"}.</>}
-        </p>
-        <div className="org-sw">
-          <span id="org-prev-lbl">Incluir previstos</span>
-          <button type="button" role="switch" aria-checked={prev} aria-labelledby="org-prev-lbl" className={`org-switch ${prev ? "on" : ""}`} onClick={() => setPrev(!prev)}><i /></button>
-        </div>
-        <div className="org-chart">
-          <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Saídas acumuladas em ${mes} comparadas com o ritmo ideal`} onPointerDown={escolher} onPointerMove={escolher} style={{ touchAction: "pan-y", display: "block" }}>
-            {[0, 1, 2, 3].map((k) => <line key={k} className="og-grid" x1={pl} x2={W - pr} y1={pt + (ih * k) / 3} y2={pt + (ih * k) / 3} />)}
-            {areaPath && <path className="og-area" d={areaPath} />}
-            {hoje >= 1 && hoje <= N && rel === 0 && <line className="og-today" x1={X(hoje)} x2={X(hoje)} y1={pt - 6} y2={pt + ih} />}
-            <line className="og-ideal" x1={X(0)} y1={Y(0)} x2={X(N)} y2={Y(receita)} />
-            <text className="og-lbl" x={W - pr} y={Math.max(12, Y(receita) - 8)} textAnchor="end">limite</text>
-            {prevPath && <path className="og-prev" d={prevPath} />}
-            {realPath && <path className="og-real" d={realPath} />}
-            {vSel !== null && <><line className="og-sel" x1={X(selD)} x2={X(selD)} y1={pt - 6} y2={pt + ih} /><circle className="og-halo" cx={X(selD)} cy={Y(vSel)} r="13" /><circle className="og-dot" cx={X(selD)} cy={Y(vSel)} r="5" /></>}
-            {prev && hoje < N && <circle className="og-end" cx={X(N)} cy={Y(F[N])} r="4.5" />}
-            <text className="og-lbl" x={pl} y={H - 6}>1 de {abr}.</text>
-            {rel === 0 && hoje > 4 && hoje < N - 4 && <text className="og-lbl og-hoje" x={X(hoje)} y={H - 6} textAnchor="middle">hoje</text>}
-            <text className="og-lbl" x={W - pr} y={H - 6} textAnchor="end">{N} de {abr}.</text>
-          </svg>
-          {vSel !== null && (
-            <div className="org-tip" style={pctX > 52 ? { right: `${100 - pctX + 4}%` } : { left: `${pctX + 4}%` }}>
-              <b>{selD} de {abr}.{selD > hoje ? " (previsto)" : ""}</b>
-              <span className="mono">{fmtBRL(vSel)}</span>
-              <span className="org-tip-i mono">Ritmo ideal {fmtBRL(iSel)}</span>
-              <span className={`mono ${dif > 0.005 ? "up" : "down"}`}>{fmtBRL(Math.abs(dif))} {dif > 0.005 ? "acima" : "abaixo"} do ideal</span>
-            </div>
-          )}
-        </div>
-        <div className="org-leg"><span><i className="l-real" />saídas</span>{prev && <span><i className="l-prev" />previstas</span>}<span><i className="l-ideal" />ritmo ideal</span></div>
+    <div className="oa">
+      <div className="oa-chips" role="group" aria-label="O que entra na conta">
+        <button type="button" className={!prev ? "on" : ""} aria-pressed={!prev} onClick={() => setPrev(false)}>Só o que já aconteceu</button>
+        <button type="button" className={prev ? "on" : ""} aria-pressed={prev} onClick={() => setPrev(true)}>Mês completo</button>
       </div>
 
-      <div className="card">
-        <div className="card-head"><h3 className="card-title">Saídas realizadas {prev ? "+ previstas" : ""}</h3></div>
-        <div className="org-row"><span><i className="sw real" />Contas pagas</span><b className="mono">{fmtBRL(pagas)}</b></div>
-        <div className="org-row"><span><i className="sw inv" />Investido no mês</span><b className="mono">{fmtBRL(investido)}</b></div>
-        {prev && <div className="org-row"><span><i className="sw prev" />Contas a pagar</span><b className="mono">{fmtBRL(aPagar)}</b></div>}
-        <div className="org-row tot"><span>Total</span><b className="mono">{fmtBRL(pagas + investido + (prev ? aPagar : 0))}</b></div>
+      <div className="card oa-flow">
+        <h3 className="oa-h">O caminho do dinheiro em {mes}</h3>
+        <div className="oa-st">
+          <span className="oa-lb">Entra no mês<small>{fmtBRL(recebido)} já caiu{prev ? ` · ${fmtBRL(aReceber)} ainda vai cair` : ""}</small></span>
+          <b className="oa-v in mono">{fmtBRL(entra)}</b>
+          <div className="oa-bar"><i className="in" style={{ width: pct(recebido) }} />{prev && <i className="in2" style={{ width: pct(aReceber) }} />}</div>
+        </div>
+        <div className="oa-st">
+          <span className="oa-lb">Contas do mês<small>{fmtBRL(pagas)} pagas{prev ? ` · ${fmtBRL(aPagar)} a pagar` : ""}</small></span>
+          <b className="oa-v out mono">− {fmtBRL(contas)}</b>
+          <div className="oa-bar"><i className="out" style={{ width: pct(pagas) }} />{prev && <i className="out2" style={{ width: pct(aPagar) }} />}</div>
+        </div>
+        <div className="oa-st">
+          <span className="oa-lb">Investido<small>{nAportes === 0 ? "nenhum aporte neste mês" : nAportes === 1 ? "1 aporte neste mês" : `${nAportes} aportes neste mês`}</small></span>
+          <b className="oa-v inv mono">− {fmtBRL(Math.max(0, investido))}</b>
+          <div className="oa-bar"><i className="inv" style={{ width: pct(Math.max(0, investido)) }} /></div>
+        </div>
+        <div className={`oa-res ${livre < 0 ? "neg" : ""}`}>
+          <div className="oa-res-lb">{prev ? (livre >= 0 ? "Livre para gastos extras" : "Falta para fechar o mês") : (livre >= 0 ? "Sobrou até agora" : "Saiu mais do que entrou")}</div>
+          <div className="oa-res-v mono">{fmtBRL(Math.abs(livre))}</div>
+          <div className="oa-res-sub">
+            {!prev && <>{livre >= 0 ? "Contando só o que já caiu e o que já foi pago." : "Até agora, as contas pagas e os investimentos passaram o que já caiu."}</>}
+            {prev && rel === 0 && livre > 0 && diasRest > 0 && <>Dá cerca de <b>{fmtBRL(livre / diasRest)} por dia</b> {diasRest === 1 ? "hoje" : `nos ${diasRest} dias que faltam`}.</>}
+            {prev && rel === 0 && livre < 0 && <>As contas e os investimentos do mês passam o que entra.</>}
+            {prev && rel < 0 && (livre >= 0 ? <>Foi o que sobrou em {mes}.</> : <>Em {mes}, as saídas passaram as entradas.</>)}
+            {prev && rel > 0 && <>Previsão com o que já está lançado para {mes}.</>}
+            {!prev && (aReceber > 0 || aPagar > 0) && <> Sem contar {fmtBRL(aReceber)} a receber e {fmtBRL(aPagar)} a pagar.</>}
+          </div>
+        </div>
       </div>
 
-      <div className="card">
-        <div className="card-head"><h3 className="card-title">Balanço do mês</h3></div>
-        <div className="org-eq">
-          <div><span>Já recebeu</span><b className="mono pos">{fmtBRL(recebido)}</b></div>
-          <div className={prev ? "" : "off"}><span>Ainda vai receber</span><b className="mono">+ {fmtBRL(aReceber)}</b></div>
-          <div><span>Contas pagas</span><b className="mono">− {fmtBRL(pagas)}</b></div>
-          <div className={prev ? "" : "off"}><span>Contas a pagar</span><b className="mono">− {fmtBRL(aPagar)}</b></div>
-          <div><span>Já investido</span><b className="mono">− {fmtBRL(investido)}</b></div>
-          <div className="res"><span>Sobra para gastos extras e investimentos</span><b className={`mono ${sobra >= 0 ? "pos" : "neg"}`}>{sobra < 0 ? "− " : ""}{fmtBRL(Math.abs(sobra))}</b></div>
-        </div>
-        {!prev && (aReceber > 0 || aPagar > 0) && <div className="field-hint" style={{ marginTop: 8 }}>Os valores ainda não recebidos ou não pagos estão fora da conta. Ligue “Incluir previstos” para ver o mês completo.</div>}
-        <div className="org-links">
-          <button type="button" className="btn btn-ghost sm" onClick={() => goTab("faturamento")}>Ver receitas</button>
-          <button type="button" className="btn btn-ghost sm" onClick={() => goTab("despesas")}>Ver contas</button>
-          <button type="button" className="btn btn-ghost sm" onClick={() => goTab("investimentos")}>Investir</button>
-        </div>
+      <div className="card oa-list">
+        <h3 className="oa-h">Ainda vai cair</h3>
+        {lista("cair", vaiCair, (it) => (
+          <div key={it.key} className="oa-li">
+            {diaBox(it.dateIso)}
+            <span className="oa-li-n"><b>{it.nome}</b><small>{subRec(it)}</small></span>
+            <span className="oa-li-r"><b className="in mono">{fmtBRL(it.net)}</b>{typeof it.toggle === "function" && <button type="button" onClick={it.toggle}>Recebi</button>}</span>
+          </div>
+        ), `Tudo o que estava previsto para ${mes} já caiu.`, "faturamento", "Ver todas as receitas")}
+      </div>
+
+      <div className="card oa-list">
+        <h3 className="oa-h">Ainda vai sair</h3>
+        {lista("sair", vaiSair, (it) => { const s = subPag(it.dateIso); return (
+          <div key={it.key} className="oa-li">
+            {diaBox(it.dateIso)}
+            <span className="oa-li-n"><b>{it.description}</b><small className={s.late ? "late" : ""}>{s.t}</small></span>
+            <span className="oa-li-r"><b className="mono">{fmtBRL(it.amount)}</b>{typeof it.toggle === "function" && <button type="button" onClick={it.toggle}>Paguei</button>}</span>
+          </div>
+        ); }, `Nenhuma conta em aberto em ${mes}.`, "despesas", "Ver todas as contas")}
       </div>
     </div>
   );
