@@ -1,7 +1,7 @@
 // Mediplan: busca sempre a versão mais nova quando há internet; sem internet, usa a cópia guardada.
-const CACHE_NAME = "mediplan-202611170020";
+const CACHE_NAME = "mediplan-202611170640";
 const REM_CACHE = "mediplan-lembretes"; // lista de lembretes gravada pelo app; não é apagada nas atualizações
-const ASSETS = ["./", "./index.html", "./app.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+const ASSETS = ["./", "./index.html", "./app.js", "./manifest.json", "./logo-192.png", "./logo-512.png", "./logo-180.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE_NAME && k !== REM_CACHE).map((k) => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener("fetch", (e) => {
@@ -30,7 +30,7 @@ async function checkReminders(agora) {
     if (it.date !== hoje && it.date !== amanha) continue;
     const k = it.key + "|" + it.date;
     if (sent[k]) continue; // um aviso por conta: na véspera ou, se o celular não conferiu na véspera, no próprio dia
-    await self.registration.showNotification(it.date === amanha ? it.t1 : it.t0, { body: it.body, icon: "icon-192.png", badge: "icon-192.png", tag: k, data: { url: self.registration.scope } });
+    await self.registration.showNotification(it.date === amanha ? it.t1 : it.t0, { body: it.body, icon: "logo-192.png", badge: "logo-192.png", tag: k, data: { url: self.registration.scope } });
     sent[k] = it.date; n++;
   }
   await remWrite("./__lembretes-enviados.json", sent);

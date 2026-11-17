@@ -1717,8 +1717,8 @@ function App() {
         recebido: !!(e.recebidoMonths && e.recebidoMonths[ck]), toggle: () => toggleExtraIncomeRecebido(e.id, ck), removable: true, remove: () => removeExtraRecurringIncome(e.id), ref: { t: "extra", id: e.id } });
     });
     oneOffIncomes.filter((o) => inMonth(o.date, y, m)).forEach((o) => {
-      items.push({ key: "one-" + o.id, vinculoId: null, nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · entrada avulsa",
-        gross: Number(o.amount || 0), net: Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
+      items.push({ key: "one-" + o.id, vinculoId: null, nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · receita extra",
+        gross: Number(o.amount || 0), net: o.taxOverride !== undefined && o.taxOverride !== null && String(o.taxOverride) !== "" ? netOf(o.amount, o.taxOverride) : Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
         removable: true, removeOne: () => setOneOffIncomes((prev) => prev.filter((x) => x.id !== o.id)), ref: { t: "avulsa", id: o.id } });
     });
     return items;
@@ -1885,7 +1885,8 @@ function App() {
   }));
   const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, description: data.description, amount: Number(data.amount) || 0, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) } : e));
   const updateShift = (id, data) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, gross: Number(data.gross) || 0, hours: Number(data.hours) || 0, date: data.date, prazoDias: Number(data.prazoDias) || 0, payDate: addDaysIso(data.date, Number(data.prazoDias) || 0) } : s));
-  const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date } : o));
+  const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido } : o));
+  const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, source: "manual" }]);
   const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category } : e));
   // conta que se repete: "só este mês" guarda um ajuste no mês; "daqui em diante" encerra a antiga no mês anterior e cria outra a partir deste
   const updateRecurringExpense = (id, d, mk, modo) => setRecurringExpenses((prev) => {
@@ -3927,7 +3928,7 @@ function App() {
             totalGross={totalGross} totalNet={totalNet}
             vinculos={vinculos} addVinculo={addVinculo} removeVinculo={removeVinculo} updateVinculoTax={updateVinculoTax} updateVinculoPrazo={updateVinculoPrazo} updateVinculoEscala={updateVinculoEscala}
             extraRecurringIncomes={extraRecurringIncomes} addExtraRecurringIncome={addExtraRecurringIncome} removeExtraRecurringIncome={removeExtraRecurringIncome} updateExtraPrazo={updateExtraPrazo}
-            shifts={shifts} oneOffIncomes={oneOffIncomes} updateVinculo={updateVinculo} updateExtra={updateExtra} updateShift={updateShift} updateOneOff={updateOneOff}
+            shifts={shifts} oneOffIncomes={oneOffIncomes} updateVinculo={updateVinculo} updateExtra={updateExtra} updateShift={updateShift} updateOneOff={updateOneOff} addOneOff={addOneOff}
             netByVinculo={netByVinculo} gainScope={gainScope} setGainScope={setGainScope} history12={history12}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth}
             workCard={<WorkRateCard cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} goMonth={goMonth} />}
@@ -4112,19 +4113,40 @@ function ShiftEditForm({ shift, onSubmit, onCancel, onDelete }) {
   );
 }
 
-function OneOffEditForm({ item, onSubmit, onCancel, onDelete }) {
-  const [description, setDescription] = useState(item.description || "");
-  const [amount, setAmount] = useState(Number(item.amount) || 0);
-  const [date, setDate] = useState(item.date);
-  const submit = () => { if (!description.trim() || !date) return; onSubmit({ description: description.trim(), amount: Number(amount) || 0, date }); };
+function OneOffEditForm({ item, onSubmit, onCancel, onDelete, novo, defaultDate }) {
+  const it = item || {};
+  const TIPOS = ["Processo", "13º salário", "Pix", "Férias", "Restituição do IR", "Outro"];
+  const [description, setDescription] = useState(it.description || "");
+  const [amount, setAmount] = useState(novo ? "" : Number(it.amount) || 0);
+  const [date, setDate] = useState(it.date || defaultDate || todayStr());
+  const [tax, setTax] = useState(it.taxOverride !== undefined && it.taxOverride !== null ? String(it.taxOverride) : novo ? "" : "0");
+  const [recebido, setRecebido] = useState(novo ? (it.date || defaultDate || todayStr()) <= todayStr() : !!it.recebido);
+  const [erro, setErro] = useState("");
+  const submit = () => {
+    if (!description.trim()) { setErro("Diga o que é essa receita."); return; }
+    if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
+    if (String(tax).trim() === "" || !(Number(tax) >= 0)) { setErro("Informe a tributação. Use 0 se não tiver imposto."); return; }
+    if (!date) { setErro("Informe a data."); return; }
+    onSubmit({ description: description.trim(), amount: Number(amount) || 0, date, taxOverride: Number(String(tax).replace(",", ".")) || 0, recebido });
+  };
+  const liquido = (Number(amount) || 0) * (1 - (Number(String(tax).replace(",", ".")) || 0) / 100);
   return (
     <div className="mini-form">
+      {novo && (
+        <div className="chip-row" style={{ marginBottom: 10 }} role="group" aria-label="Tipo de receita">
+          {TIPOS.map((t) => <button key={t} type="button" className={`chip sm ${description === t ? "active" : ""}`} aria-pressed={description === t} onClick={() => { setDescription(t === "Outro" ? "" : t); if (t === "Pix" && tax === "") setTax("0"); setErro(""); }}>{t}</button>)}
+        </div>
+      )}
       <div className="form-grid">
-        <div className="field"><label>Descrição</label><input value={description} onChange={(e) => setDescription(e.target.value)} /></div>
-        <div className="field"><label>Valor (R$)</label><MoneyInput value={amount} onChange={setAmount} /></div>
-        <div className="field"><label>Data</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+        <div className="field"><label>Descrição *</label><input value={description} onChange={(e) => { setDescription(e.target.value); setErro(""); }} placeholder="Ex.: Processo trabalhista" /></div>
+        <div className="field"><label>Valor bruto (R$) *</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
+        <div className="field"><label>Tributação (%) *</label><input type="number" inputMode="decimal" min="0" value={tax} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0" /></div>
+        <div className="field"><label>Data em que cai *</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
       </div>
-      <FormBtns label="Salvar alterações" onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+      <label className="chk-line" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 14 }}><input type="checkbox" checked={recebido} onChange={(e) => setRecebido(e.target.checked)} /> Já recebi</label>
+      {Number(amount) > 0 && String(tax).trim() !== "" && <div className="field-hint" style={{ marginTop: 6 }}>Líquido: <b>{fmtBRL(liquido)}</b></div>}
+      {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
+      <FormBtns label={novo ? "Adicionar receita" : "Salvar alterações"} onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
     </div>
   );
 }
@@ -4276,7 +4298,7 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
 function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
-  shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff,
+  shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff, addOneOff,
   netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto
 }) {
   const gv = useGv();
@@ -4292,14 +4314,14 @@ function FaturamentoTab({
     if (r.t === "vinculo") { const v = vinculos.find((x) => x.id === r.id); return v ? <><div className="fz-tit">Editar {v.nome}</div>{editorVinculo(v)}<div className="field-hint" style={{ marginTop: 8 }}>A mudança vale para todos os meses deste cargo.</div></> : null; }
     if (r.t === "extra") { const e = extraRecurringIncomes.find((x) => x.id === r.id); return e ? <><div className="fz-tit">Editar {e.description}</div>{editorExtra(e)}</> : null; }
     if (r.t === "shift") { const s = shifts.find((x) => x.id === r.id); return s ? <><div className="fz-tit">Editar plantão de {fmtDatePt(s.date)} · {it.nome}</div><ShiftEditForm key={s.id} shift={s} onSubmit={(d) => { updateShift(s.id, d); fechar(); }} onCancel={fechar} onDelete={() => { if (window.confirm("Excluir este plantão?")) { it.remove(); fechar(); } }} /></> : null; }
-    if (r.t === "avulsa") { const o = oneOffIncomes.find((x) => x.id === r.id); return o ? <><div className="fz-tit">Editar entrada avulsa</div><OneOffEditForm key={o.id} item={o} onSubmit={(d) => { updateOneOff(o.id, d); fechar(); }} onCancel={fechar} onDelete={() => { if (window.confirm("Excluir esta entrada?")) { it.removeOne(); fechar(); } }} /></> : null; }
+    if (r.t === "avulsa") { const o = oneOffIncomes.find((x) => x.id === r.id); return o ? <><div className="fz-tit">Editar receita extra</div><OneOffEditForm key={o.id} item={o} onSubmit={(d) => { updateOneOff(o.id, d); fechar(); }} onCancel={fechar} onDelete={() => { if (window.confirm("Excluir esta entrada?")) { it.removeOne(); fechar(); } }} /></> : null; }
     return null;
   };
   const vincNoMes = new Set(monthIncomeItems.map((i) => i.vinculoId).filter(Boolean));
   const extraNoMes = new Set(monthIncomeItems.filter((i) => i.ref && i.ref.t === "extra").map((i) => i.ref.id));
   const outros = [...vinculos.filter((v) => !vincNoMes.has(v.id)).map((v) => ({ k: "v-" + v.id, nome: v.nome, cor: v.cor, sub: v.tipo === "mensal" ? "cargo fixo" : "local de plantão", ed: () => editorVinculo(v) })),
     ...extraRecurringIncomes.filter((e) => !extraNoMes.has(e.id)).map((e) => ({ k: "e-" + e.id, nome: e.description, cor: SLATE, sub: "receita recorrente", ed: () => editorExtra(e) }))];
-  const gavetas = [["vinculo", "Adicionar vínculo"], ["extra", "Adicionar receita recorrente"]].concat(outros.length ? [["outros", `Outros vínculos e receitas (${outros.length})`]] : []);
+  const gavetas = [["vinculo", "Adicionar vínculo"], ["extra", "Adicionar receita recorrente"], ["avulsa", "Adicionar receita extra (processo, 13º, Pix)"]].concat(outros.length ? [["outros", `Outros vínculos e receitas (${outros.length})`]] : []);
   const sorted = [...monthIncomeItems].sort((a, b) => a.tipo === b.tipo ? 0 : (a.tipo === "plantao" ? -1 : 1));
   const received = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0);
   const donutData = netByVinculo.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }));
@@ -4314,7 +4336,6 @@ function FaturamentoTab({
         <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do líquido" : null} />
       </div>
 
-      <div className="note-info">O valor aparece no mês em que cai no caixa. Se uma empresa paga depois, toque no lápis do lançamento e ajuste o prazo.</div>
 
       {workCard}
 
@@ -4365,6 +4386,7 @@ function FaturamentoTab({
                 <div className="fz-ed">
                   {k === "vinculo" && <VinculoForm onSubmit={(d) => { addVinculo(d); setAddOpen(null); }} defaultStartMonth={monthKey} />}
                   {k === "extra" && <ExtraIncomeForm onSubmit={(d) => { addExtraRecurringIncome({ ...d, startMonth: monthKey }); setAddOpen(null); }} />}
+                  {k === "avulsa" && <OneOffEditForm novo defaultDate={todayStr().slice(0, 7) === monthKey ? todayStr() : monthKey + "-05"} onSubmit={(d) => { addOneOff(d); setAddOpen(null); }} onCancel={() => setAddOpen(null)} />}
                   {k === "outros" && outros.map((o) => (
                     <React.Fragment key={o.k}>
                       <div className="fz-out"><span><span className="legend-dot" style={{ background: o.cor, marginRight: 8 }} /><b>{o.nome}</b><small>{o.sub} · sem lançamento neste mês</small></span>
@@ -6755,7 +6777,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             )}
             {quoteRun.busy && <div className="progress-track quote-track"><div className="quote-fill" style={{ width: `${quoteRun.total ? (quoteRun.done / quoteRun.total) * 100 : 0}%` }} /></div>}
             {quoteStatus && !quoteRun.busy && <div className={`quote-msg ${quoteRun.kind}`} role="status">{quoteStatus}</div>}
-            {!brapiToken ? (
+            {(!brapiToken || Object.values(quoteRun.marks || {}).includes("token")) && (
               <div className="token-box">
                 <b>Para atualizar todos os ativos, cole um token gratuito da brapi.dev.</b>
                 <p>Sem token, o serviço só responde alguns ativos de teste, como PETR4 e VALE3. Por isso os outros preços não mudam.</p>
@@ -6769,16 +6791,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                   <input id="brapi-token" value={brapiToken} onChange={(e) => setBrapiToken(e.target.value.trim())} placeholder="cole seu token aqui" autoComplete="off" />
                 </div>
               </div>
-            ) : (
-              <details className="cfg">
-                <summary>Token da brapi.dev configurado</summary>
-                <div className="field" style={{ margin: "8px 0" }}>
-                  <label htmlFor="brapi-token">Token da brapi.dev</label>
-                  <input id="brapi-token" value={brapiToken} onChange={(e) => setBrapiToken(e.target.value.trim())} placeholder="cole seu token aqui" autoComplete="off" />
-                </div>
-              </details>
             )}
-            <div className="field-hint" style={{ marginTop: 8 }}>A busca automática vale para {tickerCount} {tickerCount === 1 ? "ativo" : "ativos"} entre ações, FIIs e ETFs. Para Tesouro, renda fixa e outros, digite o valor atual no cartão do ativo.</div>
             {positions.length > 0 && (
               <div className="asset-tools">
                 <label className="sort-pick">Ordenar ativos por
