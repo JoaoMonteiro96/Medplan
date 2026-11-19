@@ -1039,7 +1039,7 @@ function CountUp({ value, format = fmtBRL, duration = 650 }) {
 }
 
 // Barra de páginas no topo, com rolagem lateral e indicador que desliza até a página ativa
-const NAV_LABELS = { inicio: "Início", faturamento: "Faturamento", calendario: "Calendário", despesas: "Despesas", investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Configurações" };
+const NAV_LABELS = { organizacao: "Organização", inicio: "Início", faturamento: "Faturamento", calendario: "Calendário", despesas: "Despesas", investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Configurações" };
 function NavStrip({ items, active, onPick }) {
   const wrap = useRef(null);
   const [ind, setInd] = useState(null);
@@ -1069,6 +1069,107 @@ function NavStrip({ items, active, onPick }) {
         ); })}
       </div>
     </nav>
+  );
+}
+
+// ================= computador: menu lateral, painéis e gavetas =================
+const DESK_MQ = "(min-width: 1100px)";
+function useDesk() {
+  const get = () => { try { return window.matchMedia(DESK_MQ).matches; } catch (e) { return false; } };
+  const [d, setD] = useState(get);
+  useEffect(() => {
+    let mq; try { mq = window.matchMedia(DESK_MQ); } catch (e) { return; }
+    const f = () => setD(mq.matches);
+    if (mq.addEventListener) mq.addEventListener("change", f); else mq.addListener(f);
+    return () => { if (mq.removeEventListener) mq.removeEventListener("change", f); else mq.removeListener(f); };
+  }, []);
+  return d;
+}
+const DGV_KEY = "mediplan-dgv";
+function DGv({ id, icon, tone = "#16A34A", title, sub, val, wide, open: inicial = false, children }) {
+  const [open, setOpen] = useState(() => { try { const m = JSON.parse(localStorage.getItem(DGV_KEY) || "{}"); return id in m ? !!m[id] : inicial; } catch (e) { return inicial; } });
+  const toggle = () => setOpen((o) => { const n = !o; try { const m = JSON.parse(localStorage.getItem(DGV_KEY) || "{}"); m[id] = n; localStorage.setItem(DGV_KEY, JSON.stringify(m)); } catch (e) {} return n; });
+  return (
+    <section className={`dgv ${open ? "open" : ""} ${wide ? "wide" : ""}`} data-dgv={id}>
+      <button type="button" className="dgv-h" aria-expanded={open} onClick={toggle}>
+        <span className="dgv-ic" style={{ background: tone + "1f", color: tone }}>{icon}</span>
+        <span className="dgv-t"><b>{title}</b>{sub ? <small>{sub}</small> : null}</span>
+        {val !== undefined && val !== null && val !== "" ? <span className="dgv-v mono">{val}</span> : <span />}
+        <span className="dgv-ch" aria-hidden="true"><IconChevronRight size={18} /></span>
+      </button>
+      {open && <div className="dgv-b">{children}</div>}
+    </section>
+  );
+}
+function DGrid({ children }) { return <><div className="dsec">Detalhes · clique para abrir</div><div className="dgvs">{children}</div></>; }
+function DSpark({ values = [], color = "#16A34A" }) {
+  const v = values.map((x) => Number(x) || 0); if (v.length < 2) return null;
+  const mx = Math.max(...v), mn = Math.min(...v), W = 150, H = 26;
+  const pts = v.map((x, i) => `${(i * W / (v.length - 1)).toFixed(1)},${(H - 3 - ((x - mn) / (mx - mn || 1)) * (H - 6)).toFixed(1)}`).join(" ");
+  return <svg className="dspark" width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" /></svg>;
+}
+function DKpi({ label, value, sub, tone, subTone, spark, sparkColor }) {
+  return (
+    <div className="dkpi">
+      <small>{label}</small>
+      <b className="mono" style={tone ? { color: tone } : null}>{value}</b>
+      {sub ? <em style={subTone ? { color: subTone } : null}>{sub}</em> : null}
+      {spark ? <DSpark values={spark} color={sparkColor} /> : null}
+    </div>
+  );
+}
+const deltaTxt = (now, prev, nome) => { if (!prev) return null; const p = ((now - prev) / Math.abs(prev)) * 100; if (!isFinite(p)) return null; return `${p >= 0 ? "▲" : "▼"} ${Math.abs(p).toFixed(1).replace(".", ",")}% vs ${nome}`; };
+// fluxo do mês dia a dia: linha cheia até hoje, tracejada depois
+function DFluxo({ fluxoDia = {}, viewYear, viewMonth }) {
+  const dias = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const hoje = new Date(); const ehMes = hoje.getFullYear() === viewYear && hoje.getMonth() === viewMonth;
+  const corte = ehMes ? hoje.getDate() : (new Date(viewYear, viewMonth, 1) < hoje ? dias : 0);
+  let acc = 0; const pts = [];
+  for (let d = 1; d <= dias; d++) { const f = fluxoDia[d]; if (f) acc += f.entra - f.sai; pts.push(acc); }
+  const mx = Math.max(0, ...pts), mn = Math.min(0, ...pts), W = 760, H = 190, padB = 22, padT = 26;
+  const X = (i) => (i / (dias - 1)) * W, Y = (v) => padT + (1 - (v - mn) / (mx - mn || 1)) * (H - padT - padB);
+  const seg = (a, b) => pts.slice(a, b).map((v, i) => `${X(a + i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const real = corte > 0 ? seg(0, corte) : "", prev = corte < dias ? seg(Math.max(0, corte - 1), dias) : "";
+  const fim = pts[dias - 1] || 0, hojeV = corte > 0 ? pts[corte - 1] : 0;
+  return (
+    <div>
+      <svg width="100%" height="190" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Quanto entrou menos o que saiu, somado dia a dia">
+        <line x1="0" x2={W} y1={Y(0)} y2={Y(0)} stroke="var(--border)" />
+        {real && <polygon points={`0,${Y(0)} ${real} ${X(corte - 1)},${Y(0)}`} fill="#16A34A" opacity=".1" />}
+        {real && <polyline points={real} fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+        {prev && <polyline points={prev} fill="none" stroke="#16A34A" strokeWidth="2" strokeDasharray="5 5" vectorEffect="non-scaling-stroke" />}
+        {[1, 5, 10, 15, 20, 25, dias].map((d) => <text key={d} x={X(d - 1)} y={H - 4} fontSize="11" fill="#94A3B8" textAnchor={d === 1 ? "start" : d === dias ? "end" : "middle"}>{d}</text>)}
+      </svg>
+      <div className="dflx-leg"><span>{corte > 0 && corte < dias ? <>Até hoje: <b className="mono">{fmtBRL(hojeV)}</b></> : null}</span><span>Fim do mês: <b className="mono" style={{ color: fim >= 0 ? "#15803D" : "#B91C1C" }}>{fmtBRL(fim)}</b></span></div>
+    </div>
+  );
+}
+function DProximos({ incomeItems = [], expenseItems = [], max = 6, onVer }) {
+  const hoje = todayStr();
+  const l = [...incomeItems.filter((i) => !i.recebido).map((i) => ({ k: i.key, nome: i.nome, d: i.dateIso, v: Number(i.net) || 0, in: true })),
+    ...expenseItems.filter((e) => !e.paid).map((e) => ({ k: e.key, nome: e.description, d: e.dateIso, v: Number(e.amount) || 0, in: false }))].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+  if (!l.length) return <div className="empty-state" style={{ padding: "12px 0" }}>Nada pendente neste mês.</div>;
+  return (
+    <div className="dprox">
+      {l.slice(0, max).map((x) => { const atras = x.d < hoje; return (
+        <div key={x.k}><span><b>{x.nome}</b><small>{atras ? (x.in ? "atrasado desde " : "venceu em ") + fmtDatePt(x.d) : x.d === hoje ? "hoje" : fmtDatePt(x.d)}</small></span>
+          <b className="mono" style={{ color: x.in ? (atras ? "#B45309" : "#15803D") : "#B91C1C" }}>{x.in ? "+" : "−"} {fmtBRL(x.v)}</b></div>
+      ); })}
+      {l.length > max && onVer && <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={onVer}>Ver os outros {l.length - max}</button>}
+    </div>
+  );
+}
+function DSide({ active, onPick, onNovo }) {
+  const grupo = (ids) => ids.map((id) => { const t = NAV_ALL.find((x) => x.id === id); if (!t) return null; const Ic = id === "backup" ? IconGear : t.icon; return (
+    <button key={id} type="button" data-tab={id} className={`dsb-i ${active === id ? "on" : ""}`} aria-current={active === id ? "page" : undefined} onClick={() => onPick(id)}><Ic size={18} /><span>{NAV_LABELS[id]}</span></button>
+  ); });
+  return (
+    <aside className="dsb" aria-label="Páginas">
+      <div className="dsb-brand"><span className="tb-logo"><IconLogo size={22} /></span>Mediplan</div>
+      <button type="button" className="dsb-new" onClick={onNovo}><IconPlus size={16} color="#fff" /> Novo lançamento</button>
+      <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "organizacao", "metas", "visao", "contabilidade"])}
+        <div className="dsb-g">Ferramentas</div>{grupo(["importar", "backup"])}</nav>
+    </aside>
   );
 }
 
@@ -1880,6 +1981,7 @@ function App() {
   const goMonth = (y, m) => { setViewYear(y); setViewMonth(m); setSelectedDay(null); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} };
   const [cargoOpen, setCargoOpen] = useState(false);
   const [importSrc, setImportSrc] = useState(null);
+  const desk = useDesk();
   const quickGo = (kind) => {
     setQuickOpen(false);
     if (kind === "cargo") { setCargoOpen(true); return; }
@@ -3640,6 +3742,76 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v42: computador (menu lateral, painéis e gavetas) ================= */
+        .dsb { display: none; }
+        @media (max-width: 1099px) { .main { margin-left: 0; } }
+        @media (min-width: 1100px) {
+          .dsb { display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; width: 232px; z-index: 40; background: var(--surface, #fff); border-right: 1px solid var(--border); padding: 20px 14px; overflow-y: auto; }
+          .dsb-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -0.02em; margin: 0 6px 18px; }
+          .dsb-new { display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px; border: none; border-radius: 12px; background: var(--teal); color: #fff; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; margin-bottom: 16px; }
+          .dsb-new:hover { background: #15803D; }
+          .dsb nav { display: flex; flex-direction: column; gap: 2px; }
+          .dsb-i { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: none; background: none; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-dim); cursor: pointer; text-align: left; }
+          .dsb-i:hover { background: var(--surface-3); color: var(--text); }
+          .dsb-i.on { background: #E6F4EC; color: #15803D; }
+          .dsb-i:focus-visible, .dgv-h:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+          .dsb-g { font-size: 11.5px; font-weight: 600; color: var(--text-dim); margin: 16px 12px 6px; }
+          .main { margin-left: 232px !important; }
+          .navstrip { display: none; }
+          .topbar2 .tb-logo, .topbar2 .tb-new { display: none; }
+          .page { max-width: 1400px; }
+          .dgrid { display: grid; gap: 14px; margin-bottom: 14px; }
+          .dgrid > .card { margin-bottom: 0; }
+          .dkpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+          .dkpi { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; }
+          .dkpi small { display: block; font-size: 13px; color: var(--text-dim); }
+          .dkpi b { display: block; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin: 4px 0 2px; }
+          .dkpi em { display: block; font-style: normal; font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+          .dspark { display: block; margin-top: 10px; max-width: 100%; }
+          .dflx-leg { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-dim); margin-top: 6px; }
+          .dprox > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; font-size: 13.5px; }
+          .dprox > div + div { border-top: 1px solid var(--border); }
+          .dprox span b { font-weight: 600; } .dprox small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 1px; }
+          .dsec { font-size: 13px; font-weight: 600; color: var(--text-dim); margin: 22px 2px 10px; }
+          .dgvs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+          .dgv { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+          .dgv.wide { grid-column: 1 / -1; }
+          .dgv-h { display: grid; grid-template-columns: 38px 1fr auto 20px; gap: 14px; align-items: center; width: 100%; padding: 14px 18px; border: none; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+          .dgv-h:hover { background: var(--surface-2); }
+          .dgv-ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
+          .dgv-t b { display: block; font-size: 14.5px; } .dgv-t small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .dgv-t { min-width: 0; }
+          .dgv-v { font-size: 14px; font-weight: 700; white-space: nowrap; }
+          .dgv-ch { color: var(--text-dim); display: inline-flex; transition: transform .18s; } .dgv.open .dgv-ch { transform: rotate(90deg); }
+          .dgv.open .dgv-h { border-bottom: 1px solid var(--border); }
+          .dgv-b { padding: 16px 18px; }
+          .dgv-b > .card { border: none; box-shadow: none; padding: 0; margin: 0; background: none; }
+          .dgv-b .grid-2 { display: block; } .dgv-b .grid-2 > .card { border: none; box-shadow: none; padding: 0; margin: 0; }
+          .dmetas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; } .dmetas > div { display: flex; gap: 12px; align-items: center; font-size: 13.5px; } .dmetas small { display: block; color: var(--text-dim); font-size: 12px; }
+          .desk .greet { margin-bottom: 12px; }
+          .dgrid .xl-row { grid-template-columns: 26px 50px minmax(0, 1fr) 118px 112px 122px 28px; }
+          .dgrid .xl-tipo { display: none !important; }
+          .dinv-ev svg { max-height: 220px; }
+          /* calendário grande */
+          .cal-desk .cal-cell { position: relative; }
+          .calendar-grid.cal-desk { gap: 6px; }
+          .cal-desk .cal-cell { min-height: 104px; aspect-ratio: auto; align-items: flex-start; justify-content: flex-start; padding: 8px 9px; text-align: left; }
+          .cal-desk .cal-day-num { font-size: 13.5px; font-weight: 700; }
+          .cal-desk .cal-dots { position: absolute; top: 10px; right: 9px; }
+          .cal-desk .cal-hours { position: absolute; bottom: 6px; right: 8px; }
+          .cal-lines { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; width: 100%; min-width: 0; }
+          .cal-lines span { font-size: 11.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .cl-pl { background: #DCFCE7; color: #15803D; border-radius: 5px; padding: 1px 6px; align-self: flex-start; font-weight: 600; }
+          .cl-in { color: #15803D; font-weight: 600; } .cl-out { color: #B91C1C; font-weight: 600; } .cl-more { color: var(--text-dim); }
+          /* metas em duas colunas */
+          .mt { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-items: start; }
+          .mt > :not(.mt-meta) { grid-column: 1 / -1; }
+          :root[data-theme="dark"] .dsb-i.on { background: rgba(52,211,153,.14); color: #34D399; }
+          :root[data-theme="dark"] .cl-pl { background: rgba(52,211,153,.16); color: #34D399; }
+          :root[data-theme="dark"] .cl-in { color: #4ADE80; } :root[data-theme="dark"] .cl-out { color: #F87171; }
+        }
+        @media print { .dsb { display: none !important; } .main { margin-left: 0 !important; } }
+
         /* ================= v41: barra de ações suspensa ================= */
         .dock, .dk-scrim { display: none; }
         @media (max-width: 720px) {
@@ -3970,6 +4142,7 @@ function App() {
         <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup")} active={activeTab} onPick={goTab} />
       </div>
       <Dock active={activeTab} onPick={goTab} />
+      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} />
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
@@ -3986,6 +4159,7 @@ function App() {
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} quickGo={quickGo}
             setup={{ vinculos: vinculos.length, shifts: shifts.length, expenses: expenses.length + recurringExpenses.length, investments: investments.length }}
             monthExpenseItems={monthExpenseItems} limits={limits} monthShiftsCount={monthShifts.length} insights={insights}
+            desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12}
             workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
@@ -4000,7 +4174,7 @@ function App() {
             netByVinculo={netByVinculo} gainScope={gainScope} setGainScope={setGainScope} history12={history12}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth}
             workCard={<WorkRateCard cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} goMonth={goMonth} />}
-            discreto={discreto} setDiscreto={setDiscreto}
+            discreto={discreto} setDiscreto={setDiscreto} desk={desk}
           />
         )}
         {activeTab === "calendario" && (
@@ -4009,20 +4183,21 @@ function App() {
             viewYear={viewYear} viewMonth={viewMonth} vinculos={vinculos} addVinculo={addVinculo}
             addShift={addShift} addPlantao={addPlantao} removeShiftSerie={removeShiftSerie} shifts={shifts} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
             addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff}
-            vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab} fluxoDia={fluxoDia}
+            vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab} fluxoDia={fluxoDia} desk={desk}
           />
         )}
         {activeTab === "despesas" && (
           <ExpensesTab
             monthExpenseItems={monthExpenseItems} addExpense={addExpense} addRecurringExpense={addRecurringExpense}
             viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} limits={limits} setLimit={setLimit} updateExpense={updateExpense} updateRecurringExpense={updateRecurringExpense}
+            desk={desk} history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} goTab={goTab}
           />
         )}
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun}
-            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} />
+            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
         {activeTab === "metas" && (
           <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
@@ -4367,7 +4542,7 @@ function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
   shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff, addOneOff,
-  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto
+  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk
 }) {
   const gv = useGv();
   const [editKey, setEditKey] = useState(null);
@@ -4405,6 +4580,7 @@ function FaturamentoTab({
       </div>
 
 
+      {!desk && (<>
       {workCard}
 
       <div className="grid-2">
@@ -4422,6 +4598,8 @@ function FaturamentoTab({
         </div>
       </div>
 
+      </>)}
+      <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr", alignItems: "start" } : null}>
       <div className="card flush">
         <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3><span className="card-note">toque no status para marcar como recebido</span></div>
         {sorted.length === 0 ? <div className="empty-state">Nenhuma receita neste mês ainda.</div> : (
@@ -4468,6 +4646,34 @@ function FaturamentoTab({
           ))}
         </div>
       </div>
+      {desk && (
+        <div className="card">
+          <div className="card-head">
+            <h3 className="card-title">Por vínculo</h3>
+            <div className="segmented sm"><button className={`seg-btn ${gainScope === "mensal" ? "active" : ""}`} onClick={() => setGainScope("mensal")}>Mês</button><button className={`seg-btn ${gainScope === "anual" ? "active" : ""}`} onClick={() => setGainScope("anual")}>Ano</button></div>
+          </div>
+          {donutData.length === 0 ? <div className="empty-state">Cadastre um vínculo e lance plantões para ver a distribuição.</div> : <InteractiveDonut data={donutData} size={150} stroke={20} centerLabel={gainScope === "anual" ? "ano" : "mês"} />}
+        </div>
+
+      )}
+      </div>
+      {desk && (
+        <DGrid>
+          <DGv id="fat-12m" open icon={<IconTrending size={18} />} title="Receita líquida mês a mês" sub={`últimos ${chartMonths} meses`} val={"média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.value, 0) / history12.length : 0)}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
+            <SvgAreaChart data={history12} height={220} color={TEAL} valueKey="value" onOpen={(d) => goMonth(d.y, d.m)} />
+          </DGv>
+          <DGv id="fat-hora" icon={<IconCalendar size={18} />} tone="#DB2777" title="Ganho por hora" sub="pelo mês trabalhado" val="">{workCard}</DGv>
+          <DGv id="fat-imp" icon={<IconCalc size={18} />} tone="#2563EB" title="Impostos por vínculo" sub={totalGross > 0 ? `${((totalGross - totalNet) / totalGross * 100).toFixed(1).replace(".", ",")}% da receita bruta` : "sem receita no mês"} val={fmtBRL(totalGross - totalNet)}>
+            <div className="dprox">{Object.values(monthIncomeItems.reduce((m, it) => { const k = it.nome; m[k] = m[k] || { nome: k, cor: it.cor, imp: 0, bruto: 0 }; m[k].imp += it.gross - it.net; m[k].bruto += it.gross; return m; }, {})).sort((a, b) => b.imp - a.imp).map((x) => (
+              <div key={x.nome}><span><b><span className="legend-dot" style={{ background: x.cor, marginRight: 8 }} />{x.nome}</b><small>{x.bruto > 0 ? ((x.imp / x.bruto) * 100).toFixed(1).replace(".", ",") + "% do bruto" : ""}</small></span><b className="mono">{fmtBRL(x.imp)}</b></div>
+            ))}</div>
+          </DGv>
+          <DGv id="fat-pend" icon={<IconCalendar size={18} />} tone="#B45309" title="A receber" sub={monthIncomeItems.filter((i) => !i.recebido && i.dateIso < todayStr()).length ? monthIncomeItems.filter((i) => !i.recebido && i.dateIso < todayStr()).length + " atrasado(s)" : "nada atrasado"} val={fmtBRL(monthIncomeItems.filter((i) => !i.recebido).reduce((a, i) => a + i.net, 0))}>
+            <DProximos incomeItems={monthIncomeItems} expenseItems={[]} max={10} />
+          </DGv>
+        </DGrid>
+      )}
     </div>
   );
 }
@@ -5529,7 +5735,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   );
 }
 
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur }) {
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [] }) {
   const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
@@ -5553,6 +5759,62 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   ];
   const pending = steps.filter((x) => !x.done);
 
+  const prevNome = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
+  if (desk) {
+    const sobra = curStats.net - curStats.expTotal;
+    const hs = history12.slice(-12);
+    const metasNoRitmo = goals.length;
+    return (
+      <div className="desk">
+        <div className="greet"><h2>{hello}!</h2><p>Este é o painel de {MONTHS_PT[viewMonth].toLowerCase()} de {viewYear}.</p></div>
+        {alerts.length > 0 && (
+          <div className="alert-strip">
+            {alerts.slice(0, 3).map((a) => <div key={a.id} className={`alert-item alert-${a.level}`}><span className="al-dot" />{a.text}</div>)}
+          </div>
+        )}
+        <div className="dkpis">
+          <DKpi label="Receita líquida" value={fmtBRL(curStats.net)} sub={deltaTxt(curStats.net, prevStats.net, prevNome)} subTone={curStats.net >= prevStats.net ? "#15803D" : "#B91C1C"} spark={hs.map((h) => h.value)} sparkColor="#16A34A" />
+          <DKpi label="Despesas" value={fmtBRL(curStats.expTotal)} sub={deltaTxt(curStats.expTotal, prevStats.expTotal, prevNome)} subTone={curStats.expTotal <= prevStats.expTotal ? "#15803D" : "#B91C1C"} spark={hs.map((h) => h.expenses)} sparkColor="#F59E0B" />
+          <DKpi label="Sobra do mês" value={fmtBRL(sobra)} tone={sobra < 0 ? "#B91C1C" : null} sub={curStats.net > 0 ? Math.round((sobra / curStats.net) * 100) + "% da receita" : null} subTone="#15803D" spark={hs.map((h) => h.value - h.expenses)} sparkColor="#0F766E" />
+          <DKpi label="Patrimônio" value={fmtBRL(patrimonioTotal)} sub={"investido " + fmtBRL(portfolio.totalValue || totalInvestedAllTime)} subTone="#64748B" spark={hs.map((h) => h.invested)} sparkColor="#7C3AED" />
+        </div>
+        <div className="dgrid" style={{ gridTemplateColumns: "1.9fr 1fr" }}>
+          <div className="card"><div className="card-head"><h3 className="card-title">Dinheiro do mês, dia a dia</h3><span className="card-note">o que entrou menos o que saiu · tracejado é previsão</span></div><DFluxo fluxoDia={fluxoDia} viewYear={viewYear} viewMonth={viewMonth} /></div>
+          <div className="card"><div className="card-head"><h3 className="card-title">Próximos lançamentos</h3><span className="card-note">entra e sai</span></div><DProximos incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} max={5} onVer={() => setActiveTab("despesas")} /></div>
+        </div>
+        <DGrid>
+          <DGv id="ini-12m" open icon={<IconTrending size={18} />} title="Receitas x despesas" sub={`últimos ${chartMonths} meses`} val={"sobra média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.value - h.expenses, 0) / history12.length : 0)}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
+            <SvgDualBarChart data={history12} height={230} onOpen={(d) => goMonth(d.y, d.m)} />
+          </DGv>
+          <DGv id="ini-vinc" icon={<IconReceipt size={18} />} tone="#2563EB" title="Receita por vínculo" sub={vincData.length ? `${vincData[0].nome} é o maior` : "sem receitas"} val={vincData.length + " fonte" + (vincData.length === 1 ? "" : "s")}>
+            {vincData.length === 0 ? <div className="empty-state">Nenhuma receita ainda.</div> : <InteractiveDonut data={vincData.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }))} size={170} stroke={22} centerLabel="mês" />}
+          </DGv>
+          <DGv id="ini-hora" icon={<IconCalendar size={18} />} tone="#DB2777" title="Ganho por hora e trabalho" sub={`${monthShiftsCount} plantões · ${workCur.dias} dias trabalhados`} val={workCur.hourly > 0 ? fmtBRL(workCur.hourly) + "/h" : "—"}>{workCard}</DGv>
+          <DGv id="ini-cat" icon={<IconWallet size={18} />} tone="#F59E0B" title="Gastos por categoria" sub={byCat.length ? `${byCat[0].nome} é o maior gasto` : "sem despesas"} val={fmtBRL(spentAll)}>
+            {byCat.length === 0 ? <div className="empty-state">Nenhuma despesa neste mês ainda.</div> : <InteractiveDonut data={byCat} size={170} stroke={22} centerLabel="gasto no mês" />}
+          </DGv>
+          <DGv id="ini-teto" icon={<IconTarget size={18} />} tone="#0F766E" title="Teto de gastos" sub={limits.__total > 0 ? `${Math.round((spentAll / limits.__total) * 100)}% do teto usado` : "ainda não definido"} val={limits.__total > 0 ? fmtBRL(limits.__total) : ""}>
+            {limits.__total > 0 && <LimitRow label="Limite geral do mês" spent={spentAll} limit={limits.__total} color={TEAL} />}
+            {limited.map((x) => <LimitRow key={x.id} label={x.m.label} spent={x.sp} limit={x.lim} color={x.m.color} icon={<ExpIcon id={x.id} size={17} color={x.m.color} />} />)}
+            {Object.keys(limits).length === 0 && <div className="empty-state" style={{ padding: "10px 0" }}>Defina o teto em Metas. O app avisa em 80% e quando passar.</div>}
+            <button className="link-btn" onClick={() => setActiveTab("metas")}>gerenciar teto</button>
+          </DGv>
+          <DGv id="ini-metas" icon={<IconTarget size={18} />} tone="#7C3AED" title="Metas" sub={goals.length ? goals.slice(0, 2).map((g) => g.nome).join(" · ") : "nenhuma meta ainda"} val={metasNoRitmo ? metasNoRitmo + " meta" + (metasNoRitmo === 1 ? "" : "s") : ""}>
+            {goals.length === 0 ? <div className="empty-state">Defina uma meta para acompanhar aqui.</div> : <div className="dmetas">{goals.map((g) => {
+              const at = g.fonte === "carteira" ? (portfolio.totalValue || 0) : g.fonte === "patrimonio" ? Math.max(0, patrimonioTotal) : Number(g.valorAtual) || 0;
+              const pct = Math.min(100, (at / Math.max(g.valorAlvo, 1)) * 100);
+              return <div key={g.id}><Ring pct={pct} size={58} stroke={7} color={g.cor}><b style={{ fontSize: 12 }}>{pct.toFixed(0)}%</b></Ring><span><b>{g.nome}</b><small className="mono">{fmtBRL(at)} de {fmtBRL(g.valorAlvo)}</small></span></div>;
+            })}</div>}
+          </DGv>
+          <DGv id="ini-ins" wide icon={<IconTrending size={18} />} tone="#A16207" title="Insights do mês" sub={insights.length ? insights[0].title : "nada novo por enquanto"} val={insights.length ? insights.length + (insights.length === 1 ? " novidade" : " novidades") : ""}>
+            <InsightList items={insights} max={6} />
+          </DGv>
+        </DGrid>
+        <button className="btn btn-ghost" style={{ marginTop: 16 }} onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>
+      </div>
+    );
+  }
   return (
     <div>
       <div className="greet"><h2>{hello}!</h2><p>Este é o resumo de {MONTHS_PT[viewMonth].toLowerCase()} de {viewYear}.</p></div>
@@ -6132,7 +6394,7 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, set
 }
 
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
-  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, fluxoDia = {} }) {
+  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, fluxoDia = {}, desk }) {
   const [modo, setModo] = useState("plantao");
   const fxMax = Object.values(fluxoDia).reduce((a, f) => Math.max(a, Math.abs(f.entra - f.sai)), 0);
   const fxClasse = (day) => { const f = fluxoDia[day]; if (!f || !fxMax) return ""; const net = f.entra - f.sai; if (Math.abs(net) < 0.005) return ""; const r = Math.abs(net) / fxMax; return (net > 0 ? "fx-in" : "fx-out") + (r < 0.34 ? 1 : r < 0.67 ? 2 : 3); };
@@ -6176,12 +6438,13 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
 
   return (
     <>
-      <div className="kpi-row three">
+      <div className={`kpi-row ${desk ? "" : "three"}`}>
         <Kpi label="Plantões" value={nPlantoes} />
         <Kpi label="Horas no mês" value={totHoras.toFixed(0) + "h"} />
         <Kpi label="Dias trabalhados" value={Object.values(entriesByDay).filter((l) => l.some((e) => !e.off)).length} />
+        {desk && <Kpi label="Saldo do mês" value={fmtBRL(Object.values(fluxoDia).reduce((a, f) => a + f.entra - f.sai, 0))} sub="entra menos sai" />}
       </div>
-      <div className="calendar-grid">
+      <div className={`calendar-grid ${desk ? "cal-desk" : ""}`}>
         {WEEKDAYS_PT.map((w, i) => <div key={i} className="weekday-label">{w}</div>)}
         {cells.map((day, idx) => {
           if (!day) return <div key={idx} className="cal-cell empty" />;
@@ -6195,6 +6458,13 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                 <div className="cal-dots">{dEntries.slice(0, 4).map((e) => { const v = vinculoMap[e.vinculoId]; return <span key={e.id} className={`cal-dot ${e._kind === "escala" ? "esc" : ""} ${e.off ? "off" : ""}`} style={{ background: v ? v.cor : GOLD }} />; })}</div>
               )}
               {dEntries.some((e) => !e.off) && <span className="cal-hours">{fmtHoras(dEntries.reduce((a, e) => a + Number(e.hours || 0), 0))}</span>}
+              {desk && (() => { const f = fluxoDia[day]; const pl = dEntries.filter((e) => e._kind === "plantao" && !e.off).length; const its = f ? f.itens : [];
+                return (pl > 0 || its.length > 0) ? (
+                  <div className="cal-lines">
+                    {pl > 0 && <span className="cl-pl">{pl} {pl === 1 ? "plantão" : "plantões"}</span>}
+                    {its.slice(0, 3).map((x) => <span key={x.k} className={x.in ? "cl-in" : "cl-out"}>{x.in ? "+" : "−"} {x.nome}</span>)}
+                    {its.length > 3 && <span className="cl-more">+{its.length - 3}</span>}
+                  </div>) : null; })()}
             </div>
           );
         })}
@@ -6361,7 +6631,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   );
 }
 
-function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense }) {
+function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
   const [editKey, setEditKey] = useState(null);
   const gv = useGv();
   const [showForm, setShowForm] = useState(false);
@@ -6427,6 +6697,7 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
         <Kpi label="Contas no mês" value={monthExpenseItems.length} sub={monthExpenseItems.filter((e) => !e.paid).length + " pendente(s)"} />
       </div>
 
+      <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr", alignItems: "start" } : null}>
       <div className="card">
         <div className="card-head">
           <h3 className="card-title">Contas de {MONTHS_PT[viewMonth].toLowerCase()}</h3>
@@ -6451,7 +6722,7 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
         )}
         {visible.length > 0 && (
           <div className="xl" id="exp-list">
-            <div className="xl-row xl-head"><span /><span>Venc.</span><span>Descrição</span><span>Categoria</span><span>Tipo</span><span className="r">Valor</span><span>Situação</span><span /></div>
+            <div className="xl-row xl-head"><span /><span>Venc.</span><span>Descrição</span><span>Categoria</span><span className="xl-tipo">Tipo</span><span className="r">Valor</span><span>Situação</span><span /></div>
             {secs.map((sec) => (
               <div key={sec.id} className="xl-secbox" data-sec={sec.id}>
                 <div className={`xl-sec ${sec.id}`}><b>{sec.titulo}</b><span>{sec.items.length} {sec.items.length === 1 ? "conta" : "contas"} · {fmtBRL(sec.items.reduce((a, e) => a + e.amount, 0))}</span></div>
@@ -6514,6 +6785,13 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
         )}
         <div className="field-hint" style={{ marginTop: 10 }}>Toque no círculo para marcar a conta como paga.</div>
       </div>
+      {desk && (() => {
+        const m = {}; monthExpenseItems.forEach((e) => { const c = EXP_CAT_MAP[e.category] ? e.category : "outros"; m[c] = (m[c] || 0) + e.amount; });
+        const d = Object.entries(m).map(([c, v]) => ({ nome: (EXP_CAT_MAP[c] || EXP_CAT_MAP.outros).label, value: v, cor: (EXP_CAT_MAP[c] || EXP_CAT_MAP.outros).color })).sort((a, b) => b.value - a.value);
+        return <div className="card"><div className="card-head"><h3 className="card-title">Por categoria</h3><span className="card-note">{MONTHS_PT[viewMonth].toLowerCase()}</span></div>{d.length ? <InteractiveDonut data={d} size={170} stroke={22} centerLabel="no mês" /> : <div className="empty-state">Nenhuma despesa ainda.</div>}</div>;
+      })()}
+      </div>
+      {(() => { const conteudo = (
       <div className="grid-2">
         <div className="card">
           <div className="card-head"><h3 className="card-title">{showForm ? "Nova despesa" : "Adicionar despesa"}</h3>{showForm && <button className="btn-icon" onClick={() => setShowForm(false)}><IconX size={16} /></button>}</div>
@@ -6553,6 +6831,22 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
         </div>
 
       </div>
+      ); return desk ? (
+        <DGrid>
+          <DGv id="desp-add" wide open icon={<IconPlus size={18} />} title="Adicionar despesa" sub="conta fixa ou só deste mês" val="">{conteudo}</DGv>
+          <DGv id="desp-12m" icon={<IconTrending size={18} />} tone="#F59E0B" title="Despesas mês a mês" sub={`últimos ${chartMonths} meses`} val={"média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.expenses, 0) / history12.length : 0)}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
+            <SvgAreaChart data={history12} height={200} color="#F59E0B" valueKey="expenses" onOpen={(d) => goMonth && goMonth(d.y, d.m)} />
+          </DGv>
+          <DGv id="desp-venc" icon={<IconCalendar size={18} />} tone="#B91C1C" title="Próximos vencimentos" sub={monthExpenseItems.filter((e) => !e.paid).length + " conta(s) a pagar"} val={fmtBRL(totalPending)}>
+            <DProximos incomeItems={[]} expenseItems={monthExpenseItems} max={10} />
+          </DGv>
+          <DGv id="desp-imp" icon={<IconUpload size={18} />} tone="#334155" title="Importar extrato ou fatura" sub="PDF, OFX ou planilha" val="">
+            <p className="line-sub" style={{ marginTop: 0 }}>Traga as despesas do banco ou do cartão de uma vez.</p>
+            <button className="btn btn-ghost" onClick={() => goTab && goTab("importar")}>Abrir Importar</button>
+          </DGv>
+        </DGrid>
+      ) : conteudo; })()}
 
     </div>
   );
@@ -6597,7 +6891,7 @@ function AssetInput({ value, onChange, onPick, options, placeholder, showAllOnEm
 }
 
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
-  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint }) {
+  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
   const gv = useGv();
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
@@ -6696,6 +6990,12 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
         <Kpi label="Variação" num={profit} fmt={(n) => sgn(n) + " " + fmtBRL(Math.abs(n))} tone={profit >= 0 ? "var(--teal)" : "var(--brick)"} sub={signPct(profitPct) + " sobre o custo"} />
         <Kpi label="Rentabilidade" num={returnPct} fmt={signPct} tone={returnPct >= 0 ? "var(--teal)" : "var(--brick)"} sub="considera vendas" />
       </div>
+      {desk && positions.length > 0 && (
+        <div className="dgrid" style={{ gridTemplateColumns: "1fr", marginBottom: 14 }}>
+          <div className="card dinv-ev"><div className="card-head"><h3 className="card-title">Quanto você já investiu, mês a mês</h3><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
+            <SvgAreaChart data={investmentsHistory12} height={170} color="#7C3AED" valueKey="acumulado" /></div>
+        </div>
+      )}
 
       <div className="subtabs-row">
         <div className="subtabs">
