@@ -1072,6 +1072,45 @@ function NavStrip({ items, active, onPick }) {
   );
 }
 
+// barra de ações suspensa (celular): 5 seções + "Mais", que abre as outras numa folha
+const DOCK_IDS = ["inicio", "faturamento", "calendario", "despesas", "investimentos"];
+const DOCK_MAIS = ["organizacao", "metas", "visao", "contabilidade", "importar", "backup"];
+const DOCK_NOMES = { organizacao: "Organização", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
+function Dock({ active, onPick }) {
+  const [mais, setMais] = useState(false);
+  useEffect(() => {
+    if (!mais) return;
+    const k = (e) => { if (e.key === "Escape") setMais(false); };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [mais]);
+  const ir = (id) => { setMais(false); onPick(id); };
+  const emMais = DOCK_MAIS.includes(active);
+  return (
+    <>
+      {mais && (
+        <div className="dk-scrim" onClick={() => setMais(false)}>
+          <div className="dk-sheet" role="dialog" aria-label="Todas as seções" onClick={(e) => e.stopPropagation()}>
+            <h4>Todas as seções</h4>
+            <div className="dk-grid">
+              {DOCK_MAIS.map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = id === "backup" ? IconGear : t.icon; return (
+                <button key={id} type="button" data-tab={id} className={`dk-item ${active === id ? "on" : ""}`} aria-current={active === id ? "page" : undefined} onClick={() => ir(id)}>
+                  <span><Ic size={22} /></span>{DOCK_NOMES[id]}
+                </button>
+              ); })}
+            </div>
+          </div>
+        </div>
+      )}
+      <nav className="dock" aria-label="Páginas">
+        {DOCK_IDS.map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = t.icon; return (
+          <button key={id} type="button" data-tab={id} className={`dk-btn ${active === id ? "on" : ""}`} aria-label={NAV_LABELS[id]} title={NAV_LABELS[id]} aria-current={active === id ? "page" : undefined} onClick={() => ir(id)}><Ic size={22} /></button>
+        ); })}
+        <button type="button" className={`dk-btn ${mais || emMais ? "on" : ""}`} aria-label="Mais seções" aria-expanded={mais} onClick={() => setMais((v) => !v)}><IconMore size={22} /></button>
+      </nav>
+    </>
+  );
+}
+
 function Kpi({ label, value, sub, tone, num, fmt }) {
   return (
     <div className="kpi-box">
@@ -3601,6 +3640,34 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v41: barra de ações suspensa ================= */
+        .dock, .dk-scrim { display: none; }
+        @media (max-width: 720px) {
+          .navstrip { display: none; }
+          .main { padding-bottom: 110px; }
+          .dock { display: flex; position: fixed; left: 12px; right: 82px; bottom: calc(14px + env(safe-area-inset-bottom)); height: 58px; border-radius: 29px; z-index: 46;
+            align-items: center; justify-content: space-around; padding: 0 4px; background: rgba(255,255,255,.94); border: 1px solid #EEF0F3; box-shadow: 0 10px 30px rgba(15,23,42,.16);
+            -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+          .dk-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: none; color: #64748B; display: grid; place-items: center; cursor: pointer; padding: 0; transition: background .18s, color .18s, transform .12s; }
+          .dk-btn:active { transform: scale(.9); }
+          .dk-btn.on { background: #E6F4EC; color: #15803D; }
+          .dk-btn:focus-visible, .dk-item:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+          .fab2 { bottom: calc(15px + env(safe-area-inset-bottom)) !important; width: 58px !important; height: 58px !important; right: 12px !important; }
+          .dk-scrim { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(15,23,42,.35); animation: fadeIn .15s ease; }
+          .dk-sheet { position: absolute; left: 10px; right: 10px; bottom: calc(84px + env(safe-area-inset-bottom)); background: var(--surface, #fff); border-radius: 24px; padding: 16px 12px 14px; box-shadow: 0 18px 40px rgba(15,23,42,.25); animation: dkUp .2s ease; }
+          .dk-sheet h4 { margin: 0 6px 12px; font-size: 14.5px; }
+          .dk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 4px; }
+          .dk-item { border: none; background: none; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; padding: 0; }
+          .dk-item span { width: 50px; height: 50px; border-radius: 15px; background: var(--surface-3, #F1F5F9); display: grid; place-items: center; color: #334155; }
+          .dk-item.on span { background: #E6F4EC; color: #15803D; }
+          :root[data-theme="dark"] .dock { background: rgba(17,24,39,.94); border-color: #273244; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+          :root[data-theme="dark"] .dk-btn { color: #94A3B8; } :root[data-theme="dark"] .dk-btn.on, :root[data-theme="dark"] .dk-item.on span { background: rgba(52,211,153,.16); color: #34D399; }
+          :root[data-theme="dark"] .dk-item span { color: #CBD5E1; }
+        }
+        @keyframes dkUp { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .dk-sheet, .dk-scrim { animation: none; } }
+        @media print { .dock, .dk-scrim { display: none !important; } }
+
         /* ================= v37: investimentos por classe (modelo A) ================= */
         .cl-tot { margin: 2px 0 12px; } .cl-tot b { display: block; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; } .cl-tot small { display: block; font-size: 13px; margin-top: 2px; }
         .cl-bar { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 12px; background: var(--surface-3); } .cl-bar i { display: block; height: 100%; }
@@ -3902,6 +3969,7 @@ function App() {
         </header>
         <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup")} active={activeTab} onPick={goTab} />
       </div>
+      <Dock active={activeTab} onPick={goTab} />
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
