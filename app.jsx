@@ -3966,6 +3966,52 @@ function App() {
         .dgrid .rt-card { margin-bottom: 0; }
 
         .brand-nm span { color: #16A34A; } :root[data-theme="dark"] .brand-nm span { color: #34D399; }
+        /* ================= v51: telas estreitas (ex.: Galaxy Fold fechado, ~340px) ================= */
+        .kpi-value, .stat-value, .num.mono { white-space: nowrap; }
+        .kpi-value { font-size: clamp(16px, 5vw, 22px); }
+        .subtabs { min-width: 0; }
+        .kpi-box { min-width: 0; }
+        @media (min-width: 481px) and (max-width: 760px) { .kpi-row.three { grid-template-columns: 1fr 1fr; } .kpi-row.three > :nth-child(3) { grid-column: 1 / -1; } }
+        @media (max-width: 480px) {
+          .kpi-row, .kpi-row.three { grid-template-columns: 1fr; gap: 8px; }
+          .kpi-row .kpi-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; padding: 12px 14px; }
+          .kpi-row .kpi-box .kpi-label { grid-column: 1; }
+          .kpi-row .kpi-box .kpi-value { grid-column: 2; grid-row: 1 / span 2; margin: 0; text-align: right; font-size: clamp(16px, 5.2vw, 20px); }
+          .kpi-row .kpi-box .kpi-sub { grid-column: 1; margin-top: 2px; }
+          .subtabs-row { flex-wrap: wrap; row-gap: 4px; }
+          .subtabs-row .subtabs { order: 2; width: 100%; gap: 18px; }
+          .subtabs-row .inv-acoes, .subtabs-row > .btn { order: 1; width: 100%; }
+          .subtabs-row .inv-acoes .btn, .subtabs-row > .btn { width: 100%; justify-content: center; margin-bottom: 4px; }
+          .num.mono { font-size: 13.5px; }
+          /* tabelas viram lista: cada linha se ajeita na largura da tela */
+          .tbl thead { display: none; }
+          .tbl, .tbl tbody { display: block; width: 100%; }
+          .tbl tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+          .tbl tbody tr:last-child { border-bottom: none; }
+          .tbl tbody td { display: block; padding: 0; border: none !important; background: none !important; }
+          .tbl tbody td.hide-sm { display: none; }
+          .tbl tbody td.grow { flex: 1 1 auto; min-width: 0; }
+          .tbl tbody td { white-space: nowrap; } .tbl tbody td.grow, .tbl tbody td.grow * { white-space: normal; }
+          .tbl tbody td.num { margin-left: auto; }
+          .tbl tbody td:empty { display: none; }
+          .tbl tbody tr.fz-row, .tbl tbody tr.group { display: block; padding: 0; }
+          .tbl tbody tr.fz-row td, .tbl tbody tr.group td { padding: 10px 14px; }
+          .table-wrap { overflow-x: visible; }
+          /* faturamento: nome e valor em cima; status e lápis embaixo */
+          .tbl-fat tbody tr:not(.fz-row) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
+          .tbl-fat tbody tr:not(.fz-row) > td:nth-child(1) { grid-column: 1; grid-row: 1; }
+          .tbl-fat tbody tr:not(.fz-row) > td:nth-child(4) { grid-column: 2; grid-row: 1; }
+          .tbl-fat tbody tr:not(.fz-row) > td:nth-child(5) { grid-column: 1; grid-row: 2; padding-left: 20px; }
+          .tbl-fat tbody tr:not(.fz-row) > td:nth-child(6) { grid-column: 2; grid-row: 2; justify-self: end; }
+          /* investimentos: data, ativo e total em cima; tipo e lixeira embaixo */
+          .tbl-inv tbody tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; }
+          .tbl-inv tbody tr > td:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; align-self: start; }
+          .tbl-inv tbody tr > td:nth-child(2) { grid-column: 2; grid-row: 1; }
+          .tbl-inv tbody tr > td:nth-child(6) { grid-column: 3; grid-row: 1; }
+          .tbl-inv tbody tr > td:nth-child(3) { grid-column: 2; grid-row: 2; }
+          .tbl-inv tbody tr > td:nth-child(7) { grid-column: 3; grid-row: 2; justify-self: end; }
+        }
+
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -5148,13 +5194,13 @@ function FaturamentoTab({
         <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3><span className="card-note">toque no status para marcar como recebido</span></div>
         {sorted.length === 0 ? <div className="empty-state">Nenhuma receita neste mês ainda.</div> : (
           <div className="table-wrap">
-            <table className="tbl">
+            <table className="tbl tbl-fat">
               <thead><tr><th>Vínculo</th><th className="hide-sm">Data</th><th className="num hide-sm">Bruto</th><th className="num">Líquido</th><th>Status</th><th /></tr></thead>
               <tbody>
                 {sorted.map((it) => (
                   <React.Fragment key={it.key}>
                   <tr className={editKey === it.key ? "fz-aberta" : ""}>
-                    <td><span className="asset-cell"><span className="legend-dot" style={{ background: it.cor }} /><span><b>{it.nome}</b><span className="cell-sub show-sm">{it.dateLabel}</span></span></span></td>
+                    <td className="grow"><span className="asset-cell"><span className="legend-dot" style={{ background: it.cor }} /><span><b>{it.nome}</b><span className="cell-sub show-sm">{it.dateLabel}</span></span></span></td>
                     <td className="hide-sm">{it.dateLabel}{it.tipo !== "plantao" && !/ref\./.test(it.dateLabel) ? (it.tipo === "mensal" ? "" : "") : ""}</td>
                     <td className="num mono hide-sm">{fmtBRL(it.gross)}</td>
                     <td className="num mono">{fmtBRL(it.net)}</td>
@@ -8318,7 +8364,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
           <div className="card-head pad"><h3 className="card-title">Histórico de lançamentos</h3><span className="card-note">{investments.length} registro(s)</span></div>
           {investments.length === 0 ? <div className="empty-state">Nenhum lançamento ainda.</div> : (
             <div className="table-wrap">
-              <table className="tbl">
+              <table className="tbl tbl-inv">
                 <thead><tr><th>Data</th><th>Ativo</th><th>Tipo</th><th className="num hide-sm">Qtd.</th><th className="num hide-sm">Preço</th><th className="num">Total</th><th /></tr></thead>
                 <tbody>
                   {[...investments].sort((a, b) => b.date.localeCompare(a.date)).map((i) => {
@@ -8326,7 +8372,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                     return (
                       <tr key={i.id}>
                         <td>{fmtDatePt(i.date).slice(0, 5)}<span className="cell-sub">{i.date.slice(0, 4)}</span></td>
-                        <td><b>{i.description}</b><span className="cell-sub">{i.category}</span></td>
+                        <td className="grow"><b>{i.description}</b><span className="cell-sub">{i.category}</span></td>
                         <td><span className={`badge ${i.posicaoInicial || i.tipo === "ajuste" ? "" : sell ? "badge-pending" : "badge-paid"}`} style={{ cursor: "default" }}>{i.tipo === "ajuste" ? "Ajuste de preço médio" : i.posicaoInicial ? "Posição inicial" : sell ? "Venda" : "Compra"}</span></td>
                         <td className="num mono hide-sm">{i.qty > 0 ? Number(i.qty) : "—"}</td>
                         <td className="num mono hide-sm">{i.qty > 0 || i.tipo === "ajuste" ? fmtBRL(i.price) : "—"}</td>
