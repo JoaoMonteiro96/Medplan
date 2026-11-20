@@ -1916,6 +1916,8 @@ function App() {
     return Number(gross || 0) * (1 - rate / 100);
   }, [taxRateGeral]);
 
+  // quanto fica com você: nota da sua empresa (o app calcula), Pix como sócio (imposto que a outra empresa já pagou, se informado) ou carteira
+  const liquidoVinc = (v, gross) => liquidoDeVinc(v, gross, netOf);
   const buildIncomeItems = (y, m) => {
     const mk = monthKeyOf(y, m);
     const items = [];
@@ -1923,7 +1925,7 @@ function App() {
       const v = vinculoMap[s.vinculoId];
       const delayed = payDateOf(s) !== s.date;
       items.push({ key: "shift-" + s.id, vinculoId: s.vinculoId, forma: formaDe(v), nome: v ? v.nome : "(vínculo removido)", cor: v ? v.cor : GOLD,
-        tipo: "plantao", dateIso: payDateOf(s), dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: formaDe(v) === "pj" ? netOf(s.gross, v ? v.taxOverride : null) : Number(s.gross || 0),
+        tipo: "plantao", dateIso: payDateOf(s), dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: liquidoVinc(v, s.gross),
         recebido: !!s.recebido, toggle: () => toggleShiftReceived(s.id), removable: true, remove: () => removeShift(s.id), ref: { t: "shift", id: s.id } });
     });
     const refLabel = (ck) => { const [cy, cm] = ck.split("-").map(Number); return MONTHS_ABBR_PT[cm - 1] + "/" + cy; };
@@ -1932,7 +1934,7 @@ function App() {
       const ck = shiftMonthKey(mk, -d);
       if (v.startMonth > ck) return;
       items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, forma: formaDe(v), nome: v.nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, v.diaRecebimento || 5)),
-        dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: formaDe(v) === "pj" ? netOf(v.valorMensal, v.taxOverride) : Number(v.valorMensal || 0),
+        dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: liquidoVinc(v, v.valorMensal),
         recebido: !!(v.recebidoMonths && v.recebidoMonths[ck]), toggle: () => toggleVinculoMensalRecebido(v.id, ck), removable: false, ref: { t: "vinculo", id: v.id } });
       if (formaDe(v) === "clt") {
         const sal = Number(v.valorMensal || 0);
@@ -2095,7 +2097,7 @@ function App() {
   };
 
   const addVinculo = (data) => {
-    const v = { id: uid(), nome: data.nome, cor: data.cor, tipo: data.tipo, forma: data.forma || "pj", clt13: !!data.clt13, feriasMes: data.feriasMes === undefined ? null : data.feriasMes, taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride) };
+    const v = { id: uid(), nome: data.nome, cor: data.cor, tipo: data.tipo, forma: data.forma || "pj", clt13: !!data.clt13, feriasMes: data.feriasMes === undefined ? null : data.feriasMes, taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride), taxSocio: Number(data.taxSocio) || 0 };
     if (data.tipo === "plantao") v.prazoPadrao = Number(data.prazoPadrao) || 0;
     if (data.tipo === "mensal") {
       v.prazoMeses = Number(data.prazoMeses) || 0;
@@ -2116,7 +2118,7 @@ function App() {
   const updateVinculoPrazo = (id, val) => setVinculos((prev) => prev.map((v) => v.id === id ? (v.tipo === "mensal" ? { ...v, prazoMeses: Number(val) || 0 } : { ...v, prazoPadrao: Number(val) || 0 }) : v));
   const updateVinculo = (id, data) => setVinculos((prev) => prev.map((v) => {
     if (v.id !== id) return v;
-    const n = { ...v, nome: data.nome, cor: data.cor, forma: data.forma || v.forma || "pj", clt13: !!data.clt13, feriasMes: data.feriasMes === undefined ? v.feriasMes : data.feriasMes, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) };
+    const n = { ...v, nome: data.nome, cor: data.cor, forma: data.forma || v.forma || "pj", clt13: !!data.clt13, feriasMes: data.feriasMes === undefined ? v.feriasMes : data.feriasMes, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride), taxSocio: data.taxSocio === undefined ? v.taxSocio || 0 : Number(data.taxSocio) || 0 };
     if (v.tipo === "plantao") n.prazoPadrao = Number(data.prazoPadrao) || 0;
     else { n.prazoMeses = Number(data.prazoMeses) || 0; n.valorMensal = Number(data.valorMensal) || 0; n.diaRecebimento = Number(data.diaRecebimento) || 5; if (Array.isArray(data.escala) && data.escala.length) n.escala = data.escala; else delete n.escala; }
     return n;
@@ -2171,8 +2173,10 @@ function App() {
     const ja = vinculos.find((v) => v.tipo === "plantao" && stripAcc(v.nome).replace(/\s+/g, " ").trim() === chave);
     const vid = ja ? ja.id : uid();
     const extra = { ...(forma ? { forma } : {}) };
-    if (ja) setVinculos((prev) => prev.map((v) => (v.id === vid ? { ...v, ...extra, prazoPadrao: prazo, ...(tx !== undefined ? { taxOverride: tx } : {}), ...(fixo ? { fixos: [...(v.fixos || []), fixo] } : {}) } : v)));
-    else setVinculos((prev) => [...prev, { id: vid, nome, cor: PALETTE[prev.length % PALETTE.length], tipo: "plantao", ...extra, taxOverride: tx !== undefined ? tx : null, prazoPadrao: prazo, ...(fixo ? { fixos: [fixo] } : {}) }]);
+    const socio = (forma || (ja && formaDe(ja))) === "socio";
+    const txCampo = tx === undefined ? {} : socio ? { taxSocio: tx } : { taxOverride: tx };
+    if (ja) setVinculos((prev) => prev.map((v) => (v.id === vid ? { ...v, ...extra, prazoPadrao: prazo, ...txCampo, ...(fixo ? { fixos: [...(v.fixos || []), fixo] } : {}) } : v)));
+    else setVinculos((prev) => [...prev, { id: vid, nome, cor: PALETTE[prev.length % PALETTE.length], tipo: "plantao", ...extra, taxOverride: tx !== undefined && !socio ? tx : null, ...(socio && tx !== undefined ? { taxSocio: tx } : {}), prazoPadrao: prazo, ...(fixo ? { fixos: [fixo] } : {}) }]);
     const serie = fixo ? fixo.id : datas.length > 1 ? uid() : null, base = uid();
     setShifts((prev) => [...prev, ...datas.map((date, n) => ({ id: base + "-" + n, date, vinculoId: vid, gross: Number(gross) || 0, hours: Number(hours) || 0, recebido: false, prazoDias: prazo, payDate: addDaysIso(date, prazo), ...(serie ? { serie } : {}) }))]);
     return vid;
@@ -2379,7 +2383,7 @@ function App() {
     let semHoras = 0, semHorasNet = 0;
     shifts.forEach((s) => {
       if (!inMonth(s.date, y, m)) return;
-      const v = vinculoMap[s.vinculoId], h = Number(s.hours || 0), net = netOf(s.gross, v ? v.taxOverride : null);
+      const v = vinculoMap[s.vinculoId], h = Number(s.hours || 0), net = liquidoVinc(v, s.gross);
       if (h <= 0) { semHoras += 1; semHorasNet += net; return; }
       const o = slot(s.vinculoId || "?", v); o.net += net; o.hours += h; o.turnos += 1; dias.add(s.date);
     });
@@ -2397,7 +2401,7 @@ function App() {
         const s = slot(v.id, v); s.hours += e.hours; s.turnos += 1; dias.add(e.date);
       });
       const o = by[v.id];
-      if (o && o.hours > 0) o.net += netOf(v.valorMensal, v.taxOverride);
+      if (o && o.hours > 0) o.net += liquidoVinc(v, v.valorMensal);
       else if (v.startMonth <= mk) mensalSemHoras.push(v.nome);
     });
     const byVinculo = Object.values(by).filter((o) => o.hours > 0).map((o) => ({ ...o, hourly: o.net / o.hours })).sort((a, b) => b.hourly - a.hourly);
@@ -2470,10 +2474,10 @@ function App() {
   })();
 
   const totalRecebidoAllTime = useMemo(() => {
-    let total = shifts.filter((s) => s.recebido).reduce((a, s) => a + netOf(s.gross, vinculoMap[s.vinculoId] ? vinculoMap[s.vinculoId].taxOverride : null), 0);
+    let total = shifts.filter((s) => s.recebido).reduce((a, s) => a + liquidoVinc(vinculoMap[s.vinculoId], s.gross), 0);
     vinculos.filter((v) => v.tipo === "mensal").forEach((v) => {
       const rmap = v.recebidoMonths || {};
-      total += Object.keys(rmap).filter((k) => rmap[k]).length * netOf(v.valorMensal, v.taxOverride);
+      total += Object.keys(rmap).filter((k) => rmap[k]).length * liquidoVinc(v, v.valorMensal);
     });
     extraRecurringIncomes.forEach((e) => {
       const rmap = e.recebidoMonths || {};
@@ -2617,12 +2621,12 @@ function App() {
         const [y, m] = mAgo(k);
         shifts.filter((x) => inMonth(x.date, y, m) && Number(x.hours) > 0).forEach((x) => {
           const v = vinculoMap[x.vinculoId]; if (!v) return;
-          const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += netOf(x.gross, v.taxOverride); o.h += Number(x.hours);
+          const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += liquidoVinc(v, x.gross); o.h += Number(x.hours);
         });
         vinculos.filter((v) => v.tipo === "mensal" && v.startMonth <= monthKeyOf(y, m)).forEach((v) => {
           const h = (workStats(y, m).byVinculo.find((o) => o.id === v.id) || { hours: 0 }).hours;
           if (h <= 0) return;
-          const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += netOf(v.valorMensal, v.taxOverride); o.h += h;
+          const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += liquidoVinc(v, v.valorMensal); o.h += h;
         });
       });
       return Object.values(hv).filter((o) => o.h > 0);
@@ -4073,7 +4077,7 @@ function App() {
         .fg-v small { font-size: 12px; font-weight: 600; } .fg-v small.pend { color: #B45309; } .fg-v small.ok { color: #15803D; }
         .fg-body { background: var(--surface-2); border-top: 1px solid var(--border); padding-bottom: 4px; }
         .fg-body .tbl { background: transparent; } .fg-body .tbl th { background: transparent; }
-        .fg-todos { margin: 10px 18px 2px; font-size: 13px; }
+        .fg-todos { margin: 10px 18px 2px; font-size: 13px; } .fat-bruto { font-size: 11.5px; color: var(--text-dim); font-weight: 400; font-family: inherit; }
         .fg-body .tbl thead th:nth-child(2), .fg-body .tbl tbody tr:not(.fz-row) > td:nth-child(2) { display: none; }
         .fg-item { display: flex; flex-direction: column; } .fg-item small { font-size: 12px; color: var(--text-dim); }
         @media (max-width: 480px) {
@@ -4810,11 +4814,12 @@ function PlantaoAddForm({ vinculos = [], taxaPadrao, onSave }) {
   const [valor, setValor] = useState("");
   const [forma, setForma] = useState("pj");
   const [taxa, setTaxa] = useState(taxaPadrao ? String(taxaPadrao).replace(".", ",") : "");
+  const [taxaSocio, setTaxaSocio] = useState("");
   const [prazo, setPrazo] = useState(0);
   const [erro, setErro] = useState("");
-  const escolherLocal = (v) => { setLocal(v.nome); setForma(formaDe(v)); if (v.taxOverride !== null && v.taxOverride !== undefined && formaDe(v) === "pj") setTaxa(String(v.taxOverride).replace(".", ",")); setPrazo(Number(v.prazoPadrao) || 0); setErro(""); };
+  const escolherLocal = (v) => { setLocal(v.nome); setForma(formaDe(v)); if (v.taxOverride !== null && v.taxOverride !== undefined && formaDe(v) === "pj") setTaxa(String(v.taxOverride).replace(".", ",")); setTaxaSocio(Number(v.taxSocio) > 0 ? String(v.taxSocio).replace(".", ",") : ""); setPrazo(Number(v.prazoPadrao) || 0); setErro(""); };
   const horas = dur === "outra" ? Number(String(durOutra).replace(",", ".")) || 0 : dur;
-  const tx = forma === "pj" ? Number(String(taxa).replace(",", ".")) || 0 : 0;
+  const tx = forma === "pj" ? Number(String(taxa).replace(",", ".")) || 0 : forma === "socio" ? Math.min(99, Math.max(0, Number(String(taxaSocio).replace(",", ".")) || 0)) : 0;
   const liq = (Number(valor) || 0) * (1 - tx / 100);
   const cfg = { dias, cada: cada === "mes" ? "mes" : Number(cada), ordem, inicio };
   const datas = modo === "um" ? [data] : fixoDatas(cfg, inicio, isoDe(new Date(new Date(inicio + "T12:00:00").getTime() + 180 * 864e5)));
@@ -4854,11 +4859,12 @@ function PlantaoAddForm({ vinculos = [], taxaPadrao, onSave }) {
       </div>
       <FormaPicker value={forma} onChange={setForma} />
       {forma === "pj" && <div className="field"><label>Imposto da sua empresa (%)</label><input type="text" inputMode="decimal" value={taxa} onChange={(e) => setTaxa(e.target.value.replace(/[^0-9,.]/g, ""))} placeholder="Ex.: 15,5" />{taxaPadrao ? <div className="field-hint">Sugerido pela Contabilidade: {String(taxaPadrao).replace(".", ",")}%.</div> : null}</div>}
+      {forma === "socio" && <SocioImposto value={taxaSocio} onChange={(v) => { setTaxaSocio(v); setErro(""); }} />}
       <div className="field"><label>Quando paga</label><PrazoPicker unit="dias" value={prazo} onChange={setPrazo} /></div>
       {Number(valor) > 0 && (
         <div className="rc-info ok" data-resumo>
-          {modo === "um" ? <>Plantão de {fmtHoras(horas)} em {fmtDatePt(data)}: {fmtBRL(Number(valor))}{forma === "pj" ? <>, fica com você {fmtBRL(liq)}</> : null}.</>
-            : <>{dias.length ? ORDEM_SEM.filter((d) => dias.includes(d)).map((d) => DIAS_SEM[d]).join(", ") : "Escolha os dias"} · {fmtHoras(horas)} · {fmtBRL(Number(valor))}. Cerca de <b>{fmtBRL(liq * porMes)}</b> por mês{forma === "pj" ? ", já sem o imposto" : ""}. Próximos: {prox.join(", ")}. Os plantões entram no Calendário e dá para tirar um dia específico.</>}
+          {modo === "um" ? <>Plantão de {fmtHoras(horas)} em {fmtDatePt(data)}: {fmtBRL(Number(valor))}{tx > 0 ? <>, {forma === "socio" ? "cai no seu Pix" : "fica com você"} {fmtBRL(liq)}</> : null}.</>
+            : <>{dias.length ? ORDEM_SEM.filter((d) => dias.includes(d)).map((d) => DIAS_SEM[d]).join(", ") : "Escolha os dias"} · {fmtHoras(horas)} · {fmtBRL(Number(valor))}. Cerca de <b>{fmtBRL(liq * porMes)}</b> por mês{tx > 0 ? ", já sem o imposto" : ""}. Próximos: {prox.join(", ")}. Os plantões entram no Calendário e dá para tirar um dia específico.</>}
         </div>
       )}
       {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
@@ -4925,6 +4931,8 @@ const FORMAS = [
   ["clt", "Carteira assinada", "Salário que já cai líquido na conta. Inclui 13º e férias.", "imposto já descontado", "#DCFCE7", "clt"],
 ];
 const formaDe = (x) => { const f = x && x.forma === "pf" ? "socio" : x && x.forma; return FORMAS.some((y) => y[0] === f) ? f : "pj"; };
+// quanto fica com você: nota da sua empresa (o app calcula), Pix como sócio (imposto que a outra empresa já pagou, se informado) ou carteira
+const liquidoDeVinc = (v, gross, netOf) => { const f = formaDe(v), g = Number(gross || 0); if (f === "pj") return netOf(g, v ? v.taxOverride : null); if (f === "socio") return g * (1 - Math.min(99, Math.max(0, Number(v && v.taxSocio) || 0)) / 100); return g; };
 const FORMA_CURTA = { pj: "", socio: "Pix como sócio", clt: "carteira assinada" };
 function FormaPicker({ value = "pj", onChange }) {
   return (
@@ -4939,9 +4947,24 @@ function FormaPicker({ value = "pj", onChange }) {
           </button>
         ))}
       </div>
-      {value === "socio" && <div className="field-hint">Isento para você. Acima de R$ 50 mil por mês da mesma empresa, ela retém 10% na fonte.</div>}
+      {value === "socio" && <div className="field-hint">Você não paga imposto sobre esse Pix. Acima de R$ 50 mil por mês da mesma empresa, ela retém 10% na fonte.</div>}
     </div>
   );
+}
+// Pix como sócio: imposto que a outra empresa já pagou (opcional), para ver o bruto e o líquido
+function SocioImposto({ value, onChange }) {
+  return (
+    <div className="field socio-imp" style={{ gridColumn: "1 / -1" }}>
+      <label>Imposto pago pela empresa (%) <small style={{ fontWeight: 400, color: "var(--text-dim)" }}>opcional</small></label>
+      <input type="text" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value.replace(/[^0-9,.]/g, ""))} placeholder="Ex.: 16" />
+      <div className="field-hint">A empresa paga o imposto antes de mandar o Pix. Informe o percentual para ver o valor bruto e quanto cai para você. Você não paga nada a mais.</div>
+    </div>
+  );
+}
+function BrutoLiquido({ bruto, pct }) {
+  const p = Math.min(99, Math.max(0, Number(String(pct || "").replace(",", ".")) || 0));
+  if (!(bruto > 0) || !(p > 0)) return null;
+  return <div className="rc-res" style={{ gridColumn: "1 / -1" }}><div><span>Valor bruto</span><b className="mono">{fmtBRL(bruto)}</b></div><div><span>Imposto pago pela empresa</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(bruto * p / 100)}</b></div><div className="t"><span>Cai no seu Pix</span><b className="mono">{fmtBRL(bruto * (1 - p / 100))}</b></div></div>;
 }
 // imposto mensal de pessoa física (carnê-leão), tabela de 2026 com a redução até R$ 7.350
 function irMensal(base) {
@@ -5076,6 +5099,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
   const [cor, setCor] = useState(ini.cor || PALETTE[0]);
   const [tipo, setTipo] = useState(inicial ? ini.tipo : fixo ? "mensal" : "plantao");
   const [taxOverride, setTaxOverride] = useState(ini.taxOverride !== null && ini.taxOverride !== undefined && formaDe(ini) === "pj" ? String(ini.taxOverride) : (taxaPadrao ? String(taxaPadrao).replace(".", ",") : ""));
+  const [taxSocio, setTaxSocio] = useState(Number(ini.taxSocio) > 0 ? String(ini.taxSocio).replace(".", ",") : "");
   const [valorMensal, setValorMensal] = useState(inicial && ini.tipo === "mensal" ? Number(ini.valorMensal) || 0 : "");
   const [diaRecebimento, setDiaRecebimento] = useState(ini.diaRecebimento || 5);
   const [prazoPadrao, setPrazoPadrao] = useState(Number(ini.prazoPadrao) || 0);
@@ -5091,8 +5115,10 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
     if (tipo === "mensal" && !(Number(valorMensal) > 0)) { setErroV("Informe o valor que você recebe por mês."); return; }
     const tx = Number(String(taxOverride).replace(",", "."));
     if (forma === "pj" && (String(taxOverride).trim() === "" || !(tx >= 0))) { setErroV("Informe o imposto da sua empresa. Se não souber, use o valor sugerido."); return; }
+    const txS = Number(String(taxSocio).replace(",", ".")) || 0;
+    if (forma === "socio" && (txS < 0 || txS >= 100)) { setErroV("O imposto pago pela empresa precisa ficar entre 0 e 99%."); return; }
     setErroV("");
-    onSubmit({ nome, cor, tipo, taxOverride: forma === "pj" ? tx : 0, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, forma, clt13: forma === "clt" && tipo === "mensal" ? clt13 : false, feriasMes: forma === "clt" && tipo === "mensal" && feriasMes !== "" ? Number(feriasMes) : null, startMonth: defaultStartMonth });
+    onSubmit({ nome, cor, tipo, taxOverride: forma === "pj" ? tx : 0, taxSocio: forma === "socio" ? txS : 0, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, forma, clt13: forma === "clt" && tipo === "mensal" ? clt13 : false, feriasMes: forma === "clt" && tipo === "mensal" && feriasMes !== "" ? Number(feriasMes) : null, startMonth: defaultStartMonth });
     if (!inicial) { setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0); setEscala([]); }
   };
 
@@ -5109,11 +5135,13 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
         </div>}
         <FormaPicker value={forma} onChange={(f) => { setForma(f); setErroV(""); }} />
         {forma === "pj" && <div className="field"><label>Imposto da sua empresa (%)</label><input type="text" inputMode="decimal" value={taxOverride} onChange={(e) => { setTaxOverride(e.target.value.replace(/[^0-9,.]/g, "")); setErroV(""); }} placeholder="Ex.: 15,5" />{taxaPadrao ? <div className="field-hint">Sugerido pela Contabilidade: {String(taxaPadrao).replace(".", ",")}%. Se o contador passou outro número, troque.</div> : null}</div>}
+        {forma === "socio" && <SocioImposto value={taxSocio} onChange={(v) => { setTaxSocio(v); setErroV(""); }} />}
         {tipo === "mensal" && (
           <>
-            <div className="field"><label>{forma === "clt" ? "Quanto cai na sua conta por mês" : forma === "socio" ? "Quanto cai no Pix por mês" : "Valor por mês (bruto, da nota)"}</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
+            <div className="field"><label>{forma === "clt" ? "Quanto cai na sua conta por mês" : forma === "socio" ? (Number(String(taxSocio).replace(",", ".")) > 0 ? "Valor bruto por mês (antes do imposto da empresa)" : "Quanto cai no Pix por mês") : "Valor por mês (bruto, da nota)"}</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
             <div className="field"><label>Cai todo dia</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
             {forma === "pj" && Number(valorMensal) > 0 && String(taxOverride).trim() !== "" && <div className="rc-res" style={{ gridColumn: "1 / -1" }}><div><span>Valor da nota</span><b className="mono">{fmtBRL(Number(valorMensal))}</b></div><div><span>Imposto</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(Number(valorMensal) * (Number(String(taxOverride).replace(",", ".")) || 0) / 100)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(Number(valorMensal) * (1 - (Number(String(taxOverride).replace(",", ".")) || 0) / 100))}</b></div></div>}
+            {forma === "socio" && Number(valorMensal) > 0 && <BrutoLiquido bruto={Number(valorMensal)} pct={taxSocio} />}
             {forma === "clt" && (
               <>
                 <label className="ct-check" style={{ gridColumn: "1 / -1", marginTop: 0 }}><input type="checkbox" checked={clt13} onChange={(e) => setClt13(e.target.checked)} /><span>Recebo 13º salário<small>Entra metade em novembro e metade em dezembro.</small></span></label>
@@ -5337,7 +5365,7 @@ function FaturamentoTab({
                     <td className="grow"><span className="fg-item"><b>{it.tipo === "plantao" ? rotuloPlantao(it) : it.dateLabel || it.nome}</b></span></td>
                     <td className="hide-sm">{it.dateLabel}{it.tipo !== "plantao" && !/ref\./.test(it.dateLabel) ? (it.tipo === "mensal" ? "" : "") : ""}</td>
                     <td className="num mono hide-sm">{fmtBRL(it.gross)}</td>
-                    <td className="num mono">{fmtBRL(it.net)}</td>
+                    <td className="num mono">{fmtBRL(it.net)}{it.gross - it.net > 0.5 && <small className="show-sm fat-bruto">bruto {fmtBRL(it.gross)}</small>}</td>
                     <td><button className={`badge ${it.recebido ? "badge-paid" : "badge-pending"}`} onClick={it.toggle}>{it.recebido ? "Recebido" : "Pendente"}</button></td>
                     <td className="num"><button type="button" className={`fz-pen ${editKey === it.key ? "on" : ""}`} aria-label={"Editar " + it.nome} aria-expanded={editKey === it.key} onClick={() => setEditKey(editKey === it.key ? null : it.key)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg></button></td>
                   </tr>
@@ -6135,7 +6163,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
         <div className="kv-line"><span>Imposto do ano</span><b className="mono">{fmtBRL(irr.devido)}</b></div>
         <div className="kv-line"><span>Você paga a menos por causa de saúde e escola</span><b className="mono" style={{ color: devolucaoDed > 0 ? "#15803D" : undefined }}>{fmtBRL(devolucaoDed)}</b></div>
         <div className="kv-line"><span>Declaração mais vantajosa</span><b>{irr.usaSimp ? "Simplificada" : "Completa"}</b></div>
-        {anoIsento.length > 0 && <div className="kv-line"><span>Recebido sem imposto (Pix como sócio e dividendos)</span><b className="mono">{fmtBRL(somaG(anoIsento))}</b></div>}
+        {anoIsento.length > 0 && <div className="kv-line"><span>Recebido sem imposto (Pix como sócio e dividendos)</span><b className="mono">{fmtBRL(anoIsento.reduce((a, i) => a + (Number(i.forma === "socio" ? i.net : i.gross) || 0), 0))}</b></div>}
         <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Preencha quanto você recebeu" : (saldoIr >= 0 ? "Você recebe de volta " : "Você ainda paga ") + fmtBRL(Math.abs(saldoIr))}</b></div>
       </div>
       <div className="field-hint">Valor aproximado, com a tabela de {viewYear >= 2026 ? 2026 : viewYear}. Quem confirma é o contador na declaração.</div>
@@ -7629,8 +7657,8 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                   <div className="stub-tear" />
                   <div className="stub-row"><span className="k">Valor bruto</span><span className="v mono">{fmtBRL(e.gross)}</span></div>
                   <div className="stub-row"><span className="k">Horas trabalhadas</span><span className="v mono">{e.hours || 0}h</span></div>
-                  <div className="stub-row"><span className="k">Tributação</span><span className="v mono" style={{ color: "var(--brick)" }}>- {fmtBRL(e.gross - netOf(e.gross, v ? v.taxOverride : null))}</span></div>
-                  <div className="stub-row"><span className="k">Valor líquido</span><span className="v mono" style={{ color: "var(--gold)" }}>{fmtBRL(netOf(e.gross, v ? v.taxOverride : null))}</span></div>
+                  <div className="stub-row"><span className="k">{formaDe(v) === "socio" ? "Imposto pago pela empresa" : "Tributação"}</span><span className="v mono" style={{ color: "var(--brick)" }}>- {fmtBRL(e.gross - liquidoDeVinc(v, e.gross, netOf))}</span></div>
+                  <div className="stub-row"><span className="k">Valor líquido</span><span className="v mono" style={{ color: "var(--gold)" }}>{fmtBRL(liquidoDeVinc(v, e.gross, netOf))}</span></div>
                   <div className="stub-row"><span className="k">Prazo de pagamento</span>
                     <select className="tax-mini wide" value={e.prazoDias || 0} onChange={(ev) => updateShiftPrazo(e.id, ev.target.value)}>
                       {prazoOptions("dias", e.prazoDias || 0).map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
@@ -7676,7 +7704,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                   <input id="pl-local" value={local} onChange={(e) => { setLocal(e.target.value); setErro(""); }} placeholder="Ex.: Hospital São Lucas, UPA Centro" autoComplete="off" />
                   {plLocais.length > 0 && (
                     <div className="chip-row pl-chips" role="group" aria-label="Locais já usados">
-                      {plLocais.map((v) => { const on = stripAcc(local).trim() === stripAcc(v.nome).trim(); return <button key={v.id} type="button" data-local={v.nome} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => { setLocal(v.nome); setPrazoDias(Number(v.prazoPadrao) || 0); setTaxa(v.taxOverride !== null && v.taxOverride !== undefined ? String(v.taxOverride) : ""); setErro(""); }}><i style={{ background: v.cor }} />{v.nome}</button>; })}
+                      {plLocais.map((v) => { const on = stripAcc(local).trim() === stripAcc(v.nome).trim(); return <button key={v.id} type="button" data-local={v.nome} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => { setLocal(v.nome); setPrazoDias(Number(v.prazoPadrao) || 0); setTaxa(formaDe(v) === "socio" ? (Number(v.taxSocio) > 0 ? String(v.taxSocio) : "0") : v.taxOverride !== null && v.taxOverride !== undefined ? String(v.taxOverride) : ""); setErro(""); }}><i style={{ background: v.cor }} />{v.nome}</button>; })}
                     </div>
                   )}
                   <div className="field-hint">{plLocais.length ? "Toque em um local já usado ou digite um novo. Local novo fica guardado sozinho." : "É só digitar o nome. O local fica guardado para as próximas vezes."}</div>
