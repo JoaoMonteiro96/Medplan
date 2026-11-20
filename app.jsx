@@ -4085,7 +4085,7 @@ function App() {
         .conf-v { font-size: 14px; white-space: nowrap; }
         .conf-ok { display: inline-flex; align-items: center; gap: 5px; border: none; border-radius: 999px; background: var(--teal); color: #fff; font: inherit; font-size: 13px; font-weight: 600; padding: 8px 13px; cursor: pointer; white-space: nowrap; }
         .conf-ok:hover { filter: brightness(1.06); } .conf-ok:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
-        .conf-mais { margin-top: 6px; font-size: 13px; } .conf-todos { white-space: nowrap; }
+        .conf-mais { margin-top: 6px; font-size: 13px; } .conf-atr { font-style: normal; color: #B45309; font-weight: 600; } .conf-todos { white-space: nowrap; }
         @media (max-width: 380px) { .conf-it { grid-template-columns: auto minmax(0, 1fr) auto; } .conf-v { grid-column: 2; grid-row: 2; font-size: 13px; } .conf-ok { grid-column: 3; grid-row: 1 / span 2; } }
         .fg-todos { margin: 10px 18px 2px; font-size: 13px; } .tbl .fz-ed, .tbl .fz-ed * { white-space: normal; } .tbl .fz-ed .fm-op b, .tbl .fz-ed .fm-op small { overflow-wrap: anywhere; } .tbl .fz-ed label { overflow-wrap: break-word; }
         .fat-bruto { font-size: 11.5px; color: var(--text-dim); font-weight: 400; font-family: inherit; }
@@ -5319,16 +5319,16 @@ function FaturamentoTab({
   // o que já devia ter caído e ainda não foi marcado: um toque para confirmar
   const [verTodosConf, setVerTodosConf] = useState(false);
   const hojeIso = todayStr();
-  const aConfirmar = monthIncomeItems.filter((i) => !i.recebido && String(i.dateIso || "") <= hojeIso).sort((a, b) => String(a.dateIso || "").localeCompare(String(b.dateIso || "")));
+  const aConfirmar = monthIncomeItems.filter((i) => !i.recebido).sort((a, b) => String(a.dateIso || "").localeCompare(String(b.dateIso || "")));
   const confirmar = aConfirmar.length > 0 && (
     <div className="card conf-card" id="fat-confirmar">
-      <div className="conf-head"><div><h3 className="card-title">Confirme o que caiu na conta</h3><span className="card-note">{aConfirmar.length === 1 ? "1 recebimento com data já passada" : aConfirmar.length + " recebimentos com data já passada"}</span></div>
+      <div className="conf-head"><div><h3 className="card-title">Confirme o que caiu na conta</h3><span className="card-note">{(() => { const at = aConfirmar.filter((i) => String(i.dateIso || "") < hojeIso).length; const tot = aConfirmar.length === 1 ? "1 a receber" : aConfirmar.length + " a receber"; return at ? `${tot}, ${at} com a data já passada` : `${tot} em ${MONTHS_PT[viewMonth].toLowerCase()}`; })()}</span></div>
         {aConfirmar.length > 1 && <button type="button" className="btn btn-ghost btn-sm conf-todos" onClick={() => aConfirmar.forEach((x) => x.toggle())}>Recebi todos</button>}</div>
       <div className="conf-list">
         {(verTodosConf ? aConfirmar : aConfirmar.slice(0, 5)).map((it) => (
           <div key={it.key} className="conf-it">
             <span className="legend-dot" style={{ background: it.cor }} />
-            <span className="conf-t"><b>{String(it.nome || "").split(" · ")[0]}</b><small>{it.tipo === "plantao" ? rotuloPlantao(it) : it.dateLabel}</small></span>
+            <span className="conf-t"><b>{String(it.nome || "").split(" · ")[0]}</b><small>{it.tipo === "plantao" ? rotuloPlantao(it) : it.dateLabel}{String(it.dateIso || "") < hojeIso ? <em className="conf-atr"> · atrasado</em> : null}</small></span>
             <b className="mono conf-v">{fmtBRL(it.net)}</b>
             <button type="button" className="conf-ok" onClick={it.toggle} aria-label={"Marcar " + it.nome + " como recebido"}><IconCheck size={15} color="#fff" /> Recebi</button>
           </div>
