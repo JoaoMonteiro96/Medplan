@@ -1835,7 +1835,7 @@ function App() {
     shifts.filter((s) => inMonth(payDateOf(s), y, m)).forEach((s) => {
       const v = vinculoMap[s.vinculoId];
       const delayed = payDateOf(s) !== s.date;
-      items.push({ key: "shift-" + s.id, vinculoId: s.vinculoId, nome: v ? v.nome : "(vínculo removido)", cor: v ? v.cor : GOLD,
+      items.push({ key: "shift-" + s.id, vinculoId: s.vinculoId, forma: formaDe(v), nome: v ? v.nome : "(vínculo removido)", cor: v ? v.cor : GOLD,
         tipo: "plantao", dateIso: payDateOf(s), dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: netOf(s.gross, v ? v.taxOverride : null),
         recebido: !!s.recebido, toggle: () => toggleShiftReceived(s.id), removable: true, remove: () => removeShift(s.id), ref: { t: "shift", id: s.id } });
     });
@@ -1844,7 +1844,7 @@ function App() {
       const d = Number(v.prazoMeses || 0);
       const ck = shiftMonthKey(mk, -d);
       if (v.startMonth > ck) return;
-      items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, nome: v.nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, v.diaRecebimento || 5)),
+      items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, forma: formaDe(v), nome: v.nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, v.diaRecebimento || 5)),
         dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: netOf(v.valorMensal, v.taxOverride),
         recebido: !!(v.recebidoMonths && v.recebidoMonths[ck]), toggle: () => toggleVinculoMensalRecebido(v.id, ck), removable: false, ref: { t: "vinculo", id: v.id } });
     });
@@ -1852,15 +1852,16 @@ function App() {
       const d = Number(e.prazoMeses || 0);
       const ck = shiftMonthKey(mk, -d);
       if (e.startMonth > ck) return;
-      items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, nome: e.description, cor: SLATE, tipo: "extra", dateIso: dateStr(y, m, clampDay(y, m, e.diaRecebimento || 5)),
+      items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, forma: formaDe(e), nome: e.description, cor: SLATE, tipo: "extra", dateIso: dateStr(y, m, clampDay(y, m, e.diaRecebimento || 5)),
         dateLabel: d > 0 ? `dia ${e.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${e.diaRecebimento || 5} · recorrente`, gross: Number(e.amount || 0), net: netOf(e.amount, e.taxOverride),
         recebido: !!(e.recebidoMonths && e.recebidoMonths[ck]), toggle: () => toggleExtraIncomeRecebido(e.id, ck), removable: true, remove: () => removeExtraRecurringIncome(e.id), ref: { t: "extra", id: e.id } });
     });
     oneOffIncomes.filter((o) => inMonth(o.date, y, m)).forEach((o) => {
-      items.push({ key: "one-" + o.id, vinculoId: null, nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · receita extra",
+      items.push({ key: "one-" + o.id, vinculoId: null, forma: o.forma || "pf", nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · receita extra",
         gross: Number(o.amount || 0), net: o.taxOverride !== undefined && o.taxOverride !== null && String(o.taxOverride) !== "" ? netOf(o.amount, o.taxOverride) : Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
         removable: true, removeOne: () => setOneOffIncomes((prev) => prev.filter((x) => x.id !== o.id)), ref: { t: "avulsa", id: o.id } });
     });
+    items.forEach((it) => { if (FORMA_CURTA[it.forma]) it.dateLabel += " · " + FORMA_CURTA[it.forma]; });
     return items;
   };
 
@@ -1998,7 +1999,7 @@ function App() {
   };
 
   const addVinculo = (data) => {
-    const v = { id: uid(), nome: data.nome, cor: data.cor, tipo: data.tipo, taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride) };
+    const v = { id: uid(), nome: data.nome, cor: data.cor, tipo: data.tipo, forma: data.forma || "pj", taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride) };
     if (data.tipo === "plantao") v.prazoPadrao = Number(data.prazoPadrao) || 0;
     if (data.tipo === "mensal") {
       v.prazoMeses = Number(data.prazoMeses) || 0;
@@ -2019,15 +2020,15 @@ function App() {
   const updateVinculoPrazo = (id, val) => setVinculos((prev) => prev.map((v) => v.id === id ? (v.tipo === "mensal" ? { ...v, prazoMeses: Number(val) || 0 } : { ...v, prazoPadrao: Number(val) || 0 }) : v));
   const updateVinculo = (id, data) => setVinculos((prev) => prev.map((v) => {
     if (v.id !== id) return v;
-    const n = { ...v, nome: data.nome, cor: data.cor, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) };
+    const n = { ...v, nome: data.nome, cor: data.cor, forma: data.forma || v.forma || "pj", taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) };
     if (v.tipo === "plantao") n.prazoPadrao = Number(data.prazoPadrao) || 0;
     else { n.prazoMeses = Number(data.prazoMeses) || 0; n.valorMensal = Number(data.valorMensal) || 0; n.diaRecebimento = Number(data.diaRecebimento) || 5; if (Array.isArray(data.escala) && data.escala.length) n.escala = data.escala; else delete n.escala; }
     return n;
   }));
-  const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, description: data.description, amount: Number(data.amount) || 0, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) } : e));
+  const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, forma: data.forma || e.forma || "pj", description: data.description, amount: Number(data.amount) || 0, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) } : e));
   const updateShift = (id, data) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, gross: Number(data.gross) || 0, hours: Number(data.hours) || 0, date: data.date, prazoDias: Number(data.prazoDias) || 0, payDate: addDaysIso(data.date, Number(data.prazoDias) || 0) } : s));
-  const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido } : o));
-  const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, source: "manual" }]);
+  const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || o.forma || "pf" } : o));
+  const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || "pf", source: "manual" }]);
   const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category, ...(d.dedutivel !== undefined ? { dedutivel: !!d.dedutivel } : {}) } : e));
   // conta que se repete: "só este mês" guarda um ajuste no mês; "daqui em diante" encerra a antiga no mês anterior e cria outra a partir deste
   const updateRecurringExpense = (id, d, mk, modo) => setRecurringExpenses((prev) => {
@@ -2082,7 +2083,7 @@ function App() {
   const removePresenca = (id) => setPresencas((prev) => prev.filter((p) => p.id !== id));
 
   const addExtraRecurringIncome = (data) => {
-    setExtraRecurringIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0,
+    setExtraRecurringIncomes((prev) => [...prev, { id: uid(), forma: data.forma || "pj", description: data.description, amount: Number(data.amount) || 0,
       diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, startMonth: data.startMonth || monthKey, taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride), recebidoMonths: {} }]);
   };
   const removeExtraRecurringIncome = (id) => setExtraRecurringIncomes((prev) => prev.filter((e) => e.id !== id));
@@ -4373,18 +4374,41 @@ function FormBtns({ label, onSubmit, onCancel, onDelete }) {
   );
 }
 
+// como o trabalho é pago: empresa com nota, pessoa física sem nota ou carteira assinada
+const FORMAS = [
+  ["pj", "Empresa (com nota)", "Você emite nota fiscal pela sua empresa. Entra na agenda de impostos e no controle de notas da Contabilidade."],
+  ["pf", "Pessoa física (sem nota)", "Recebe no seu CPF, por recibo ou RPA. Não tem nota. O imposto pode vir retido na fonte ou ser pago por você no carnê-leão."],
+  ["clt", "Carteira assinada (CLT)", "Salário com holerite. INSS e imposto de renda já vêm descontados. Não tem nota nem guia para pagar."],
+];
+const formaDe = (x) => (x && FORMAS.some((f) => f[0] === x.forma) ? x.forma : "pj");
+const FORMA_CURTA = { pj: "", pf: "pessoa física", clt: "carteira assinada" };
+function FormaPicker({ value = "pj", onChange }) {
+  const f = FORMAS.find((x) => x[0] === value) || FORMAS[0];
+  return (
+    <div className="field" style={{ gridColumn: "1 / -1" }}>
+      <label>Como você recebe?</label>
+      <div className="chip-row" role="group" aria-label="Como você recebe">
+        {FORMAS.map(([k, l]) => <button key={k} type="button" className={`chip sm ${value === k ? "active" : ""}`} aria-pressed={value === k} onClick={() => onChange(k)}>{l}</button>)}
+      </div>
+      <div className="field-hint">{f[2]}</div>
+    </div>
+  );
+}
+const taxLabel = (forma) => (forma === "clt" ? "Desconto no holerite, INSS + IR (%) *" : forma === "pf" ? "Imposto retido ou do carnê-leão (%) *" : "Tributação (%) *");
+
 function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
   const [description, setDescription] = useState(inicial ? inicial.description || "" : "");
   const [amount, setAmount] = useState(inicial ? Number(inicial.amount) || 0 : "");
   const [diaRecebimento, setDia] = useState(inicial ? inicial.diaRecebimento || 5 : 5);
   const [taxOverride, setTax] = useState(inicial && inicial.taxOverride !== null && inicial.taxOverride !== undefined ? String(inicial.taxOverride) : "");
   const [prazoMeses, setPrazo] = useState(inicial ? Number(inicial.prazoMeses) || 0 : 0);
+  const [forma, setForma] = useState(formaDe(inicial));
   const [erro, setErro] = useState("");
   const submit = () => {
     if (!description.trim()) { setErro("Dê um nome para a receita."); return; }
     if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
     if (String(taxOverride).trim() === "" || !(Number(taxOverride) >= 0)) { setErro("Informe a tributação. Use 0 se não tiver imposto."); return; }
-    onSubmit({ description: description.trim(), amount: Number(amount), diaRecebimento, taxOverride, prazoMeses });
+    onSubmit({ description: description.trim(), amount: Number(amount), diaRecebimento, taxOverride, prazoMeses, forma });
     if (!inicial) { setDescription(""); setAmount(""); setTax(""); setPrazo(0); }
     setErro("");
   };
@@ -4394,7 +4418,8 @@ function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
         <div className="field"><label>Descrição</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Dividendos, aluguel de consultório" /></div>
         <div className="field"><label>Valor (R$) *</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
         <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDia(e.target.value)} /></div>
-        <div className="field"><label>Tributação (%) *</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0 para dividendos" /></div>
+        <FormaPicker value={forma} onChange={setForma} />
+        <div className="field"><label>{taxLabel(forma)}</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0 para dividendos" /></div>
         <div className="field" style={{ gridColumn: "1 / -1" }}><label>Quando esse valor é pago?</label><PrazoPicker unit="meses" value={prazoMeses} onChange={setPrazo} /></div>
       </div>
       {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
@@ -4430,26 +4455,28 @@ function OneOffEditForm({ item, onSubmit, onCancel, onDelete, novo, defaultDate 
   const [date, setDate] = useState(it.date || defaultDate || todayStr());
   const [tax, setTax] = useState(it.taxOverride !== undefined && it.taxOverride !== null ? String(it.taxOverride) : novo ? "" : "0");
   const [recebido, setRecebido] = useState(novo ? (it.date || defaultDate || todayStr()) <= todayStr() : !!it.recebido);
+  const [forma, setForma] = useState(it.forma || "pf");
   const [erro, setErro] = useState("");
   const submit = () => {
     if (!description.trim()) { setErro("Diga o que é essa receita."); return; }
     if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
     if (String(tax).trim() === "" || !(Number(tax) >= 0)) { setErro("Informe a tributação. Use 0 se não tiver imposto."); return; }
     if (!date) { setErro("Informe a data."); return; }
-    onSubmit({ description: description.trim(), amount: Number(amount) || 0, date, taxOverride: Number(String(tax).replace(",", ".")) || 0, recebido });
+    onSubmit({ description: description.trim(), amount: Number(amount) || 0, date, taxOverride: Number(String(tax).replace(",", ".")) || 0, recebido, forma });
   };
   const liquido = (Number(amount) || 0) * (1 - (Number(String(tax).replace(",", ".")) || 0) / 100);
   return (
     <div className="mini-form">
       {novo && (
         <div className="chip-row" style={{ marginBottom: 10 }} role="group" aria-label="Tipo de receita">
-          {TIPOS.map((t) => <button key={t} type="button" className={`chip sm ${description === t ? "active" : ""}`} aria-pressed={description === t} onClick={() => { setDescription(t === "Outro" ? "" : t); if (t === "Pix" && tax === "") setTax("0"); setErro(""); }}>{t}</button>)}
+          {TIPOS.map((t) => <button key={t} type="button" className={`chip sm ${description === t ? "active" : ""}`} aria-pressed={description === t} onClick={() => { setDescription(t === "Outro" ? "" : t); if (t === "Pix" && tax === "") setTax("0"); if (t === "13º salário" || t === "Férias") setForma("clt"); if (t === "Processo" || t === "Pix") setForma("pf"); setErro(""); }}>{t}</button>)}
         </div>
       )}
       <div className="form-grid">
         <div className="field"><label>Descrição *</label><input value={description} onChange={(e) => { setDescription(e.target.value); setErro(""); }} placeholder="Ex.: Processo trabalhista" /></div>
         <div className="field"><label>Valor bruto (R$) *</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
-        <div className="field"><label>Tributação (%) *</label><input type="number" inputMode="decimal" min="0" value={tax} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0" /></div>
+        <FormaPicker value={forma} onChange={setForma} />
+        <div className="field"><label>{taxLabel(forma)}</label><input type="number" inputMode="decimal" min="0" value={tax} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0" /></div>
         <div className="field"><label>Data em que cai *</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
       </div>
       <label className="chk-line" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 14 }}><input type="checkbox" checked={recebido} onChange={(e) => setRecebido(e.target.checked)} /> Já recebi</label>
@@ -4471,6 +4498,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
   const [prazoPadrao, setPrazoPadrao] = useState(Number(ini.prazoPadrao) || 0);
   const [prazoMeses, setPrazoMeses] = useState(Number(ini.prazoMeses) || 0);
   const [escala, setEscala] = useState(Array.isArray(ini.escala) ? ini.escala : []);
+  const [forma, setForma] = useState(formaDe(ini));
 
   const [erroV, setErroV] = useState("");
   const submit = () => {
@@ -4478,7 +4506,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
     if (tipo === "mensal" && !(Number(valorMensal) > 0)) { setErroV("Informe o valor que você recebe por mês."); return; }
     if (String(taxOverride).trim() === "" || !(Number(taxOverride) >= 0)) { setErroV("Informe a tributação. Use 0 se não tiver imposto."); return; }
     setErroV("");
-    onSubmit({ nome, cor, tipo, taxOverride, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, startMonth: defaultStartMonth });
+    onSubmit({ nome, cor, tipo, taxOverride, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, forma, startMonth: defaultStartMonth });
     if (!inicial) { setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0); setEscala([]); }
   };
 
@@ -4493,7 +4521,8 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
             <option value="mensal">Cargo fixo com salário mensal (diarista, contrato...)</option>
           </select>
         </div>}
-        <div className="field"><label>Tributação (%) *</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTaxOverride(e.target.value); setErroV(""); }} placeholder="Ex.: 15" /></div>
+        <FormaPicker value={forma} onChange={setForma} />
+        <div className="field"><label>{taxLabel(forma)}</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTaxOverride(e.target.value); setErroV(""); }} placeholder="Ex.: 15" /></div>
         {tipo === "mensal" && (
           <>
             <div className="field"><label>Valor mensal bruto (R$) *</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
@@ -5271,14 +5300,17 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const hoje = todayStr();
   const boleto = contab.pagamento === "boleto";
   // agenda
-  const prevGross = prevIncomeItems.reduce((a, i) => a + (Number(i.gross) || 0), 0);
-  const prevTax = prevIncomeItems.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
+  const prevPJ = prevIncomeItems.filter((i) => i.forma === "pj");
+  const prevGross = prevPJ.reduce((a, i) => a + (Number(i.gross) || 0), 0);
+  const prevTax = prevPJ.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
+  const prevPFtax = prevIncomeItems.filter((i) => i.forma === "pf").reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
   const guias = contabGuias(contab, viewYear, viewMonth, prevGross, prevTax);
+  if (prevPFtax > 0.004) { const dUlt = new Date(viewYear, viewMonth + 1, 0).getDate(); guias.push({ id: "carneleao", nome: "Carnê-leão (pessoa física)", dia: dUlt, data: dateStr(viewYear, viewMonth, dUlt), valor: prevPFtax, sub: "estimativa dos recebimentos no CPF. Se o imposto já veio retido, desconsidere.", estimado: true }); }
   const pagos = (contab.pagos && contab.pagos[mk]) || {};
   const totGuias = guias.reduce((a, g) => a + g.valor, 0);
   const totPago = guias.filter((g) => pagos[g.id]).reduce((a, g) => a + g.valor, 0);
   // caixinha: a parte de imposto de cada recebimento
-  const recebidos = monthIncomeItems.filter((i) => i.recebido && (Number(i.gross) || 0) - (Number(i.net) || 0) > 0.004);
+  const recebidos = monthIncomeItems.filter((i) => i.forma !== "clt" && i.recebido && (Number(i.gross) || 0) - (Number(i.net) || 0) > 0.004);
   const sep = contab.separado || {};
   const alvo = recebidos.reduce((a, i) => a + (i.gross - i.net), 0);
   const guardado = recebidos.filter((i) => sep[i.key]).reduce((a, i) => a + (i.gross - i.net), 0);
@@ -5288,7 +5320,8 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const toggleGrupo = (g) => { const v = !grupoSep(g); setContab((p) => { const n = { ...(p.separado || {}) }; g.keys.forEach((k) => { n[k] = v; }); return { ...p, separado: n }; }); };
   // notas por tomador
   const notasMap = contab.notas || {};
-  const tomadores = Object.values(monthIncomeItems.reduce((acc, i) => {
+  const semNotaPorForma = monthIncomeItems.filter((i) => i.forma !== "pj");
+  const tomadores = Object.values(monthIncomeItems.filter((i) => i.forma === "pj").reduce((acc, i) => {
     const k = i.nome || "Outros"; const t = acc[k] || (acc[k] = { nome: k, cor: i.cor, bruto: 0, n: 0, pend: 0, atras: false, data: null });
     t.bruto += Number(i.gross) || 0; t.n += 1;
     if (!i.recebido) { t.pend += 1; if (i.dateIso < hoje) t.atras = true; if (!t.data || i.dateIso < t.data) t.data = i.dateIso; }
@@ -5304,7 +5337,10 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const pl = numOf(contab.proLabore);
   const calcPl = contab.modo === "contab" && pl > 0 ? (contab.regime === "presumido" ? calcPresumido(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0)) : calcSimples(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0))) : null;
   const vItem = (id) => (calcPl ? (calcPl.itens.find((i) => i.id === id) || { valor: 0 }).valor : 0);
-  const sug = { rend: pl * 12, inss: vItem("inss") * 12, retido: vItem("irrf") * 12 };
+  const anoNaoPJ = yearIncomeItems.filter((i) => i.forma !== "pj");
+  const anoClt = yearIncomeItems.filter((i) => i.forma === "clt");
+  const somaG = (l) => l.reduce((a, i) => a + (Number(i.gross) || 0), 0), somaT = (l) => l.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
+  const sug = { rend: pl * 12 + somaG(anoNaoPJ), inss: vItem("inss") * 12, retido: vItem("irrf") * 12 + somaT(anoClt) };
   const val = (k) => (ir[k] === undefined || ir[k] === "" || ir[k] === null ? sug[k] || 0 : numOf(ir[k]));
   const dedAno = yearExpenseItems.filter(ehDedutivel);
   const somaCat = (c) => dedAno.filter((e) => e.category === c).reduce((a, e) => a + e.amount, 0);
@@ -5369,7 +5405,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   );
   const caixinha = (
     <div className="card" id="ct-caixa">
-      <div className="card-head"><h3 className="card-title">Caixinha do imposto</h3><span className="card-note">a parte do imposto de cada recebimento</span></div>
+      <div className="card-head"><h3 className="card-title">Caixinha do imposto</h3><span className="card-note">a parte do imposto de cada recebimento, menos CLT</span></div>
       {recebidos.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Quando um pagamento cair, aparece aqui quanto dele é imposto para você separar.</div> : (<>
         <div className="ct-cx">
           <Ring pct={pctCx} size={86} stroke={9} color="#0F766E"><b style={{ fontSize: 15 }}>{pctCx}%</b></Ring>
@@ -5391,7 +5427,8 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const notas = (
     <div className="card" id="ct-notas">
       <div className="card-head"><h3 className="card-title">Nota × recebimento</h3><span className="card-note">{mes}</span></div>
-      {tomadores.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Nenhuma receita em {mes}.</div> : (
+      {semNotaPorForma.length > 0 && <div className="field-hint" style={{ marginTop: 0, marginBottom: 6 }}>Não precisam de nota: {[...new Set(semNotaPorForma.map((i) => i.nome + " (" + FORMA_CURTA[i.forma] + ")"))].join(", ")}.</div>}
+      {tomadores.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>{semNotaPorForma.length ? "Nenhuma receita com nota em " + mes + "." : "Nenhuma receita em " + mes + "."}</div> : (
         <div className="ct-list">
           {tomadores.map((t) => { const emit = !!notasMap[notaKey(t.nome)]; return (
             <div key={t.nome} className="ct-row" data-tomador={t.nome}>
@@ -5408,8 +5445,8 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const irBody = (
     <div className="ct-ir">
       <div className="form-grid">
-        <div className="field"><label>Rendimentos tributáveis no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Pró-labore, salário CLT, aluguel. {sug.rend > 0 ? "Em branco usa o pró-labore × 12." : ""} Lucros da empresa são isentos e não entram.</div></div>
-        <div className="field"><label>Imposto já retido no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Está no informe de rendimentos.</div></div>
+        <div className="field"><label>Rendimentos tributáveis no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Pró-labore, salário CLT, trabalhos como pessoa física, aluguel. {sug.rend > 0 ? "Em branco usa o pró-labore × 12 mais o que está lançado como CLT e pessoa física." : ""} Lucros da empresa são isentos e não entram.</div></div>
+        <div className="field"><label>Imposto já retido no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Está no informe de rendimentos. Em branco usa o desconto dos vínculos CLT.</div></div>
         <div className="field"><label>INSS pago no ano (R$)</label><MoneyInput value={ir.inss === undefined || ir.inss === "" ? "" : ir.inss} placeholder={sug.inss ? Math.round(sug.inss).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("inss", v)} /></div>
         <div className="field"><label>Previdência privada PGBL no ano (R$)</label><MoneyInput value={ir.pgbl === undefined ? "" : ir.pgbl} onChange={(v) => setIr("pgbl", v)} /></div>
         <div className="field"><label>Dependentes</label><input type="number" min="0" value={ir.dependentes || ""} placeholder="0" onChange={(e) => setIr("dependentes", e.target.value)} /></div>
