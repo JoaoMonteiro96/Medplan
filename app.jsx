@@ -1129,12 +1129,12 @@ function AnexosField({ value = [], onChange }) {
     <div className="anx" data-anexos>
       {(value || []).map((a) => (
         <div key={a.id} className="anx-it">
-          <button type="button" className="anx-open" onClick={() => abrirAnexo(a)} title="Abrir"><span aria-hidden="true">{/pdf/i.test(a.tipo) ? "📄" : "🖼️"}</span><b>{a.nome}</b><small>{Math.max(1, Math.round((a.tamanho || 0) / 1024))} KB</small></button>
+          <button type="button" className="anx-open" onClick={() => abrirAnexo(a)} title="Abrir"><span aria-hidden="true"><ProIc n={/pdf/i.test(a.tipo) ? "pdf" : "imagem"} size={18} color="var(--text-dim)" /></span><b>{a.nome}</b><small>{Math.max(1, Math.round((a.tamanho || 0) / 1024))} KB</small></button>
           <button type="button" className="btn-icon" aria-label={"Remover " + a.nome} onClick={() => remover(a)}><IconX size={14} /></button>
         </div>
       ))}
       <input ref={ref} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={(e) => enviar(e.target.files)} />
-      <button type="button" className="btn btn-ghost sm anx-add" disabled={busy} onClick={() => ref.current && ref.current.click()}>{busy ? "Enviando…" : "📎 Anexar nota fiscal ou recibo"}</button>
+      <button type="button" className="btn btn-ghost sm anx-add" disabled={busy} onClick={() => ref.current && ref.current.click()}>{busy ? "Enviando…" : <><ProIc n="clipe" size={16} /> Anexar nota fiscal ou recibo</>}</button>
       {erro && <div className="note-bad" style={{ marginTop: 6 }}>{erro}</div>}
       {(value || []).length > 0 && <div className="field-hint">Guardado neste aparelho.</div>}
     </div>
@@ -3922,7 +3922,7 @@ function App() {
         @media (max-width: 720px) { .cart-fontes { grid-template-columns: 1fr; } }
         .cart-f { display: flex; gap: 10px; align-items: flex-start; text-align: left; border: 1.5px solid var(--border); background: var(--surface); border-radius: 12px; padding: 11px 12px; font: inherit; color: var(--text); cursor: pointer; }
         .cart-f.on { border-color: var(--teal); background: rgba(22,160,107,0.06); }
-        .cart-f-ic { font-size: 20px; line-height: 1.2; } .cart-f-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .cart-f-ic { width: 36px; height: 36px; border-radius: 10px; background: rgba(22,160,107,.09); display: grid; place-items: center; flex: none; } .cart-f-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .cart-f-t b { font-size: 14px; } .cart-f-t small { font-size: 12.5px; color: var(--text-dim); line-height: 1.35; }
         .cart-f-t i { font-style: normal; font-size: 10.5px; font-weight: 700; color: #15803D; background: #DCFCE7; border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
         .cart-colar { width: 100%; font: inherit; font-size: 14px; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--surface); color: var(--text); resize: vertical; }
@@ -4012,6 +4012,8 @@ function App() {
           .tbl-inv tbody tr > td:nth-child(7) { grid-column: 3; grid-row: 2; justify-self: end; }
         }
 
+        .anx-add { display: inline-flex; align-items: center; gap: 6px; } .xl-anx { display: inline-flex; vertical-align: -1px; margin-left: 6px; }
+        .ded-r .link-btn { display: inline-flex; align-items: center; gap: 4px; }
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -4653,12 +4655,36 @@ function fixoDatas(f, desde, ate) {
   }
   return out;
 }
+// ícones de traço, no mesmo estilo dos ícones do app (substituem os emojis)
+const PRO_IC = {
+  plantao: <><path d="M5 3v5a4 4 0 0 0 8 0V3" /><path d="M9 12v3a5 5 0 0 0 10 0v-2" /><circle cx="19" cy="11" r="2" /></>,
+  cargo: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M12 7v4M10 9h4" /><path d="M10 21v-4h4v4" /></>,
+  recorrente: <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a3 3 0 0 1 3-3h15" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a3 3 0 0 1-3 3H3" /></>,
+  unica: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 10v4M18 10v4" /></>,
+  despesa: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /><path d="M6 15h4" /></>,
+  nota: <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" /><path d="M9 7h6M9 11h6M9 15h4" /></>,
+  socio: <><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><circle cx="17" cy="9" r="2.5" /><path d="M15.5 14.2A5 5 0 0 1 21 19.5" /></>,
+  clt: <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /><path d="M3 13h18" /></>,
+  div: <><polyline points="3 17 9 11 13 15 21 7" /><path d="M15 7h6v6" /></>,
+  aluguel: <><path d="M3 11l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></>,
+  outro: <><path d="M3 8V6a2 2 0 0 1 2-2h12" /><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M16 13.5h2" /></>,
+  planilha: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M3 14h18M9 4v16" /></>,
+  celular: <><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></>,
+  pdf: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h6" /></>,
+  imagem: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></>,
+  calculo: <><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8" /><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h.01M16 19h.01" strokeWidth="2.6" /></>,
+  colar: <><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="M8 12h8M8 16h5" /></>,
+  globo: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" /></>,
+  clipe: <path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7" />,
+};
+const IC_TOM = { "#FEF3C7": "#B45309", "#DBEAFE": "#1D4ED8", "#EDE9FE": "#6D28D9", "#DCFCE7": "#15803D", "#FEE2E2": "#B91C1C", "#FCE7F3": "#BE185D", "#F1F5F9": "#334155" };
+const ProIc = ({ n, size = 22, color = "currentColor", sw = 1.8 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}>{PRO_IC[n]}</svg>;
 const ADD_OPCOES = [
-  ["plantao", "Plantão", "12 ou 24 horas. Um dia só ou fixo, repetindo toda semana.", "🩺", "#FEF3C7"],
-  ["cargo", "Cargo fixo", "Diarismo, coordenação, supervisão, preceptoria. Recebe todo mês.", "🏥", "#DBEAFE"],
-  ["recorrente", "Receita que se repete", "Aluguel, dividendos, pró-labore. Entra todo mês.", "🔁", "#EDE9FE"],
-  ["unica", "Receita única", "Processo, 13º, um Pix de quem te devia, restituição.", "💰", "#DCFCE7"],
-  ["despesa", "Despesa", "Conta fixa ou gasto do mês.", "💳", "#FEE2E2"],
+  ["plantao", "Plantão", "12 ou 24 horas. Um dia só ou fixo, repetindo toda semana.", "plantao", "#FEF3C7"],
+  ["cargo", "Cargo fixo", "Diarismo, coordenação, supervisão, preceptoria. Recebe todo mês.", "cargo", "#DBEAFE"],
+  ["recorrente", "Receita que se repete", "Aluguel, dividendos, pró-labore. Entra todo mês.", "recorrente", "#EDE9FE"],
+  ["unica", "Receita única", "Processo, 13º, um Pix de quem te devia, restituição.", "unica", "#DCFCE7"],
+  ["despesa", "Despesa", "Conta fixa ou gasto do mês.", "despesa", "#FEE2E2"],
 ];
 function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, monthKey, addPlantao, addVinculo, addExtra, addOneOff }) {
   const [kind, setKind] = useState(inicial || null);
@@ -4674,7 +4700,7 @@ function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, 
           <>
             {ADD_OPCOES.map(([k, l, d, ic, bg]) => (
               <button key={k} type="button" className="add-op" data-add={k} onClick={() => (k === "despesa" ? onDespesa() : setKind(k))}>
-                <i style={{ background: bg }} aria-hidden="true">{ic}</i><span><b>{l}</b><small>{d}</small></span><IconChevronRight size={18} />
+                <i style={{ background: bg }} aria-hidden="true"><ProIc n={ic} color={IC_TOM[bg]} /></i><span><b>{l}</b><small>{d}</small></span><IconChevronRight size={18} />
               </button>
             ))}
             <div className="add-mais">
@@ -4822,9 +4848,9 @@ function FormBtns({ label, onSubmit, onCancel, onDelete }) {
 
 // como o dinheiro do trabalho chega: nota da própria empresa, Pix como sócio de outra empresa ou carteira assinada
 const FORMAS = [
-  ["pj", "Nota da minha empresa", "Você emite a nota, paga os impostos e fica com o resto.", "o app calcula o imposto", "#DBEAFE", "🧾"],
-  ["socio", "Pix de empresa em que sou sócio", "Outra empresa paga sua parte direto no seu CPF.", "imposto já pago pela empresa", "#EDE9FE", "🤝"],
-  ["clt", "Carteira assinada", "Salário que já cai líquido na conta. Inclui 13º e férias.", "imposto já descontado", "#DCFCE7", "📄"],
+  ["pj", "Nota da minha empresa", "Você emite a nota, paga os impostos e fica com o resto.", "o app calcula o imposto", "#DBEAFE", "nota"],
+  ["socio", "Pix de empresa em que sou sócio", "Outra empresa paga sua parte direto no seu CPF.", "imposto já pago pela empresa", "#EDE9FE", "socio"],
+  ["clt", "Carteira assinada", "Salário que já cai líquido na conta. Inclui 13º e férias.", "imposto já descontado", "#DCFCE7", "clt"],
 ];
 const formaDe = (x) => { const f = x && x.forma === "pf" ? "socio" : x && x.forma; return FORMAS.some((y) => y[0] === f) ? f : "pj"; };
 const FORMA_CURTA = { pj: "", socio: "Pix como sócio", clt: "carteira assinada" };
@@ -4835,7 +4861,7 @@ function FormaPicker({ value = "pj", onChange }) {
       <div className="fm-ops" role="radiogroup" aria-label="Como esse dinheiro chega até você">
         {FORMAS.map(([k, l, d, selo, bg, ic]) => (
           <button key={k} type="button" role="radio" aria-checked={value === k} className={`fm-op ${value === k ? "on" : ""}`} data-forma={k} onClick={() => onChange(k)}>
-            <i style={{ background: bg }} aria-hidden="true">{ic}</i>
+            <i style={{ background: bg }} aria-hidden="true"><ProIc n={ic} color={IC_TOM[bg]} /></i>
             <span><b>{l}</b><small>{d}</small><em className={k === "pj" ? "warn" : "ok"}>{selo}</em></span>
             <span className="fm-rad" aria-hidden="true" />
           </button>
@@ -5891,12 +5917,12 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
     </div>
   );
   const GRUPOS = [
-    ["pj", "Nota da minha empresa", "🧾", "#DBEAFE", (v) => "Imposto estimado: " + fmtBRL(v.imp) + ". As guias estão na agenda abaixo."],
-    ["socio", "Pix de empresa em que sou sócio", "🤝", "#EDE9FE", () => "Nada a pagar. Entra como rendimento isento na declaração."],
-    ["clt", "Carteira assinada", "📄", "#DCFCE7", () => "Nada a pagar. O imposto já vem descontado no holerite."],
-    ["div", "Dividendos", "📈", "#FEF3C7", () => "Isentos. Não entram na conta de impostos."],
-    ["aluguel", "Aluguel", "🏠", "#FCE7F3", (v) => "Carnê-leão estimado: " + fmtBRL(v.imp) + ", pago até o fim do mês seguinte."],
-    ["outro", "Outras receitas", "💰", "#F1F5F9", () => "Processo, Pix devolvido e restituição não têm imposto a pagar."],
+    ["pj", "Nota da minha empresa", "nota", "#DBEAFE", (v) => "Imposto estimado: " + fmtBRL(v.imp) + ". As guias estão na agenda abaixo."],
+    ["socio", "Pix de empresa em que sou sócio", "socio", "#EDE9FE", () => "Nada a pagar. Entra como rendimento isento na declaração."],
+    ["clt", "Carteira assinada", "clt", "#DCFCE7", () => "Nada a pagar. O imposto já vem descontado no holerite."],
+    ["div", "Dividendos", "div", "#FEF3C7", () => "Isentos. Não entram na conta de impostos."],
+    ["aluguel", "Aluguel", "aluguel", "#FCE7F3", (v) => "Carnê-leão estimado: " + fmtBRL(v.imp) + ", pago até o fim do mês seguinte."],
+    ["outro", "Outras receitas", "outro", "#F1F5F9", () => "Processo, Pix devolvido e restituição não têm imposto a pagar."],
   ];
   const resumoFormas = GRUPOS.map(([k, nome, ic, bg, oque]) => {
     const l = monthIncomeItems.filter((i) => i.forma === k);
@@ -5909,7 +5935,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
       <div className="card-head"><h3 className="card-title">Seus recebimentos e os impostos</h3><span className="card-note">{mes}</span></div>
       {resumoFormas.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Nenhuma receita em {mes}.</div> : resumoFormas.map((g) => (
         <div key={g.k} className="ct-fm" data-forma={g.k}>
-          <i style={{ background: g.bg }} aria-hidden="true">{g.ic}</i>
+          <i style={{ background: g.bg }} aria-hidden="true"><ProIc n={g.ic} size={19} color={IC_TOM[g.bg]} /></i>
           <span className="ct-l"><b>{g.nome}</b><small>{g.quem}</small></span>
           <b className="mono ct-v">{fmtBRL(g.v.tot)}</b>
           <div className="ct-fm-o">{g.oque}</div>
@@ -6037,7 +6063,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
         <div className="ded-lista">
           {dedLista.map((e) => (
             <div key={e.key} className="ded-it"><span><b>{e.description}</b><small>{fmtDatePt(e.dateIso)} · {e.category === "educacao" ? "Escola" : e.category === "saude" ? "Saúde" : (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label}</small></span>
-              <span className="ded-r"><b className="mono">{fmtBRL(e.amount)}</b>{(e.anexos || []).length ? e.anexos.map((a) => <button key={a.id} type="button" className="link-btn" onClick={() => abrirAnexo(a)}>📎 ver nota</button>) : <small className="ded-sem">falta a nota</small>}{e.soIR && <button type="button" className="link-btn ded-rm" onClick={() => removerAvulsa(e.avId)}>remover</button>}</span></div>
+              <span className="ded-r"><b className="mono">{fmtBRL(e.amount)}</b>{(e.anexos || []).length ? e.anexos.map((a) => <button key={a.id} type="button" className="link-btn" onClick={() => abrirAnexo(a)}><ProIc n="clipe" size={13} /> ver nota</button>) : <small className="ded-sem">falta a nota</small>}{e.soIR && <button type="button" className="link-btn ded-rm" onClick={() => removerAvulsa(e.avId)}>remover</button>}</span></div>
           ))}
         </div>
         {dedAteHoje.length > 6 && <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => setDedVerTodas(!dedVerTodas)}>{dedVerTodas ? "Ver menos" : `Ver todos (${dedAteHoje.length})`}</button>}
@@ -7725,7 +7751,7 @@ function ExpensesTab({ dedSignal, monthExpenseItems, addExpense, addRecurringExp
                       </button>
                       <span className="xl-date mono">{dm}</span>
                       <div className="xl-main">
-                        <div className="xl-title">{e.description}{(e.anexos || []).length > 0 && <span className="xl-anx" title="Nota anexada" aria-label="Nota anexada"> 📎</span>}{ehDedutivel(e) && <span className="xl-ded" title="Dedutível no IR">IR</span>}</div>
+                        <div className="xl-title">{e.description}{(e.anexos || []).length > 0 && <span className="xl-anx" title="Nota anexada" aria-label="Nota anexada"><ProIc n="clipe" size={13} color="var(--text-dim)" /></span>}{ehDedutivel(e) && <span className="xl-ded" title="Dedutível no IR">IR</span>}</div>
                         {e.itens && <button type="button" className="xl-more" data-fat-open aria-expanded={openFat === e.key} onClick={() => setOpenFat(openFat === e.key ? null : e.key)}>{openFat === e.key ? "Fechar" : `Ver os ${e.itens.length} gastos`} <span aria-hidden="true">{openFat === e.key ? "▴" : "▾"}</span></button>}
                         <div className="xl-sub"><span className="mono">{dm}</span><span>·</span><i style={{ background: meta.color }} /><span>{meta.label}</span>{e.tipo === "recorrente" && <><span>·</span><span>todo mês</span></>}</div>
                       </div>
@@ -8770,12 +8796,12 @@ function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
 }
 
 const CARTEIRA_FONTES = [
-  { id: "b3", ic: "📊", nome: "Planilha da B3", rec: true, sub: "Tudo o que está no seu CPF, de todas as corretoras do Brasil." },
-  { id: "print", ic: "📱", nome: "Print do app", sub: "Uma foto da tela da carteira. Você confere antes de salvar." },
-  { id: "cpdf", ic: "📄", nome: "PDF da corretora", sub: "Extrato de posição ou de custódia." },
-  { id: "cplan", ic: "🧮", nome: "Planilha própria", sub: "Excel ou CSV com código, quantidade e preço médio." },
-  { id: "colar", ic: "📋", nome: "Copiar e colar", sub: "Copie a lista do site da corretora e cole." },
-  { id: "ext", ic: "🌎", nome: "Corretora no exterior", sub: "Avenue, Nomad, Inter, XP, Interactive Brokers. Valores em dólar." },
+  { id: "b3", ic: "planilha", nome: "Planilha da B3", rec: true, sub: "Tudo o que está no seu CPF, de todas as corretoras do Brasil." },
+  { id: "print", ic: "celular", nome: "Print do app", sub: "Uma foto da tela da carteira. Você confere antes de salvar." },
+  { id: "cpdf", ic: "pdf", nome: "PDF da corretora", sub: "Extrato de posição ou de custódia." },
+  { id: "cplan", ic: "calculo", nome: "Planilha própria", sub: "Excel ou CSV com código, quantidade e preço médio." },
+  { id: "colar", ic: "colar", nome: "Copiar e colar", sub: "Copie a lista do site da corretora e cole." },
+  { id: "ext", ic: "globo", nome: "Corretora no exterior", sub: "Avenue, Nomad, Inter, XP, Interactive Brokers. Valores em dólar." },
 ];
 const CARTEIRA_SRC = CARTEIRA_FONTES.map((f) => f.id);
 function ImportDicas({ source }) {
@@ -9061,7 +9087,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
             <div className="cart-fontes" role="radiogroup">
               {CARTEIRA_FONTES.map((f) => (
                 <button key={f.id} type="button" role="radio" aria-checked={source === f.id} className={`cart-f ${source === f.id ? "on" : ""}`} data-fonte={f.id} onClick={() => setSource(f.id)}>
-                  <span className="cart-f-ic" aria-hidden="true">{f.ic}</span>
+                  <span className="cart-f-ic" aria-hidden="true"><ProIc n={f.ic} size={20} color="var(--teal)" /></span>
                   <span className="cart-f-t"><b>{f.nome}{f.rec && <i>mais precisa</i>}</b><small>{f.sub}</small></span>
                 </button>
               ))}
