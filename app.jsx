@@ -2248,9 +2248,36 @@ function App() {
     return true;
   };
   const setCotacao = (key, val) => setCotacoes((prev) => ({ ...prev, [key]: val }));
+  // Central de cotações: uma função no Supabase busca os preços para todos (com o token guardado lá).
+  // O app só avisa quais ativos tem e lê os preços já buscados. Ninguém precisa de token.
+  const tickersBolsa = () => [...new Set(portfolio.positions.filter((p) => p.isQty && invCatMeta(p.category).kind === "ticker").map((p) => p.description))];
+  const cotacoesCentral = async (pedirNovos) => {
+    if (!session || !cloudCfg) return null;
+    const tickers = tickersBolsa(); if (!tickers.length) return { n: 0, ok: 0 };
+    const sb = await getSupabase(cloudCfg);
+    await sb.from("cotacoes_pedidos").upsert(tickers.map((t) => ({ ticker: t, visto_em: new Date().toISOString() })), { onConflict: "user_id,ticker" });
+    if (pedirNovos) { try { await sb.functions.invoke("cotacoes", { body: { tickers } }); } catch (e) { /* a função roda sozinha também */ } }
+    const { data, error } = await sb.from("cotacoes").select("ticker,preco,atualizado").in("ticker", tickers);
+    if (error) throw error;
+    const novo = {}; let ultima = "";
+    (data || []).forEach((r) => { if (Number(r.preco) > 0) { novo[r.ticker] = Number(r.preco); if (r.atualizado > ultima) ultima = r.atualizado; } });
+    if (Object.keys(novo).length) setCotacoes((prev) => ({ ...prev, ...novo, __centralEm: ultima }));
+    return { n: tickers.length, ok: Object.keys(novo).length, ultima, faltam: tickers.filter((t) => !novo[t]) };
+  };
+  useEffect(() => { if (!loaded || !session) return; cotacoesCentral(true).catch(() => {}); }, [loaded, session, investments.length]);
   const refreshQuotes = async () => {
     if (quoteRun.busy) return;
-    const tickers = [...new Set(portfolio.positions.filter((p) => p.isQty && invCatMeta(p.category).kind === "ticker").map((p) => p.description))];
+    if (session && cloudCfg) {
+      setQuoteStatus(""); setQuoteRun({ busy: true, done: 0, total: 1, marks: {}, kind: "" });
+      try {
+        const r = await cotacoesCentral(true);
+        const hora = r && r.ultima ? new Date(r.ultima).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+        setQuoteStatus(!r || !r.n ? "Não há ações, FIIs ou ETFs com quantidade para buscar." : `${r.ok} de ${r.n} cotações${hora ? " · preços de " + hora : ""}. Os preços são atualizados sozinhos 4 vezes por dia, em dias de bolsa.${r.faltam.length ? " Ainda sem preço: " + r.faltam.join(", ") + "." : ""}`);
+        setQuoteRun({ busy: false, done: 1, total: 1, marks: {}, kind: r && r.ok === r.n ? "ok" : "warn" });
+      } catch (e) { setQuoteStatus("Não consegui buscar as cotações agora. Tente de novo em alguns minutos."); setQuoteRun({ busy: false, done: 1, total: 1, marks: {}, kind: "bad" }); }
+      return;
+    }
+    const tickers = tickersBolsa();
     if (tickers.length === 0) {
       setQuoteRun((r) => ({ ...r, marks: {}, kind: "warn" }));
       setQuoteStatus("Não há ações, FIIs ou ETFs com quantidade para buscar. Lance a compra com quantidade e preço.");
@@ -4594,7 +4621,7 @@ function App() {
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
-            setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun}
+            setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
         {activeTab === "metas" && (
@@ -8001,7 +8028,7 @@ function RentabilidadeCard({ hist = [], investments = [], totalValue, totalBough
 }
 
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
-  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
+  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, usaCentral, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
   const gv = useGv();
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
@@ -8258,7 +8285,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             )}
             {quoteRun.busy && <div className="progress-track quote-track"><div className="quote-fill" style={{ width: `${quoteRun.total ? (quoteRun.done / quoteRun.total) * 100 : 0}%` }} /></div>}
             {quoteStatus && !quoteRun.busy && <div className={`quote-msg ${quoteRun.kind}`} role="status">{quoteStatus}</div>}
-            {(!brapiToken || Object.values(quoteRun.marks || {}).includes("token")) && (
+            {!usaCentral && (!brapiToken || Object.values(quoteRun.marks || {}).includes("token")) && (
               <div className="token-box">
                 <b>Para atualizar todos os ativos, cole um token gratuito da brapi.dev.</b>
                 <p>Sem token, o serviço só responde alguns ativos de teste, como PETR4 e VALE3. Por isso os outros preços não mudam.</p>

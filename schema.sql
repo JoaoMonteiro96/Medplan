@@ -122,3 +122,38 @@ create policy "notas: enviar as minhas" on storage.objects for insert to authent
   with check (bucket_id = 'notas' and auth.uid()::text = (storage.foldername(name))[1]);
 create policy "notas: apagar as minhas" on storage.objects for delete to authenticated
   using (bucket_id = 'notas' and auth.uid()::text = (storage.foldername(name))[1]);
+-- ============ Sallos: central de cotações ============
+-- Uma função busca os preços na brapi (com o token guardado no Supabase)
+-- e grava aqui. O app de cada pessoa só lê. Ninguém precisa de token.
+create table if not exists public.cotacoes (
+  ticker     text primary key,
+  preco      numeric not null,
+  atualizado timestamptz not null default now()
+);
+alter table public.cotacoes enable row level security;
+drop policy if exists "logados leem cotacoes" on public.cotacoes;
+create policy "logados leem cotacoes" on public.cotacoes for select to authenticated using (true);
+
+-- Quais ativos cada pessoa tem (só o código), para a função saber o que buscar
+create table if not exists public.cotacoes_pedidos (
+  user_id  uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  ticker   text not null check (ticker ~ '^[A-Z0-9]{4}[0-9]{1,2}$'),
+  visto_em timestamptz not null default now(),
+  primary key (user_id, ticker)
+);
+alter table public.cotacoes_pedidos enable row level security;
+drop policy if exists "dono le pedido" on public.cotacoes_pedidos;
+drop policy if exists "dono cria pedido" on public.cotacoes_pedidos;
+drop policy if exists "dono altera pedido" on public.cotacoes_pedidos;
+create policy "dono le pedido"     on public.cotacoes_pedidos for select to authenticated using (auth.uid() = user_id);
+create policy "dono cria pedido"   on public.cotacoes_pedidos for insert to authenticated with check (auth.uid() = user_id);
+create policy "dono altera pedido" on public.cotacoes_pedidos for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Atualização automática: 11h, 13h, 15h e 18h30 (horário de Brasília), dias úteis
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+select cron.unschedule(jobname) from cron.job where jobname in ('sallos-cotacoes', 'sallos-cotacoes-fechamento');
+select cron.schedule('sallos-cotacoes', '0 14,16,18 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/cotacoes', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{"todos": true}'::jsonb) $$);
+select cron.schedule('sallos-cotacoes-fechamento', '30 21 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/cotacoes', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{"todos": true}'::jsonb) $$);
