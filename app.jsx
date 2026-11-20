@@ -1088,15 +1088,8 @@ async function salvarAnexo(file) {
   if (file.size > ANEXO_MAX) throw new Error("O arquivo passa de 10 MB. Tire uma foto menor ou salve o PDF reduzido.");
   const id = uid();
   const meta = { id, nome: file.name || "nota", tipo: file.type || "", tamanho: file.size, data: todayStr() };
-  try {
-    const c = await sbComSessao();
-    if (c) {
-      const path = c.uid + "/" + id + "-" + nomeSeguro(file.name);
-      const { error } = await c.sb.storage.from(ANEXO_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
-      if (!error) return { ...meta, path };
-      if (/bucket|not found|policy|row-level|unauthori|403|404/i.test(String(error.message || error.statusCode || ""))) meta.semNuvem = true;
-    }
-  } catch (e) { /* sem internet: fica no aparelho */ }
+  // As notas ficam só neste aparelho (decisão do usuário). Pede ao navegador para não apagar.
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   await idbOp("readwrite", (st) => st.put(file, id));
   return { ...meta, local: true };
 }
@@ -1124,20 +1117,18 @@ function AnexosField({ value = [], onChange }) {
     if (ref.current) ref.current.value = "";
   };
   const remover = async (a) => { if (!window.confirm(`Remover o anexo "${a.nome}"?`)) return; await apagarAnexo(a); onChange((value || []).filter((x) => x.id !== a.id)); };
-  const local = (value || []).some((a) => a.local), semNuvem = (value || []).some((a) => a.semNuvem);
   return (
     <div className="anx" data-anexos>
       {(value || []).map((a) => (
         <div key={a.id} className="anx-it">
-          <button type="button" className="anx-open" onClick={() => abrirAnexo(a)} title="Abrir"><span aria-hidden="true">{/pdf/i.test(a.tipo) ? "📄" : "🖼️"}</span><b>{a.nome}</b><small>{Math.max(1, Math.round((a.tamanho || 0) / 1024))} KB{a.local ? " · neste aparelho" : " · na nuvem"}</small></button>
+          <button type="button" className="anx-open" onClick={() => abrirAnexo(a)} title="Abrir"><span aria-hidden="true">{/pdf/i.test(a.tipo) ? "📄" : "🖼️"}</span><b>{a.nome}</b><small>{Math.max(1, Math.round((a.tamanho || 0) / 1024))} KB</small></button>
           <button type="button" className="btn-icon" aria-label={"Remover " + a.nome} onClick={() => remover(a)}><IconX size={14} /></button>
         </div>
       ))}
       <input ref={ref} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={(e) => enviar(e.target.files)} />
       <button type="button" className="btn btn-ghost sm anx-add" disabled={busy} onClick={() => ref.current && ref.current.click()}>{busy ? "Enviando…" : "📎 Anexar nota fiscal ou recibo"}</button>
       {erro && <div className="note-bad" style={{ marginTop: 6 }}>{erro}</div>}
-      {semNuvem ? <div className="field-hint">Guardado só neste aparelho: a nuvem ainda não está pronta para arquivos. Rode o script atualizado no Supabase (schema.sql) para guardar na nuvem.</div>
-        : local ? <div className="field-hint">Guardado só neste aparelho. Entre na sua conta para guardar os próximos na nuvem.</div> : null}
+      {(value || []).length > 0 && <div className="field-hint">Guardado neste aparelho.</div>}
     </div>
   );
 }
@@ -3872,6 +3863,17 @@ function App() {
         .ded-it small { display: block; color: var(--text-dim); font-size: 12px; } .ded-r { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .ded-sem { color: #B45309 !important; font-weight: 600; }
         :root[data-theme="dark"] .xl-ded { background: rgba(139,92,246,.18); color: #C4B5FD; }
 
+        .ded-dev { border-radius: 14px; padding: 14px 16px; background: var(--bg-soft, #F1F5F9); margin-bottom: 12px; display: grid; gap: 2px; }
+        .ded-dev small { font-size: 12.5px; color: var(--text-dim); font-weight: 600; } .ded-dev b { font-size: 24px; letter-spacing: -.01em; } .ded-dev span { font-size: 12.5px; color: var(--text-dim); line-height: 1.4; }
+        .ded-dev.ok { background: #ECFDF3; } .ded-dev.ok b { color: #15803D; }
+        :root[data-theme="dark"] .ded-dev.ok { background: rgba(22,163,74,.14); } :root[data-theme="dark"] .ded-dev.ok b { color: #4ADE80; }
+        .ded-tot { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-dim); margin: 0 2px 12px; } .ded-tot b { color: var(--text); margin-left: 4px; }
+        .ded-add { margin-bottom: 12px; }
+        .ded-av { border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; } .ded-av-t { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+        .ded-av .chip-row { display: flex; gap: 6px; flex-wrap: wrap; } .ded-av > .field { margin-bottom: 14px; }
+        .ded-so { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #0F766E; background: #CCFBF1; border-radius: 5px; padding: 1px 5px; vertical-align: 1px; }
+        :root[data-theme="dark"] .ded-so { background: rgba(20,184,166,.18); color: #5EEAD4; }
+        .ded-rm { font-size: 12px; color: var(--text-dim) !important; }
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -5651,6 +5653,17 @@ function baixarCsv(nome, linhas) {
 }
 function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateGeral, desk, viewYear, viewMonth, monthIncomeItems = [], prevIncomeItems = [], yearIncomeItems = [], yearExpenseItems = [], pagarGuia, desfazerGuia }) {
   const [dedVerTodas, setDedVerTodas] = useState(false);
+  const [avForm, setAvForm] = useState(false), [avDesc, setAvDesc] = useState(""), [avValor, setAvValor] = useState(""), [avData, setAvData] = useState(todayStr()), [avCat, setAvCat] = useState("saude"), [avAnexos, setAvAnexos] = useState([]);
+  const salvarAvulsa = () => {
+    const novo = { id: uid(), descricao: avDesc.trim(), valor: Number(avValor) || 0, data: avData, categoria: avCat, anexos: avAnexos };
+    setContab((p) => ({ ...p, dedAvulsas: [...(p.dedAvulsas || []), novo] }));
+    setAvForm(false); setAvDesc(""); setAvValor(""); setAvAnexos([]); setAvCat("saude"); setAvData(todayStr());
+  };
+  const removerAvulsa = (id) => {
+    const x = (contab.dedAvulsas || []).find((a) => a.id === id); if (!x || !window.confirm(`Remover "${x.descricao}" do registro do IR?`)) return;
+    (x.anexos || []).forEach((a) => apagarAnexo(a));
+    setContab((p) => ({ ...p, dedAvulsas: (p.dedAvulsas || []).filter((a) => a.id !== id) }));
+  };
   const set = (k, v) => setContab((p) => ({ ...p, [k]: v }));
   const mk = monthKeyOf(viewYear, viewMonth);
   const mes = MONTHS_PT[viewMonth].toLowerCase(), mesAnt = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
@@ -5700,7 +5713,10 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const somaG = (l) => l.reduce((a, i) => a + (Number(i.gross) || 0), 0), somaT = (l) => l.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
   const sug = { rend: pl * 12 + somaG(anoNaoPJ), inss: vItem("inss") * 12, retido: vItem("irrf") * 12 + somaT(anoClt) };
   const val = (k) => (ir[k] === undefined || ir[k] === "" || ir[k] === null ? sug[k] || 0 : numOf(ir[k]));
-  const dedAno = yearExpenseItems.filter(ehDedutivel);
+  // gastos registrados só para o IR (não entram em ganhos e custos do app)
+  const avulsas = (contab.dedAvulsas || []).filter((x) => String(x.data || "").slice(0, 4) === String(viewYear))
+    .map((x) => ({ key: "av-" + x.id, avId: x.id, soIR: true, description: x.descricao || "Gasto dedutível", amount: Number(x.valor) || 0, category: x.categoria || "saude", dateIso: x.data, anexos: x.anexos || [], dedutivel: true }));
+  const dedAno = [...yearExpenseItems.filter(ehDedutivel), ...avulsas];
   const somaCat = (c) => dedAno.filter((e) => e.category === c).reduce((a, e) => a + e.amount, 0);
   const dep = Math.max(0, Math.round(numOf(ir.dependentes)));
   const rend = val("rend");
@@ -5708,6 +5724,8 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const pgbl = Math.min(numOf(ir.pgbl), rend * 0.12);
   const deducoes = val("inss") + saude + educ + dep * IR_DEP_ANUAL + pgbl;
   const irr = irAnual(rend, deducoes);
+  const irSemGastos = irAnual(rend, deducoes - saude - educ);
+  const devolucaoDed = rend > 0 ? Math.max(0, irSemGastos.devido - irr.devido) : 0;
   const retido = val("retido");
   const saldoIr = retido - irr.devido;
   const outrosDed = dedAno.filter((e) => !["saude", "educacao"].includes(e.category));
@@ -5720,7 +5738,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
     L.push([], ["Total bruto", "", inc.reduce((a, i) => a + (Number(i.gross) || 0), 0)]);
     if (!ano) { L.push([], ["GUIAS DO MÊS"], ["Guia", "Vencimento", "Valor", "Pago"]); guias.forEach((g) => L.push([g.nome, fmtDatePt(g.data), g.valor, pagos[g.id] ? "sim" : "não"])); }
     L.push([], ["DESPESAS DEDUTÍVEIS"], ["Data", "Descrição", "Categoria", "Valor", "Nota anexada"]);
-    exps.forEach((e) => L.push([fmtDatePt(e.dateIso), e.description, (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, e.amount, (e.anexos || []).length ? (e.anexos || []).map((a) => a.nome).join(", ") : "não"]));
+    exps.forEach((e) => L.push([fmtDatePt(e.dateIso), e.description + (e.soIR ? " (registrado só para o IR)" : ""), (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, e.amount, (e.anexos || []).length ? (e.anexos || []).map((a) => a.nome).join(", ") : "não"]));
     baixarCsv(`mediplan-contador-${ano ? viewYear : mk}.csv`, L);
   };
   const tag = (t, c) => <span className={`ctg ${c}`}>{t}</span>;
@@ -5731,7 +5749,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
       <DKpi label={"Impostos de " + mes} value={fmtBRL(totGuias)} sub={guias.length ? `${guias.length} ${guias.length === 1 ? "guia" : "guias"} · ${guias.filter((g) => pagos[g.id]).length} paga(s)` : "nada a pagar"} />
       <DKpi label="Caixinha do imposto" value={fmtBRL(guardado)} sub={alvo - guardado > 0.004 ? "falta separar " + fmtBRL(alvo - guardado) : "tudo separado"} subTone={alvo - guardado > 0.004 ? "#B45309" : "#15803D"} />
       <DKpi label="Notas sem pagamento" value={String(semPag.length)} sub={semPag.length ? fmtBRL(semPag.reduce((a, t) => a + t.bruto, 0)) + " a receber" : semNota.length ? semNota.length + " sem nota marcada" : "tudo em dia"} subTone={semPag.some((t) => t.atras) ? "#B91C1C" : "#64748B"} />
-      <DKpi label={"IR de " + viewYear + " (estimativa)"} value={rend > 0 ? (saldoIr >= 0 ? "+ " : "− ") + fmtBRL(Math.abs(saldoIr)) : "—"} tone={rend > 0 ? (saldoIr >= 0 ? "#15803D" : "#B91C1C") : null} sub={rend > 0 ? (saldoIr >= 0 ? "a restituir" : "a pagar") : "informe seus rendimentos"} />
+      <DKpi label={"IR de " + viewYear + " (estimativa)"} value={rend > 0 ? (saldoIr >= 0 ? "+ " : "− ") + fmtBRL(Math.abs(saldoIr)) : "—"} tone={rend > 0 ? (saldoIr >= 0 ? "#15803D" : "#B91C1C") : null} sub={rend > 0 ? (saldoIr >= 0 ? "você recebe de volta" : "você ainda paga") : "preencha quanto recebeu"} />
     </div>
   );
   const GRUPOS = [
@@ -5830,40 +5848,63 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const irBody = (
     <div className="ct-ir">
       <div className="form-grid">
-        <div className="field"><label>Rendimentos tributáveis no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Pró-labore, salário CLT e aluguel. {sug.rend > 0 ? "Em branco usa o que está lançado no app." : ""} Pix como sócio e dividendos são isentos e não entram aqui.</div></div>
-        <div className="field"><label>Imposto já retido no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Está no informe de rendimentos. Em branco usa o desconto dos vínculos CLT.</div></div>
+        <div className="field"><label>Quanto você recebeu no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Só pró-labore, carteira assinada e aluguel. {sug.rend > 0 ? "Em branco, o app usa o que você já lançou." : ""} Pix como sócio e dividendos não entram.</div></div>
+        <div className="field"><label>Imposto já descontado no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Aparece no informe de rendimentos que a empresa envia em fevereiro.</div></div>
         <div className="field"><label>INSS pago no ano (R$)</label><MoneyInput value={ir.inss === undefined || ir.inss === "" ? "" : ir.inss} placeholder={sug.inss ? Math.round(sug.inss).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("inss", v)} /></div>
-        <div className="field"><label>Previdência privada PGBL no ano (R$)</label><MoneyInput value={ir.pgbl === undefined ? "" : ir.pgbl} onChange={(v) => setIr("pgbl", v)} /></div>
+        <div className="field"><label>Previdência privada PGBL (R$)</label><MoneyInput value={ir.pgbl === undefined ? "" : ir.pgbl} onChange={(v) => setIr("pgbl", v)} /></div>
         <div className="field"><label>Dependentes</label><input type="number" min="0" value={ir.dependentes || ""} placeholder="0" onChange={(e) => setIr("dependentes", e.target.value)} /></div>
       </div>
       <div className="ct-ir-res">
-        <div className="kv-line"><span>Saúde (despesas dedutíveis)</span><b className="mono">{fmtBRL(saude)}</b></div>
-        <div className="kv-line"><span>Educação (até o limite)</span><b className="mono">{fmtBRL(educ)}</b></div>
-        <div className="kv-line"><span>{irr.usaSimp ? "Desconto simplificado (melhor para você)" : "Deduções (declaração completa, melhor para você)"}</span><b className="mono">− {fmtBRL(irr.usaSimp ? irr.simp : irr.deducoes)}</b></div>
-        <div className="kv-line"><span>Imposto devido no ano</span><b className="mono">{fmtBRL(irr.devido)}</b></div>
-        {anoIsento.length > 0 && <div className="kv-line"><span>Rendimentos isentos (Pix como sócio e dividendos)</span><b className="mono">{fmtBRL(somaG(anoIsento))}</b></div>}
-        <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Informe seus rendimentos" : (saldoIr >= 0 ? "A restituir " : "A pagar ") + fmtBRL(Math.abs(saldoIr))}</b></div>
+        <div className="kv-line"><span>Imposto do ano</span><b className="mono">{fmtBRL(irr.devido)}</b></div>
+        <div className="kv-line"><span>Você paga a menos por causa de saúde e escola</span><b className="mono" style={{ color: devolucaoDed > 0 ? "#15803D" : undefined }}>{fmtBRL(devolucaoDed)}</b></div>
+        <div className="kv-line"><span>Declaração mais vantajosa</span><b>{irr.usaSimp ? "Simplificada" : "Completa"}</b></div>
+        {anoIsento.length > 0 && <div className="kv-line"><span>Recebido sem imposto (Pix como sócio e dividendos)</span><b className="mono">{fmtBRL(somaG(anoIsento))}</b></div>}
+        <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Preencha quanto você recebeu" : (saldoIr >= 0 ? "Você recebe de volta " : "Você ainda paga ") + fmtBRL(Math.abs(saldoIr))}</b></div>
       </div>
-      <div className="field-hint">Estimativa simplificada com a tabela de {viewYear >= 2026 ? 2026 : viewYear} e a redução para rendas até R$ 88.200 por ano. Não substitui a declaração nem o contador.</div>
+      <div className="field-hint">Valor aproximado, com a tabela de {viewYear >= 2026 ? 2026 : viewYear}. Quem confirma é o contador na declaração.</div>
     </div>
   );
   const dedAteHoje = [...dedAno].filter((e) => String(e.dateIso).slice(0, 7) <= todayStr().slice(0, 7)).sort((x, y) => String(y.dateIso).localeCompare(String(x.dateIso)));
   const dedSemNota = dedAteHoje.filter((e) => !(e.anexos || []).length).length;
   const dedLista = dedVerTodas ? dedAteHoje : dedAteHoje.slice(0, 6);
+  const somaSaude = dedAno.filter((e) => e.category === "saude").reduce((t, e) => t + e.amount, 0);
+  const somaEscola = dedAno.filter((e) => e.category === "educacao").reduce((t, e) => t + e.amount, 0);
   const dedBody = (
     <div>
-      {onAddDed && <button type="button" className="btn btn-primary sm" style={{ marginBottom: 10 }} onClick={onAddDed}><IconPlus size={14} color="#fff" /> Adicionar despesa dedutível</button>}
-      {porCat.length === 0 ? <div className="empty-state">Nenhuma despesa dedutível em {viewYear}. Saúde e escola entram sozinhas; para outras, marque “Dedutível” ao lançar ou pelo lápis em Despesas.</div> : (<>
-        <div className="dprox">{porCat.map((c) => <div key={c.nome}><span><b><span className="legend-dot" style={{ background: c.cor, marginRight: 8 }} />{c.nome}</b><small>{c.n} lançamento(s)</small></span><b className="mono">{fmtBRL(c.v)}</b></div>)}</div>
+      <div className={`ded-dev ${devolucaoDed > 0 ? "ok" : ""}`}>
+        {rend <= 0 ? (<><small>Economia no imposto de renda</small><b className="mono">—</b><span>Preencha “Quanto você recebeu no ano” no quadro do imposto de renda.</span></>)
+          : devolucaoDed > 0 ? (<><small>Economia no imposto de renda</small><b className="mono">{fmtBRL(devolucaoDed)}</b><span>É quanto você deixa de pagar em {viewYear} por causa dos gastos com saúde e escola.</span></>)
+          : (<><small>Economia no imposto de renda</small><b className="mono">R$ 0,00</b><span>Por enquanto seus gastos ainda não diminuem o imposto. Continue guardando as notas.</span></>)}
+      </div>
+      <div className="ded-tot"><span>Saúde <b className="mono">{fmtBRL(somaSaude)}</b></span><span>Escola <b className="mono">{fmtBRL(somaEscola)}</b></span></div>
+      {somaEscola > IR_EDU_LIMITE * (1 + dep) && <div className="field-hint" style={{ margin: "-6px 2px 12px" }}>Escola desconta no máximo {fmtBRL(IR_EDU_LIMITE)} por pessoa no ano. O cálculo acima já considera isso.</div>}
+      <button type="button" className={`btn btn-primary sm ded-add ${avForm ? "on" : ""}`} onClick={() => setAvForm(!avForm)}><IconPlus size={14} color="#fff" /> Adicionar gasto com nota</button>
+      {avForm && (
+        <div className="ded-av">
+          <p className="line-sub" style={{ margin: "0 0 10px" }}>Use para gastos de saúde ou escola que você quer guardar para o imposto de renda, inclusive de meses antes de usar o app. Não muda o seu saldo.</p>
+          <div className="form-grid">
+            <div className="field" style={{ gridColumn: "1 / -1" }}><label>O que foi</label><input value={avDesc} onChange={(e) => setAvDesc(e.target.value)} placeholder="Ex: consulta, exame, dentista, escola" /></div>
+            <div className="field"><label>Valor (R$)</label><MoneyInput value={avValor} onChange={setAvValor} /></div>
+            <div className="field"><label>Data</label><input type="date" value={avData} max={todayStr()} onChange={(e) => setAvData(e.target.value)} /></div>
+          </div>
+          <div className="field"><label>É de</label><div className="chip-row">{[["saude", "Saúde"], ["educacao", "Escola"]].map(([k, l]) => <button key={k} type="button" className={`chip sm ${avCat === k ? "active" : ""}`} aria-pressed={avCat === k} onClick={() => setAvCat(k)}>{l}</button>)}</div></div>
+          <div className="field"><label>Foto ou PDF da nota</label><AnexosField value={avAnexos} onChange={setAvAnexos} /></div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="btn btn-primary sm" disabled={!avDesc.trim() || !(Number(avValor) > 0) || !avData} onClick={salvarAvulsa}>Salvar</button>
+            <button type="button" className="btn btn-ghost sm" onClick={() => setAvForm(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {dedAteHoje.length === 0 ? <div className="empty-state">Nenhum gasto de saúde ou escola em {viewYear}. Plano de saúde e escola lançados em Despesas aparecem aqui sozinhos.</div> : (<>
         <div className="ded-lista">
           {dedLista.map((e) => (
-            <div key={e.key} className="ded-it"><span><b>{e.description}</b><small>{fmtDatePt(e.dateIso)} · {(EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label}</small></span>
-              <span className="ded-r"><b className="mono">{fmtBRL(e.amount)}</b>{(e.anexos || []).length ? e.anexos.map((a) => <button key={a.id} type="button" className="link-btn" onClick={() => abrirAnexo(a)}>📎 ver nota</button>) : <small className="ded-sem">sem nota</small>}</span></div>
+            <div key={e.key} className="ded-it"><span><b>{e.description}</b><small>{fmtDatePt(e.dateIso)} · {e.category === "educacao" ? "Escola" : e.category === "saude" ? "Saúde" : (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label}</small></span>
+              <span className="ded-r"><b className="mono">{fmtBRL(e.amount)}</b>{(e.anexos || []).length ? e.anexos.map((a) => <button key={a.id} type="button" className="link-btn" onClick={() => abrirAnexo(a)}>📎 ver nota</button>) : <small className="ded-sem">falta a nota</small>}{e.soIR && <button type="button" className="link-btn ded-rm" onClick={() => removerAvulsa(e.avId)}>remover</button>}</span></div>
           ))}
         </div>
-        {dedAteHoje.length > 6 && <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => setDedVerTodas(!dedVerTodas)}>{dedVerTodas ? "Mostrar só as mais recentes" : `Ver todas as ${dedAteHoje.length} despesas até este mês`}</button>}
-        {dedSemNota > 0 && <div className="field-hint">{dedSemNota} despesa(s) sem nota anexada. Para anexar, abra pelo lápis em Despesas.</div>}
-        {outrosDed.length > 0 && <div className="field-hint">Cursos, congressos e anuidade do conselho só abatem no IR de quem é autônomo e faz livro-caixa. Eles vão para o relatório do contador.</div>}
+        {dedAteHoje.length > 6 && <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => setDedVerTodas(!dedVerTodas)}>{dedVerTodas ? "Ver menos" : `Ver todos (${dedAteHoje.length})`}</button>}
+        {dedSemNota > 0 && <div className="field-hint">Para pôr a nota numa conta do mês, toque no lápis dela em Despesas.</div>}
+        {outrosDed.length > 0 && <div className="field-hint">Cursos e congressos não diminuem o imposto de quem recebe pró-labore. Eles vão no relatório para o contador avaliar.</div>}
       </>)}
     </div>
   );
@@ -5881,8 +5922,8 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
     <>
       <div className={desk ? "dsec" : "ct-sec"}>Para o ano</div>
       <div className="dgvs">
-        <DGv id="ct-ir" wide={desk} open icon={<IconCalc size={18} />} tone="#15803D" title={"Imposto de renda de " + viewYear} sub="estimativa com o que está no app" val={rend > 0 ? (saldoIr >= 0 ? "a restituir " : "a pagar ") + fmtBRL(Math.abs(saldoIr)) : ""}>{irBody}</DGv>
-        <DGv id="ct-ded" icon={<IconReceipt size={18} />} tone="#6D28D9" title="Despesas dedutíveis" sub="saúde, escola, cursos e conselho" val={fmtBRL(dedAno.reduce((a, e) => a + e.amount, 0))}>{dedBody}</DGv>
+        <DGv id="ct-ir" wide={desk} open icon={<IconCalc size={18} />} tone="#15803D" title={"Imposto de renda de " + viewYear} sub="valor aproximado" val={rend > 0 ? (saldoIr >= 0 ? "recebe " : "paga ") + fmtBRL(Math.abs(saldoIr)) : ""}>{irBody}</DGv>
+        <DGv id="ct-ded" icon={<IconReceipt size={18} />} tone="#6D28D9" title="Gastos que descontam no IR" sub="saúde e escola, com as notas" val={rend > 0 && devolucaoDed > 0 ? fmtBRL(devolucaoDed) : fmtBRL(somaSaude + somaEscola)}>{dedBody}</DGv>
         <DGv id="ct-rel" icon={<IconDownload size={18} />} tone="#1D4ED8" title="Relatório para o contador" sub="planilha do mês ou do ano" val="">{relBody}</DGv>
         <DGv id="ct-calc" icon={<IconCalc size={18} />} tone="#334155" title="Como o imposto é calculado" sub={calcSub} val="">
           <ContabCalc contab={contab} setContab={setContab} app={app} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} />
