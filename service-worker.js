@@ -1,5 +1,5 @@
 // Sallos: busca sempre a versão mais nova quando há internet; sem internet, usa a cópia guardada.
-const CACHE_NAME = "mediplan-202611202143";
+const CACHE_NAME = "mediplan-202611202150";
 const REM_CACHE = "mediplan-lembretes"; // lista de lembretes gravada pelo app; não é apagada nas atualizações
 const ASSETS = ["./", "./index.html", "./app.js", "./manifest.json", "./sallos-192.png", "./sallos-512.png", "./sallos-180.png", "./sallos-32.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)).catch(() => {})); self.skipWaiting(); });

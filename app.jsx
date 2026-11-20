@@ -655,6 +655,7 @@ const IconChevronRight = (p) => <Ico {...p}><polyline points="9 18 15 12 9 6"/><
 const IconChevronUp = (p) => <Ico {...p}><polyline points="18 15 12 9 6 15"/></Ico>;
 const IconChevronDown = (p) => <Ico {...p}><polyline points="6 9 12 15 18 9"/></Ico>;
 const IconX = (p) => <Ico {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ico>;
+const IconCheck = (p) => <Ico {...p}><polyline points="20 6 9 17 4 12"/></Ico>;
 const IconBuilding = (p) => <Ico {...p}><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><line x1="10" y1="6" x2="14" y2="6"/><line x1="10" y1="10" x2="14" y2="10"/><line x1="10" y1="14" x2="14" y2="14"/><line x1="10" y1="18" x2="14" y2="18"/></Ico>;
 const IconClock = (p) => <Ico {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Ico>;
 const IconReceipt = (p) => <Ico {...p}><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="12" y2="15"/></Ico>;
@@ -4077,6 +4078,15 @@ function App() {
         .fg-v small { font-size: 12px; font-weight: 600; } .fg-v small.pend { color: #B45309; } .fg-v small.ok { color: #15803D; }
         .fg-body { background: var(--surface-2); border-top: 1px solid var(--border); padding-bottom: 4px; }
         .fg-body .tbl { background: transparent; } .fg-body .tbl th { background: transparent; }
+        .conf-card { border: 1.5px solid color-mix(in srgb, var(--teal) 35%, var(--border)); }
+        .conf-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; } .conf-head .card-note { display: block; margin-top: 2px; }
+        .conf-it { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+        .conf-t { min-width: 0; } .conf-t b { display: block; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .conf-t small { display: block; font-size: 12px; color: var(--text-dim); }
+        .conf-v { font-size: 14px; white-space: nowrap; }
+        .conf-ok { display: inline-flex; align-items: center; gap: 5px; border: none; border-radius: 999px; background: var(--teal); color: #fff; font: inherit; font-size: 13px; font-weight: 600; padding: 8px 13px; cursor: pointer; white-space: nowrap; }
+        .conf-ok:hover { filter: brightness(1.06); } .conf-ok:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        .conf-mais { margin-top: 6px; font-size: 13px; } .conf-todos { white-space: nowrap; }
+        @media (max-width: 380px) { .conf-it { grid-template-columns: auto minmax(0, 1fr) auto; } .conf-v { grid-column: 2; grid-row: 2; font-size: 13px; } .conf-ok { grid-column: 3; grid-row: 1 / span 2; } }
         .fg-todos { margin: 10px 18px 2px; font-size: 13px; } .tbl .fz-ed, .tbl .fz-ed * { white-space: normal; } .tbl .fz-ed .fm-op b, .tbl .fz-ed .fm-op small { overflow-wrap: anywhere; } .tbl .fz-ed label { overflow-wrap: break-word; }
         .fat-bruto { font-size: 11.5px; color: var(--text-dim); font-weight: 400; font-family: inherit; }
         .fg-body .tbl thead th:nth-child(2), .fg-body .tbl tbody tr:not(.fz-row) > td:nth-child(2) { display: none; }
@@ -5306,6 +5316,27 @@ function FaturamentoTab({
     arr.forEach((g) => g.itens.sort((a, b) => String(a.dateIso || "").localeCompare(String(b.dateIso || ""))));
     return arr.sort((a, b) => b.plantoes - a.plantoes || b.net - a.net);
   })();
+  // o que já devia ter caído e ainda não foi marcado: um toque para confirmar
+  const [verTodosConf, setVerTodosConf] = useState(false);
+  const hojeIso = todayStr();
+  const aConfirmar = monthIncomeItems.filter((i) => !i.recebido && String(i.dateIso || "") <= hojeIso).sort((a, b) => String(a.dateIso || "").localeCompare(String(b.dateIso || "")));
+  const confirmar = aConfirmar.length > 0 && (
+    <div className="card conf-card" id="fat-confirmar">
+      <div className="conf-head"><div><h3 className="card-title">Confirme o que caiu na conta</h3><span className="card-note">{aConfirmar.length === 1 ? "1 recebimento com data já passada" : aConfirmar.length + " recebimentos com data já passada"}</span></div>
+        {aConfirmar.length > 1 && <button type="button" className="btn btn-ghost btn-sm conf-todos" onClick={() => aConfirmar.forEach((x) => x.toggle())}>Recebi todos</button>}</div>
+      <div className="conf-list">
+        {(verTodosConf ? aConfirmar : aConfirmar.slice(0, 5)).map((it) => (
+          <div key={it.key} className="conf-it">
+            <span className="legend-dot" style={{ background: it.cor }} />
+            <span className="conf-t"><b>{String(it.nome || "").split(" · ")[0]}</b><small>{it.tipo === "plantao" ? rotuloPlantao(it) : it.dateLabel}</small></span>
+            <b className="mono conf-v">{fmtBRL(it.net)}</b>
+            <button type="button" className="conf-ok" onClick={it.toggle} aria-label={"Marcar " + it.nome + " como recebido"}><IconCheck size={15} color="#fff" /> Recebi</button>
+          </div>
+        ))}
+      </div>
+      {aConfirmar.length > 5 && <button type="button" className="link-btn conf-mais" onClick={() => setVerTodosConf(!verTodosConf)}>{verTodosConf ? "Mostrar menos" : `Ver os outros ${aConfirmar.length - 5}`}</button>}
+    </div>
+  );
   const received = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0);
   const donutData = netByVinculo.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }));
 
@@ -5320,25 +5351,7 @@ function FaturamentoTab({
       </div>
 
 
-      {!desk && (<>
-      {workCard}
-
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-head">
-            <h3 className="card-title">Por vínculo</h3>
-            <div className="segmented sm"><button className={`seg-btn ${gainScope === "mensal" ? "active" : ""}`} onClick={() => setGainScope("mensal")}>Mês</button><button className={`seg-btn ${gainScope === "anual" ? "active" : ""}`} onClick={() => setGainScope("anual")}>Ano</button></div>
-          </div>
-          {donutData.length === 0 ? <div className="empty-state">Cadastre um vínculo e lance plantões para ver a distribuição.</div> : <InteractiveDonut data={donutData} size={150} stroke={20} centerLabel={gainScope === "anual" ? "ano" : "mês"} />}
-        </div>
-
-        <div className="card">
-          <div className="card-head"><h3 className="card-title">Rendimento</h3><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
-          <SvgAreaChart data={history12} height={200} color={TEAL} valueKey="value" onOpen={(d) => goMonth(d.y, d.m)} />
-        </div>
-      </div>
-
-      </>)}
+      {confirmar}
       <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr", alignItems: "start" } : null}>
       <div className="card flush">
         <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3><span className="card-note">toque no status para marcar como recebido</span></div>
@@ -5416,6 +5429,25 @@ function FaturamentoTab({
 
       )}
       </div>
+      {!desk && (<>
+      {workCard}
+
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-head">
+            <h3 className="card-title">Por vínculo</h3>
+            <div className="segmented sm"><button className={`seg-btn ${gainScope === "mensal" ? "active" : ""}`} onClick={() => setGainScope("mensal")}>Mês</button><button className={`seg-btn ${gainScope === "anual" ? "active" : ""}`} onClick={() => setGainScope("anual")}>Ano</button></div>
+          </div>
+          {donutData.length === 0 ? <div className="empty-state">Cadastre um vínculo e lance plantões para ver a distribuição.</div> : <InteractiveDonut data={donutData} size={150} stroke={20} centerLabel={gainScope === "anual" ? "ano" : "mês"} />}
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h3 className="card-title">Rendimento</h3><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
+          <SvgAreaChart data={history12} height={200} color={TEAL} valueKey="value" onOpen={(d) => goMonth(d.y, d.m)} />
+        </div>
+      </div>
+
+      </>)}
       {desk && (
         <DGrid>
           <DGv id="fat-12m" open icon={<IconTrending size={18} />} title="Receita líquida mês a mês" sub={`últimos ${chartMonths} meses`} val={"média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.value, 0) / history12.length : 0)}>
