@@ -49,12 +49,67 @@ const EXP_CATS = [
   { id: "seguro", label: "Seguros", color: "#0891B2", kw: ["seguro", "previdencia", "previdência"] },
   { id: "impostos", label: "Impostos", color: "#64748B", kw: ["imposto", "darf", "crm", "contador", "contabil", "contábil", "inss", "iss", "taxa", "anuidade", "sindicato", "cremeb"] },
   { id: "pets", label: "Pets", color: "#D97706", kw: ["pet", "cachorro", "gato", "veterin", "ração", "racao"] },
+  { id: "restaurante", label: "Restaurantes", color: "#BE185D", kw: [] },
+  { id: "compras", label: "Compras", color: "#65A30D", kw: [] },
+  { id: "viagem", label: "Viagens", color: "#0F766E", kw: [] },
+  { id: "beleza", label: "Beleza", color: "#C026D3", kw: [] },
+  { id: "assinaturas", label: "Assinaturas", color: "#7C2D12", kw: [] },
   { id: "outros", label: "Outros", color: "#94A3B8", kw: [] },
 ];
 const EXP_CAT_MAP = Object.fromEntries(EXP_CATS.map((c) => [c.id, c]));
+// ---- reconhecimento das compras do cartão ----
+// nomes como vêm na fatura: "IFD*RESTAURANTE X", "MP *LOJA", "UBER* TRIP", "PAG*DROGARIA", "AMAZON BR 02/10"
+const SEM_ACENTO = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const PROC_PREFIXO = /^\s*(ifd|ifood|pg|pag|pags|pagseguro|ps|mp|mpago|mercadopago|ec|ebn|htm|paypal|picpay|sumup|sum|stone|ton|cielo|getnet|shpp|dl|zp|iugu|ame|pp|cl|bo|ebw|nupay|rede|asaas|vindi|zoop|pagarme|pagar me)\s*\*\s*/;
+const limpaLoja = (desc) => {
+  let d = SEM_ACENTO(desc).replace(PROC_PREFIXO, "").replace(PROC_PREFIXO, "");
+  d = d.replace(/\bparc(ela)?\s*\d+\s*(\/|de)\s*\d+/g, " ").replace(/\b\d{1,2}\s*\/\s*\d{1,2}\b/g, " ");
+  return d.replace(/[^a-z0-9&]+/g, " ").replace(/\s+/g, " ").trim();
+};
+// chave da loja para lembrar a categoria que a pessoa escolheu
+const chaveLoja = (desc) => limpaLoja(desc).replace(/\d+/g, " ").replace(/\s+/g, " ").trim().split(" ").filter((w) => w.length > 1).slice(0, 3).join(" ");
+const REGRAS_COMPRA = [
+  ["restaurante", ["ifood", "ifd", "uber eats", "ubereats", "rappi", "aiqfome", "ze delivery", "zedelivery", "james delivery", "delivery", "restaurante", "rest", "churrascaria", "churrasco", "pizzaria", "pizza*", "burger*", "burguer*", "hamburgueria", "mcdonalds", "mc donalds", "mcdonald*", "burger king", "bk brasil", "subway", "outback", "habibs", "habib s", "giraffas", "spoleto", "madero", "coco bambu", "starbucks", "cafe", "cafeteria", "coffee", "lanchonete", "lanche*", "bar", "boteco", "choperia", "chopp*", "cervejaria", "sorveteria", "sorvete*", "acai*", "doceria", "confeitaria", "sushi*", "temaki*", "japones*", "comida*", "espetinho", "pastelaria", "pastel*", "food*", "grill", "bistro", "cantina", "kfc", "popeyes", "dominos", "pizza hut", "bobs", "vivenda do camarao", "galeto*", "tapioca*", "cacau show", "kopenhagen", "creperia", "petiscaria", "cozinha", "gastronomia", "buffet", "self service", "marmita*", "quiosque", "beach", "barraca", "fast food", "jeronimo", "abbraccio", "paris 6", "fogo de chao", "china in box", "gendai", "nakombi", "frango*", "cachorro quente", "hot dog", "salgado*", "esfiha*", "kebab"]],
+  ["mercado", ["supermercado*", "supermerc*", "mercado", "mercadinho", "minimercado", "atacadao", "atacado", "atacarejo", "atakarejo", "assai", "carrefour", "extra", "pao de acucar", "gbarbosa", "hiperideal", "redemix", "bompreco", "big bompreco", "walmart", "sams club", "makro", "hortifruti", "hortifrut*", "sacolao", "acougue", "frigorifico", "emporio", "mercearia", "padaria", "panificadora", "panificacao", "oxxo", "st marche", "mambo", "perini", "sonda", "zona sul", "mundial", "guanabara", "prezunic", "dia brasil", "comper", "condor", "angeloni", "nordestao", "cometa", "bretas", "epa", "verdemar", "savegnago", "tenda atacado", "fort atacadista", "max atacadista", "spani", "hippo", "hiper*", "feira", "quitanda", "distribuidora", "bebidas", "adega", "casa de carnes", "carnes", "laticinios"]],
+  ["transporte", ["uber", "uber trip", "uberbr", "99app", "99 app", "99 pop", "99pop", "99taxi", "cabify", "indriver", "indrive", "taxi", "posto*", "auto posto", "combustive*", "shell", "ipiranga", "petrobras", "br mania", "ale combustiveis", "gasolina", "estacionamento", "estacion*", "estapar", "zona azul", "sem parar", "semparar", "conectcar", "veloe", "move mais", "pedagio", "autopista", "ccr", "ecovia", "arteris", "metro", "metro rio", "cptm", "onibus", "bilhete unico", "riocard", "localiza", "movida", "unidas", "oficina", "auto pecas", "autopecas", "pneu*", "lava jato", "lavajato", "lava rapido", "detran", "ipva", "moto*", "car wash", "mecanica", "auto center", "autocenter", "rodoviaria", "buser", "clickbus", "blablacar", "patinete", "bike itau", "tembici", "abastece*"]],
+  ["viagem", ["latam", "tam linhas", "gol linhas", "gol trans", "voegol", "azul linhas", "voeazul", "azul viagens", "decolar", "booking", "airbnb", "hotel*", "hoteis", "pousada*", "resort*", "hostel", "trivago", "expedia", "hotels com", "123milhas", "123 milhas", "maxmilhas", "smiles", "livelo", "cvc", "hurb", "aeroporto", "airlines", "airline", "american air", "tap air", "copa air", "aerolineas", "iberia", "air france", "klm", "emirates", "rentcars", "rent a car", "hertz", "avis", "viagem*", "turismo", "passagem aerea", "seguro viagem", "duty free", "dufry"]],
+  ["saude", ["farmacia*", "farmac*", "drogaria*", "droga*", "drogasil", "droga raia", "raia", "pague menos", "pacheco", "panvel", "sao joao farm*", "venancio", "ultrafarma", "nissei", "extrafarma", "drogal", "farma*", "laboratorio*", "lab", "clinica*", "hospital*", "medic*", "odonto*", "dentista", "dental", "otica*", "oticas", "psicolog*", "fisioterap*", "fisio", "exame*", "unimed", "hapvida", "amil", "bradesco saude", "sulamerica saude", "notredame", "consulta*", "vacina*", "nutri*", "dermato*", "diagnostic*", "fleury", "dasa", "sabin", "hermes pardini", "a+ medicina", "imagem", "radiolog*", "ortoped*", "pediatr*", "cardio*", "oftalmo*", "terapia", "saude"]],
+  ["educacao", ["escola*", "colegio*", "faculdade*", "universidade*", "curso*", "udemy", "coursera", "alura", "hotmart", "eduzz", "kiwify", "livraria*", "saraiva", "leitura", "congresso*", "simposio*", "medcurso", "medgrupo", "estrategia med", "estrategia", "sanar", "afya", "whitebook", "unbound", "uptodate", "up to date", "medway", "medcel", "aristo", "residencia*", "papelaria*", "kalunga", "educa*", "ensino", "idiomas", "ingles", "wizard", "fisk", "ccaa", "cultura inglesa", "duolingo"]],
+  ["assinaturas", ["apple com bill", "apple com", "itunes", "icloud", "google one", "google storage", "google play", "google youtube", "google *", "microsoft*", "office 365", "adobe*", "canva*", "openai", "chatgpt", "anthropic", "claude ai", "dropbox", "notion*", "linkedin*", "kindle unlimited", "audible", "zoom us", "evernote", "1password", "nordvpn", "github", "amazon prime", "prime br", "assinatura*", "mensalidade app"]],
+  ["lazer", ["netflix", "spotify", "disney*", "hbo*", "max com", "hbomax", "prime video", "globoplay", "globo play", "paramount*", "deezer", "youtube*", "crunchyroll", "apple tv", "star plus", "telecine", "premiere", "cinema*", "cinemark", "kinoplex", "cinepolis", "uci", "ingresso*", "sympla", "eventim", "ticketmaster", "ticket360", "bilheteria", "teatro*", "show*", "steam*", "playstation", "psn", "xbox", "nintendo", "epic games", "riot", "parque*", "clube*", "boliche", "karaoke", "museu", "zoologico", "aquario", "beach park", "game*", "jogos"]],
+  ["academia", ["smart fit", "smartfit", "bluefit", "bodytech", "selfit", "academia*", "gympass", "wellhub", "totalpass", "crossfit", "cross fit", "pilates", "studio fit", "personal", "natacao", "fitness"]],
+  ["beleza", ["salao*", "barbearia*", "barber*", "cabelo*", "cabeleir*", "manicure", "esmalteria", "estetica*", "sephora", "boticario", "o boticario", "natura", "avon", "eudora", "perfumaria*", "cosmetic*", "depilacao", "depil*", "spa", "beleza", "beauty", "maquiagem", "quem disse berenice", "jequiti", "mac cosmetics", "loccitane"]],
+  ["pets", ["petz", "cobasi", "petlove", "pet shop", "petshop", "pet*", "veterin*", "agropet", "racao", "petshop*"]],
+  ["telefone", ["tim", "tim brasil", "claro", "vivo", "oi", "recarga*", "telefonica", "nextel", "algar"]],
+  ["internet", ["net virtua", "claro net", "vivo fibra", "oi fibra", "desktop", "brisanet", "sky", "internet", "provedor", "fibra"]],
+  ["seguro", ["seguro*", "seguradora", "porto seguro", "azul seguros", "tokio marine", "mapfre", "allianz", "hdi", "liberty", "youse", "previdencia", "bradesco seguros", "itau seguros", "caixa seguradora", "sompo", "zurich", "suhai"]],
+  ["moradia", ["leroy merlin", "telhanorte", "c&c", "cec casa", "material de construcao", "materiais de construcao", "mat constr*", "construcao", "ferragens", "ferragem", "eletrica", "moveis", "decor*", "lavanderia", "home center", "condominio", "aluguel", "quinto andar", "quintoandar", "tok stok", "tokstok", "etna", "camicado", "mobly", "madeira madeira", "madeiramadeira", "colchoes", "colchao", "casa e construcao", "casa do construtor", "gas", "ultragaz", "liquigas", "copagaz", "supergasbras"]],
+  ["compras", ["amazon*", "amzn*", "mercado livre", "mercadolivre", "mercadolibre", "meli", "shopee", "shein", "aliexpress", "temu", "magalu", "magazine luiza", "magazine*", "americanas", "submarino", "casas bahia", "ponto frio", "pontofrio", "kabum", "fast shop", "fastshop", "renner", "riachuelo", "c&a", "cea", "zara", "hering", "marisa", "pernambucanas", "centauro", "netshoes", "decathlon", "nike*", "adidas", "puma", "havaianas", "arezzo", "schutz", "anacapri", "melissa", "lojas*", "loja", "store", "shopping*", "outlet", "presente*", "cacau show", "kopenhagen", "lindt", "joalheria", "pandora", "vivara", "calcados", "roupas", "moda", "vestuario", "boutique", "apple store", "iplace", "samsung", "xiaomi", "dell", "lenovo", "multilaser", "polishop", "daiso", "imaginarium", "ri happy", "rihappy", "brinquedos", "papelaria", "armarinho", "tecidos", "ebay", "wish", "enjoei", "dafiti", "zattini", "farm", "animale", "reserva", "osklen", "lacoste", "track field", "mizuno", "olympikus", "oakley", "chilli beans", "smart", "cia hering"]],
+  ["impostos", ["iof*", "anuidade*", "tarifa*", "juros*", "encargo*", "multa*", "darf", "crm", "cremeb", "cfm", "imposto*", "taxa*", "cartorio", "receita federal", "prefeitura", "detran"]],
+];
+const regraBate = (txt, k) => {
+  if (k.endsWith("*")) { const b = k.slice(0, -1); return txt.includes(" " + b); }
+  return txt.includes(" " + k + " ");
+};
+function catCompra(desc, aprendidas) {
+  const bruto = SEM_ACENTO(desc);
+  if (!bruto.trim()) return "outros";
+  if (aprendidas) { const k = chaveLoja(desc); if (k && aprendidas[k]) return aprendidas[k]; }
+  // intermediadores que já dizem o tipo
+  if (/^\s*(ifd|ifood)\b/.test(bruto) || /uber\s*\*?\s*eats/.test(bruto) || /\brappi\b/.test(bruto)) return "restaurante";
+  if (/^\s*uber\b/.test(bruto) || /^\s*99\s*(\*|app|pop|taxi|tecnologia)/.test(bruto)) return "transporte";
+  if (/^\s*(amazon|amzn)/.test(bruto)) return /prime|kindle|audible|music/.test(bruto) ? "assinaturas" : "compras";
+  if (/apple\.com\/bill|apple com bill|^\s*google\s*\*/.test(bruto)) return "assinaturas";
+  if (/^\s*(dl|mp|mercadopago)\s*\*\s*(mercado\s*livre|mercadolivre|meli)/.test(bruto)) return "compras";
+  const txt = " " + limpaLoja(desc) + " ";
+  for (const [cat, chaves] of REGRAS_COMPRA) if (chaves.some((k) => regraBate(txt, k))) return cat;
+  return "outros";
+}
 const guessExpCat = (desc) => {
   const d = String(desc || "").toLowerCase();
   if (!d) return "outros";
+  const nova = catCompra(desc);
+  if (nova !== "outros" && !(nova === "compras" && /fatura|cartao|cartão/.test(d))) return nova;
   const palavras = " " + d.replace(/[^a-z0-9\u00e0-\u00fc]+/g, " ") + " ";
   for (const c of EXP_CATS) if (c.kw.some((k) => (k.trim().length <= 4 ? palavras.includes(" " + k.trim() + " ") : d.includes(k)))) return c.id;
   return "outros";
@@ -620,9 +675,13 @@ function parseB3Tables(tables) {
 const CARD_PAY_RE = /(pag(amento|to)?\.?\s*(de\s+)?fatura|fatura\s*(do\s+)?cart|pagto\.?\s*cart|cart[aã]o de cr[eé]dito)/i;
 const INVEST_RE = /(aplica[cç][aã]o|resgate|tesouro direto|corretora|\bcdb\b|\blci\b|\blca\b|invest)/i;
 // Agrupa as compras de uma fatura por categoria, da maior para a menor
-function faturaGrupos(itens) {
+const catItemFatura = (it, aprendidas) => {
+  const k = aprendidas && chaveLoja(it.d); if (k && aprendidas[k]) return aprendidas[k];
+  return it.c && it.c !== "outros" && it.c !== "cartao" && EXP_CAT_MAP[it.c] ? it.c : catCompra(it.d);
+};
+function faturaGrupos(itens, aprendidas) {
   const map = {};
-  (itens || []).forEach((it) => { const m = EXP_CAT_MAP[it.c] || EXP_CAT_MAP.outros; const g = map[m.id] = map[m.id] || { id: m.id, label: m.label, color: m.color, valor: 0, itens: [] }; g.valor += Number(it.v || 0); g.itens.push(it); });
+  (itens || []).forEach((it) => { const m = EXP_CAT_MAP[catItemFatura(it, aprendidas)] || EXP_CAT_MAP.outros; const g = map[m.id] = map[m.id] || { id: m.id, label: m.label, color: m.color, valor: 0, itens: [] }; g.valor += Number(it.v || 0); g.itens.push(it); });
   return Object.values(map).map((g) => ({ ...g, itens: g.itens.sort((a, b) => (a.dt || "").localeCompare(b.dt || "")) })).sort((a, b) => b.valor - a.valor);
 }
 const cleanDesc = (d) => String(d || "").replace(/\s+/g, " ").trim().slice(0, 70);
@@ -2924,7 +2983,7 @@ function App() {
       horas: ws.hours, porHora: ws.hourly, trabalho: ws.byVinculo.map((o) => ({ nome: o.nome, horas: o.hours, liquido: o.net, porHora: o.hourly })),
       receitas: [...monthIncomeItems].sort((a, b) => (a.dateIso || "").localeCompare(b.dateIso || "")).map((i) => ({ quando: i.dateLabel, nome: i.nome, tipo: TIPOS[i.tipo] || i.tipo, bruto: i.gross, liquido: i.net, recebido: i.recebido })),
       despesasItens: [...monthExpenseItems].sort((a, b) => (a.dateIso || "").localeCompare(b.dateIso || "")).map((e) => ({ venc: e.dateLabel, descricao: e.description, categoria: (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, tipo: e.tipo === "recorrente" ? "Todo mês" : "Pontual", valor: e.amount, paga: e.paid })),
-      cartoes: monthExpenseItems.filter((e) => Array.isArray(e.itens) && e.itens.length).map((e) => { const g = faturaGrupos(e.itens); return { nome: e.description, n: e.itens.length, total: e.amount, grupos: g.map((x) => ({ nome: x.label, n: x.itens.length, valor: x.valor })) }; }),
+      cartoes: monthExpenseItems.filter((e) => Array.isArray(e.itens) && e.itens.length).map((e) => { const g = faturaGrupos(e.itens, contab.catAprendida); return { nome: e.description, n: e.itens.length, total: e.amount, grupos: g.map((x) => ({ nome: x.label, n: x.itens.length, valor: x.valor })) }; }),
       categorias: Object.values(cats).sort((a, b) => b.valor - a.valor), limiteGeral: Number(limits.__total || 0),
       aportes: [...monthInvestments].filter((i) => i.tipo !== "ajuste").sort((a, b) => (a.date || "").localeCompare(b.date || "")).map((i) => { const venda = i.tipo === "venda" || Number(i.amount) < 0; return { data: fmtDatePt(i.date), ativo: i.description, classe: i.category, operacao: venda ? "Venda" : "Compra", qtd: i.qty > 0 ? fmtQty(i.qty) : "-", preco: i.qty > 0 ? fmtBRL(i.price) : "-", total: Number(i.amount || 0) }; }),
       carteira: portfolio.positions.map((p) => ({ ativo: p.description, classe: p.category, qtd: p.isQty ? fmtQty(p.qty) : "-", pm: p.isQty ? (p.usd ? fmtUSD : fmtBRL)(p.avg) : "-", cotacao: p.isQty && p.cotacao > 0 ? (p.usd ? fmtUSD : fmtBRL)(p.cotacao) : "-", custo: p.cost, valor: p.value, resultado: p.profit, pct: p.cost > 0 ? p.profitPct : null })),
@@ -3911,7 +3970,9 @@ function App() {
         .xl-grp-h { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: none; padding: 9px 10px 6px; font-family: inherit; font-size: 13.5px; color: var(--text); cursor: pointer; text-align: left; }
         .xl-grp-n { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-weight: 600; flex-wrap: wrap; } .xl-grp-n i { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; } .xl-grp-n small { font-weight: 400; font-size: 12px; color: var(--text-dim); }
         .xl-grp-c { color: var(--text-dim); font-size: 12px; } .xl-grp-bar { height: 4px; background: var(--surface-3); margin: 0 10px 8px; border-radius: 999px; overflow: hidden; } .xl-grp-bar i { display: block; height: 100%; border-radius: 999px; }
-        .xl-it { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--border); font-size: 13px; } .xl-it span:first-child { color: var(--text-dim); font-size: 12px; } .xl-it-d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .xl-fat-dica { font-size: 12px; color: var(--text-dim); margin: -2px 0 8px; line-height: 1.4; }
+        .xl-mudar { position: relative; font-size: 12px; font-weight: 600; color: var(--teal); padding: 4px 2px; cursor: pointer; } .xl-mudar select { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; font-size: 16px; }
+        .xl-it { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--border); font-size: 13px; } .xl-it span:first-child { color: var(--text-dim); font-size: 12px; } .xl-it-d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .fat-box { display: flex; flex-direction: column; gap: 4px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; padding: 12px 14px; margin: 10px 0 12px; font-size: 13px; } .fat-box > span { color: var(--text-dim); } .fat-box input:not([type=checkbox]) { background: #fff; }
         .choice em { font-style: normal; font-size: 11px; font-weight: 700; color: #166534; background: #DCFCE7; border-radius: 999px; padding: 1px 8px; align-self: flex-start; }
         #day-modo { display: flex; margin-bottom: 0; } #day-modo .seg-btn { flex: 1; }
@@ -4655,6 +4716,7 @@ function App() {
             monthExpenseItems={monthExpenseItems} addExpense={addExpense} addRecurringExpense={addRecurringExpense}
             viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} dedSignal={signals.dedutivel} limits={limits} setLimit={setLimit} updateExpense={updateExpense} updateRecurringExpense={updateRecurringExpense}
             desk={desk} history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} goTab={goTab}
+            catAprendida={contab.catAprendida || {}} aprenderCat={(desc, cat) => { const k = chaveLoja(desc); if (k) setContab((p) => ({ ...p, catAprendida: { ...(p.catAprendida || {}), [k]: cat } })); }}
           />
         )}
         {activeTab === "investimentos" && (
@@ -7815,7 +7877,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   );
 }
 
-function ExpensesTab({ dedSignal, monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
+function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
   const [editKey, setEditKey] = useState(null);
   const gv = useGv();
   const [showForm, setShowForm] = useState(false);
@@ -7949,14 +8011,16 @@ function ExpensesTab({ dedSignal, monthExpenseItems, addExpense, addRecurringExp
                       {linha}{ed}
                       <div className="xl-fat" data-fat={e.description}>
                         <div className="xl-fat-h">Gastos desta fatura por categoria</div>
-                        {faturaGrupos(e.itens).map((g) => { const gk = e.key + "|" + g.id, ab = !!openGrp[gk]; return (
+                        <div className="xl-fat-dica">Abra uma categoria e toque em "mudar" se alguma compra estiver no lugar errado. O app lembra da loja nas próximas faturas.</div>
+                        {faturaGrupos(e.itens, catAprendida).map((g) => { const gk = e.key + "|" + g.id, ab = !!openGrp[gk]; return (
                           <div key={g.id} className="xl-grp">
                             <button type="button" className="xl-grp-h" data-grp={g.label} aria-expanded={ab} onClick={() => setOpenGrp((p) => ({ ...p, [gk]: !p[gk] }))}>
                               <span className="xl-grp-n"><i style={{ background: g.color }} />{g.label}<small>{g.itens.length} {g.itens.length === 1 ? "compra" : "compras"} · {Math.round((g.valor / (e.amount || 1)) * 100)}%</small></span>
                               <b className="mono">{fmtBRL(g.valor)}</b><span className="xl-grp-c" aria-hidden="true">{ab ? "▴" : "▾"}</span>
                             </button>
                             <div className="xl-grp-bar"><i style={{ width: `${Math.min(100, (g.valor / (e.amount || 1)) * 100)}%`, background: g.color }} /></div>
-                            {ab && g.itens.map((it, n) => <div key={n} className="xl-it"><span className="mono">{(it.dt || "").slice(8, 10)}/{(it.dt || "").slice(5, 7)}</span><span className="xl-it-d">{it.d}</span><b className="mono">{fmtBRL(it.v)}</b></div>)}
+                            {ab && g.itens.map((it, n) => <div key={n} className="xl-it"><span className="mono">{(it.dt || "").slice(8, 10)}/{(it.dt || "").slice(5, 7)}</span><span className="xl-it-d">{it.d}</span><b className="mono">{fmtBRL(it.v)}</b>
+                              {aprenderCat && <label className="xl-mudar">mudar<select value={g.id} aria-label={"Categoria de " + it.d} onChange={(ev) => aprenderCat(it.d, ev.target.value)}>{EXP_CATS.filter((c) => c.id !== "cartao").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}</div>)}
                           </div>
                         ); })}
                         {Math.abs(e.ajuste || 0) >= 0.01 && (
@@ -8859,7 +8923,7 @@ function lerNotaGenerica(lines) {
   const rows = out.map((t) => ({ kind: "trade", src: "neg", nota: true, date: t.date || todayStr(), semData: !t.date, ticker: t.tk, spec: t.spec, name: ASSET_NAME[t.tk] || "", incerto: true, category: b3Category(t.tk, "", ""), side: t.side, qty: t.qty, price: t.price, amount: t.amount }));
   return { rows, outros: 0, ehNota: rows.length > 0, datas: [...new Set(rows.map((r) => r.date))].sort() };
 }
-if (typeof window !== "undefined") window.__mp = { pdfToLines, parseNotaCorretagem, lerCarteiraTexto, lerCarteiraTabelas, juntarCarteira, lerTradesExterior, lerNotaGenerica, detectLoc, numLoc };
+if (typeof window !== "undefined") window.__mp = { pdfToLines, parseNotaCorretagem, lerCarteiraTexto, lerCarteiraTabelas, juntarCarteira, lerTradesExterior, lerNotaGenerica, detectLoc, numLoc, catCompra, chaveLoja };
 
 function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
   const ext = fonte === "ext";
