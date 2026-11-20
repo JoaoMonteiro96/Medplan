@@ -2462,6 +2462,20 @@ function App() {
     return () => { vivo = false; };
   }, [investments.length]);
   const portfolio = useMemo(() => computePortfolio(investments, cotacoes), [investments, cotacoes]);
+  // retrato diário da carteira (valor, total comprado e vendido) para o gráfico de rentabilidade
+  useEffect(() => {
+    if (!loaded || !portfolio.positions.length) return;
+    const d = todayStr();
+    const novo = { d, v: Math.round(portfolio.totalValue * 100) / 100, b: Math.round(portfolio.totalBought * 100) / 100, s: Math.round(portfolio.totalSold * 100) / 100 };
+    const hist = Array.isArray(cotacoes.__hist) ? cotacoes.__hist : [];
+    const ult = hist[hist.length - 1];
+    if (ult && ult.d === d && ult.v === novo.v && ult.b === novo.b && ult.s === novo.s) return;
+    let h = [...hist.filter((x) => x.d !== d), novo].sort((a, b) => a.d.localeCompare(b.d));
+    // mais de um ano atrás: guarda um ponto por semana
+    const corte = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10), vistos = new Set();
+    h = h.filter((x) => { if (x.d >= corte) return true; const t = new Date(x.d + "T12:00:00"); const k = t.getFullYear() + "-" + Math.floor((t - new Date(t.getFullYear(), 0, 1)) / (7 * 864e5)); if (vistos.has(k)) return false; vistos.add(k); return true; }).slice(-900);
+    setCotacoes((p) => ({ ...p, __hist: h }));
+  }, [loaded, portfolio.totalValue, portfolio.totalBought, portfolio.totalSold]);
   // meta: valor informado à mão, o valor atual dos investimentos ou o patrimônio total (os dois últimos mudam sozinhos)
   // ---- patrimônio total (recebido - pago, independente de estar em caixa ou investido) ----
   const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + posicaoInicialTotal + portfolio.unrealized;
@@ -3935,6 +3949,22 @@ function App() {
           .ci-fs { grid-column: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
           .ci-f small { display: block; } .ci-semq { grid-column: 2; grid-template-columns: 1fr; }
         }
+        /* ================= v50: rentabilidade com minigráficos ================= */
+        .rt-card { padding: 18px 20px 20px; margin-bottom: 16px; }
+        .rt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+        .rt-head h3 { margin: 0; font-size: 17px; font-weight: 600; flex: 1; }
+        .rt-ic { width: 44px; height: 44px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; color: var(--text); }
+        .rt-info { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--text-dim); background: none; color: var(--text-dim); font: 600 13px/1 Georgia, serif; font-style: italic; cursor: pointer; }
+        .rt-txt { font-size: 12.5px; color: var(--text-dim); margin: -4px 0 12px; line-height: 1.45; }
+        .rt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .rt-b { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .rt-n { font-size: 14px; color: var(--text-dim); font-weight: 500; }
+        .rt-svg { width: 100%; height: 64px; display: block; overflow: visible; }
+        .rt-pill { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; border-radius: 999px; padding: 6px 14px; font-size: 17px; }
+        .rt-pill b { font-weight: 600; } .rt-pill.up { background: #E3F7EE; color: #15803D; } .rt-pill.down { background: #FDE8E8; color: #B91C1C; }
+        :root[data-theme="dark"] .rt-pill.up { background: rgba(22,163,74,.16); color: #4ADE80; } :root[data-theme="dark"] .rt-pill.down { background: rgba(220,38,38,.16); color: #FCA5A5; }
+        .dgrid .rt-card { margin-bottom: 0; }
+
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -7807,6 +7837,75 @@ function AssetInput({ value, onChange, onPick, options, placeholder, showAllOnEm
   );
 }
 
+// ---- Rentabilidade: dois minigráficos (12 meses e total) ----
+function MiniLinha({ serie, cor, id }) {
+  const W = 200, H = 64, P = 6;
+  if (!serie || serie.length < 2) return <svg className="rt-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true"><line x1={P} x2={W - P} y1={H / 2} y2={H / 2} stroke={cor} strokeWidth="2.5" strokeDasharray="3 5" strokeLinecap="round" opacity=".5" /><circle cx={W - P - 2} cy={H / 2} r="5" fill="var(--surface)" stroke={cor} strokeWidth="2.5" /></svg>;
+  const t0 = serie[0].t, t1 = serie[serie.length - 1].t || t0 + 1;
+  const ys = serie.map((p) => p.y), lo = Math.min(...ys), hi = Math.max(...ys), amp = hi - lo || 1;
+  const X = (t) => P + ((t - t0) / (t1 - t0 || 1)) * (W - 2 * P - 4), Y = (y) => H - P - ((y - lo) / amp) * (H - 2 * P);
+  const pts = serie.map((p) => [X(p.t), Y(p.y)]);
+  const d = pts.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join(" ");
+  const last = pts[pts.length - 1];
+  return (
+    <svg className="rt-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
+      <defs><linearGradient id={"rtg-" + id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={cor} stopOpacity=".22" /><stop offset="1" stopColor={cor} stopOpacity="0" /></linearGradient></defs>
+      <path d={d + ` L ${last[0].toFixed(1)} ${H} L ${pts[0][0].toFixed(1)} ${H} Z`} fill={`url(#rtg-${id})`} />
+      <path d={d} fill="none" stroke={cor} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={last[0]} cy={last[1]} r="5" fill="var(--surface)" stroke={cor} strokeWidth="2.5" />
+    </svg>
+  );
+}
+function RentabilidadeCard({ hist = [], investments = [], totalValue, totalBought, totalSold }) {
+  const [info, setInfo] = useState(false);
+  const hoje = todayStr();
+  const tms = (d) => new Date(d + "T12:00:00").getTime();
+  const real = [...hist.filter((h) => h.d < hoje), { d: hoje, v: totalValue, b: totalBought, s: totalSold }].filter((h) => h.b > 0);
+  const tot = (h) => (h.b > 0 ? ((h.v + h.s - h.b) / h.b) * 100 : 0);
+  const primeira = investments.filter((i) => i.tipo !== "ajuste" && i.date).map((i) => i.date).sort()[0];
+  const serieTotal = [...(primeira && real.length && primeira < real[0].d ? [{ t: tms(primeira), y: 0 }] : []), ...real.map((h) => ({ t: tms(h.d), y: tot(h) }))];
+  const umAno = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  let rotulo = "Últimos 12 meses", serie12;
+  if (real.length && real[0].d <= umAno) {
+    const ini = [...real].reverse().find((h) => h.d <= umAno) || real[0];
+    const dietz = (x) => { const g = (x.v + x.s - x.b) - (ini.v + ini.s - ini.b); const base = ini.v + ((x.b - ini.b) - (x.s - ini.s)) / 2; return base > 0 ? (g / base) * 100 : 0; };
+    serie12 = real.filter((h) => h.d >= ini.d).map((h) => ({ t: tms(h.d), y: dietz(h) }));
+  } else if (!primeira || primeira >= umAno) serie12 = serieTotal;
+  else {
+    const ini = real[0];
+    rotulo = "Desde " + MONTHS_ABBR_PT[Number(ini.d.slice(5, 7)) - 1].toLowerCase() + "/" + ini.d.slice(2, 4);
+    const dietz = (x) => { const g = (x.v + x.s - x.b) - (ini.v + ini.s - ini.b); const base = ini.v + ((x.b - ini.b) - (x.s - ini.s)) / 2; return base > 0 ? (g / base) * 100 : 0; };
+    serie12 = real.map((h) => ({ t: tms(h.d), y: dietz(h) }));
+  }
+  const v12 = serie12.length ? serie12[serie12.length - 1].y : 0, vT = serieTotal.length ? serieTotal[serieTotal.length - 1].y : 0;
+  const bloco = (nome, serie, v, id) => {
+    const pos = v >= 0, cor = pos ? "#16A34A" : "#DC2626";
+    return (
+      <div className="rt-b" data-rt={id}>
+        <span className="rt-n">{nome}</span>
+        <MiniLinha serie={serie} cor={cor} id={id} />
+        <span className={`rt-pill ${pos ? "up" : "down"}`}><b className="mono">{(pos ? "" : "−") + Math.abs(v).toFixed(2).replace(".", ",")}%</b>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{pos ? <><line x1="7" y1="17" x2="17" y2="7" /><polyline points="8 7 17 7 17 16" /></> : <><line x1="7" y1="7" x2="17" y2="17" /><polyline points="17 8 17 17 8 17" /></>}</svg>
+        </span>
+      </div>
+    );
+  };
+  return (
+    <div className="card rt-card" data-rent>
+      <div className="rt-head">
+        <span className="rt-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="14" width="3" height="6" rx="1" /><rect x="10.5" y="11" width="3" height="9" rx="1" /><rect x="17" y="8" width="3" height="12" rx="1" /><polyline points="4 10 10 6 14 8 20 3" /><polyline points="16 3 20 3 20 7" /></svg></span>
+        <h3>Rentabilidade</h3>
+        <button type="button" className="rt-info" aria-expanded={info} aria-label="O que é a rentabilidade" onClick={() => setInfo(!info)}>i</button>
+      </div>
+      {info && <p className="rt-txt"><b>Total:</b> quanto a carteira rendeu desde o primeiro investimento, contando o que você já vendeu. <b>{rotulo}:</b> o rendimento no período, sem contar o dinheiro novo que você aplicou. O gráfico mostra a evolução registrada pelo app nos dias em que você o abre{real.length < 3 ? ", e vai ficando mais detalhado com o tempo" : ""}.</p>}
+      <div className="rt-grid">
+        {bloco(rotulo, serie12, v12, "12m")}
+        {bloco("Total", serieTotal, vT, "tot")}
+      </div>
+    </div>
+  );
+}
+
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
   setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
   const gv = useGv();
@@ -7903,16 +8002,17 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   return (
     <div>
       <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
-      <div className="kpi-row">
+      <div className="kpi-row three">
         <Kpi label="Total investido" num={totalCost} sub="custo das posições" />
         <Kpi label="Patrimônio atual" num={totalValue} sub={positions.length + " posição(ões)"} />
         <Kpi label="Variação" num={profit} fmt={(n) => sgn(n) + " " + fmtBRL(Math.abs(n))} tone={profit >= 0 ? "var(--teal)" : "var(--brick)"} sub={signPct(profitPct) + " sobre o custo"} />
-        <Kpi label="Rentabilidade" num={returnPct} fmt={signPct} tone={returnPct >= 0 ? "var(--teal)" : "var(--brick)"} sub="considera vendas" />
       </div>
+      {!desk && positions.length > 0 && <RentabilidadeCard hist={Array.isArray(cotacoes.__hist) ? cotacoes.__hist : []} investments={investments} totalValue={totalValue} totalBought={totalBought} totalSold={totalSold} />}
       {desk && positions.length > 0 && (
-        <div className="dgrid" style={{ gridTemplateColumns: "1fr", marginBottom: 14 }}>
+        <div className="dgrid" style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1fr)", marginBottom: 14 }}>
           <div className="card dinv-ev"><div className="card-head"><h3 className="card-title">Quanto você já investiu, mês a mês</h3><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
             <SvgAreaChart data={investmentsHistory12} height={170} color="#7C3AED" valueKey="acumulado" /></div>
+          <RentabilidadeCard hist={Array.isArray(cotacoes.__hist) ? cotacoes.__hist : []} investments={investments} totalValue={totalValue} totalBought={totalBought} totalSold={totalSold} />
         </div>
       )}
 
