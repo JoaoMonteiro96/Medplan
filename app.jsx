@@ -4549,7 +4549,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
           <>
             <div className="field"><label>Valor mensal bruto (R$) *</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
             <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
-            <div className="field" style={{ gridColumn: "1 / -1" }}><label>Escala fixa da semana (opcional)</label><EscalaEditor value={escala} onChange={setEscala} /></div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}><label>Escala fixa (opcional)</label><EscalaEditor value={escala} onChange={setEscala} /></div>
           </>
         )}
         <div className="field" style={{ gridColumn: "1 / -1" }}>
@@ -5804,7 +5804,7 @@ function escalaProximas(s, n) {
 }
 const slotFds = (s) => (s.dias || []).length > 0 && (s.dias || []).every((d) => d === 6 || d === 0);
 const repTxt = (n, fds, cap) => {
-  const t = n <= 1 ? (fds ? "todo fim de semana" : "toda semana") : n === 2 ? (fds ? "um fim de semana sim, outro não" : "uma semana sim, outra não") : (fds ? `a cada ${n} fins de semana` : `a cada ${n} semanas`);
+  const t = n <= 1 ? "semanal" : n === 2 ? "quinzenal" : `a cada ${n} semanas`;
   return cap ? t.charAt(0).toUpperCase() + t.slice(1) : t;
 };
 // Próximas semanas (de segunda a domingo) em que os dias deste horário ainda não passaram, para escolher qual é a da vez
@@ -5838,7 +5838,7 @@ function escalaDiasTxt(dias) {
   if (d.length === 7) return "Todos os dias";
   return d.map((x) => DIAS_SEM[x]).join(", ");
 }
-const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}${slotMensal(s) ? ` · 1 vez por mês (${ORD_TXT[Number(s.ordem) || 1]} ${slotFds(s) ? "fim de semana" : "semana"})` : slotCada(s) > 1 ? ` · ${repTxt(slotCada(s), slotFds(s))}` : ""}`).join("  |  ");
+const escalaResumo = (v) => (v.escala || []).map((s) => `${escalaDiasTxt(s.dias)} · ${(TURNOS[s.turno] || "").toLowerCase()} · ${fmtHoras(s.horas)}${slotMensal(s) ? ` · mensal (${ORD_TXT[Number(s.ordem) || 1]} ${slotFds(s) ? "fim de semana" : "semana"})` : slotCada(s) > 1 ? ` · ${repTxt(slotCada(s), slotFds(s))}` : ""}`).join("  |  ");
 const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + ((s.dias || []).length * (Number(s.horas) || 0)) / (slotMensal(s) ? 4.35 : slotCada(s)), 0);
 
 function EscalaEditor({ value, onChange }) {
@@ -5855,7 +5855,7 @@ function EscalaEditor({ value, onChange }) {
     if (o.length === 2 && o.includes(6) && o.includes(0)) return "Sáb e Dom";
     return o.map((x) => DIAS_SEM[x]).join(", ");
   };
-  const freqTxt = (s) => slotMensal(s) ? `${ORD_TXT[Number(s.ordem) || 1]} ${slotFds(s) ? "fim de semana" : "semana"} do mês` : repTxt(slotCada(s), slotFds(s));
+  const freqTxt = (s) => slotMensal(s) ? `Mensal, ${ORD_TXT[Number(s.ordem) || 1]} ${slotFds(s) ? "fim de semana" : "semana"} do mês` : repTxt(slotCada(s), slotFds(s), true);
   const freqVal = (s) => (slotMensal(s) ? "mes" : String(slotCada(s)));
   const setFreq = (s, v) => {
     if (v === "mes") upd(s.id, { cada: "mes", ordem: Number(s.ordem) || 1 });
@@ -5863,7 +5863,7 @@ function EscalaEditor({ value, onChange }) {
   };
   return (
     <div className="esc">
-      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Opcional. Use para os horários que se repetem, como “Seg a Sex de manhã”. As horas entram no Calendário.</div>}
+      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Opcional. Cadastre os períodos fixos de trabalho para que as horas sejam lançadas no Calendário.</div>}
       {list.map((s) => {
         const c = slotCada(s), mes = slotMensal(s), fds = slotFds(s), temDias = (s.dias || []).length > 0;
         const px = (c > 1 || mes) && temDias ? escalaProximas(s, 3) : [];
@@ -5871,7 +5871,7 @@ function EscalaEditor({ value, onChange }) {
           <div key={s.id} className="esc-sum" data-escala={s.id}>
             <button type="button" className="esc-sum-b" onClick={() => setEdit(s.id)} aria-label={"Editar " + diasTxt(s.dias)}>
               <b>{diasTxt(s.dias)} · {TURNOS[s.turno] || "Manhã"} · {fmtHoras(Number(s.horas) || 0)}</b>
-              <small>{freqTxt(s)}{px.length ? " · próximas: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") : ""}</small>
+              <small>{freqTxt(s)}{px.length ? " · próximas datas: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") : ""}</small>
             </button>
             <button type="button" className="btn-icon" aria-label="Editar horário" onClick={() => setEdit(s.id)}><IconEdit size={15} /></button>
             <button type="button" className="btn-icon" aria-label="Remover horário" onClick={() => remover(s.id)}><IconTrash size={15} /></button>
@@ -5896,26 +5896,26 @@ function EscalaEditor({ value, onChange }) {
                   <b>{fmtHoras(Number(s.horas) || 0)}</b>
                   <button type="button" aria-label="Mais meia hora" onClick={() => upd(s.id, { horas: Math.min(24, (Number(s.horas) || 0) + 0.5) })}>+</button>
                 </div></div>
-              <label className="esc-rep"><span className="esc-l">Repete</span>
+              <label className="esc-rep"><span className="esc-l">Frequência</span>
                 <select value={freqVal(s)} onChange={(e) => setFreq(s, e.target.value)}>
                   {[1, 2, 3].map((n) => <option key={n} value={String(n)}>{repTxt(n, fds, true)}</option>)}
-                  <option value="mes">1 vez por mês</option>
+                  <option value="mes">Mensal</option>
                 </select></label>
               {c > 1 && temDias && (
-                <label><span className="esc-l">Próxima vez</span>
+                <label><span className="esc-l">Próximo dia trabalhado</span>
                   <select value={atual ? atual.inicio : ""} onChange={(e) => upd(s.id, { inicio: e.target.value })}>
-                    {!atual && <option value="">escolha</option>}
+                    {!atual && <option value="">Selecione</option>}
                     {ops.map((o) => <option key={o.inicio} value={o.inicio}>{o.label}</option>)}
                   </select></label>
               )}
               {mes && (
-                <label><span className="esc-l">Qual {fds ? "fim de semana" : "semana"}</span>
+                <label><span className="esc-l">Semana do mês</span>
                   <select value={Number(s.ordem) || 1} onChange={(e) => upd(s.id, { ordem: Number(e.target.value) })}>
                     {[1, 2, 3, 4, 5].map((o) => <option key={o} value={o}>{o === 5 ? "Último" : ORD_TXT[o]} do mês</option>)}
                   </select></label>
               )}
             </div>
-            {px.length > 0 && <div className="esc-prox" data-prox>Próximas: {px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ")}</div>}
+            {px.length > 0 && <div className="esc-prox" data-prox>Próximas datas: {px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ")}</div>}
             <div className="esc-btns">
               <button type="button" className="btn btn-primary sm" onClick={() => setEdit(null)}>Pronto</button>
               <button type="button" className="btn btn-ghost sm" onClick={() => remover(s.id)}>Remover</button>
@@ -5924,8 +5924,8 @@ function EscalaEditor({ value, onChange }) {
         );
       })}
       <div className="esc-foot">
-        <button type="button" className="btn btn-ghost sm" onClick={add}><IconPlus size={14} /> {list.length ? "Adicionar outro horário" : "Adicionar horário"}</button>
-        {list.length > 0 && <span>≈ {fmtHoras(escalaHorasSemana(list))} por semana{list.some((x) => slotCada(x) > 1 || slotMensal(x)) ? ", em média" : ""}</span>}
+        <button type="button" className="btn btn-ghost sm" onClick={add}><IconPlus size={14} /> {list.length ? "Adicionar outro período" : "Adicionar período"}</button>
+        {list.length > 0 && <span>Carga média: {fmtHoras(escalaHorasSemana(list))} por semana</span>}
       </div>
     </div>
   );
