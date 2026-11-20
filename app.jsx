@@ -657,6 +657,7 @@ const IconTarget = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><circle cx=
 const IconBell = (p) => <Ico {...p}><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></Ico>;
 const IconFileText = (p) => <Ico {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></Ico>;
 // logo: o "M" de Mediplan dentro do anel de progresso das metas
+const IconEdit = (p) => <Ico {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></Ico>;
 const IconLogo = (p) => (<svg width={p.size||22} height={p.size||22} viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="#273244" strokeWidth="10" /><circle cx="50" cy="50" r="40" fill="none" stroke="#34D399" strokeWidth="10" strokeLinecap="round" strokeDasharray="188 252" transform="rotate(-90 50 50)" /><path d="M32 68 V34 L50 55 L68 34 V68" fill="none" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 
 // ---- self-contained SVG charts (no external charting library) ----
@@ -3756,6 +3757,27 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v45: escala fixa mais simples ================= */
+        .esc { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+        .esc-sum { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; align-items: center; border: 1px solid var(--border); border-radius: 12px; padding: 6px 6px 6px 12px; background: var(--surface, #fff); }
+        .esc-sum-b { border: none; background: none; text-align: left; font: inherit; color: var(--text); padding: 4px 0; cursor: pointer; min-width: 0; }
+        .esc-sum-b b { display: block; font-size: 14px; } .esc-sum-b small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }
+        .esc-ed { border: 1.5px solid var(--teal); border-radius: 14px; padding: 12px; background: var(--surface, #fff); }
+        .esc-l { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-dim); margin-bottom: 5px; }
+        .esc-dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 12px; }
+        .esc-dia { height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface, #fff); font: inherit; font-weight: 700; font-size: 14px; color: var(--text); cursor: pointer; }
+        .esc-dia span { display: none; } .esc-dia.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+        @media (min-width: 560px) { .esc-dia { font-size: 0; } .esc-dia span { display: inline; font-size: 13.5px; } }
+        .esc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+        .esc-grid select { width: 100%; }
+        @media (max-width: 559px) { .esc-grid .esc-rep { grid-column: 1 / -1; } }
+        .esc-step { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; height: 42px; overflow: hidden; }
+        .esc-step button { width: 42px; height: 100%; border: none; background: var(--surface-3); font: inherit; font-size: 18px; font-weight: 700; color: var(--text); cursor: pointer; }
+        .esc-step b { flex: 1; text-align: center; font-size: 14.5px; }
+        .esc-prox { font-size: 12.5px; color: var(--text-dim); margin-top: 10px; }
+        .esc-btns { display: flex; gap: 8px; margin-top: 12px; }
+        .esc-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-dim); }
+
         /* ================= v44: contabilidade (gavetas e cartões também no celular) ================= */
         .dgvs { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: start; }
         .dgv { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
@@ -5821,65 +5843,90 @@ const escalaHorasSemana = (escala) => (escala || []).reduce((a, s) => a + ((s.di
 
 function EscalaEditor({ value, onChange }) {
   const list = value || [];
+  const [edit, setEdit] = useState(null);
   const upd = (id, patch) => onChange(list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  const add = (dias) => onChange([...list, { id: uid(), dias, turno: "manha", horas: 6 }]);
+  const add = () => { const id = uid(); onChange([...list, { id, dias: [1, 2, 3, 4, 5], turno: "manha", horas: 6 }]); setEdit(id); };
+  const remover = (id) => { onChange(list.filter((x) => x.id !== id)); if (edit === id) setEdit(null); };
+  const diasTxt = (d = []) => {
+    const o = ORDEM_SEM.filter((x) => d.includes(x));
+    if (!o.length) return "Sem dias";
+    if (o.length === 5 && [1, 2, 3, 4, 5].every((x) => o.includes(x))) return "Seg a Sex";
+    if (o.length === 7) return "Todos os dias";
+    if (o.length === 2 && o.includes(6) && o.includes(0)) return "Sáb e Dom";
+    return o.map((x) => DIAS_SEM[x]).join(", ");
+  };
+  const freqTxt = (s) => slotMensal(s) ? `${ORD_TXT[Number(s.ordem) || 1]} ${slotFds(s) ? "fim de semana" : "semana"} do mês` : repTxt(slotCada(s), slotFds(s));
+  const freqVal = (s) => (slotMensal(s) ? "mes" : String(slotCada(s)));
+  const setFreq = (s, v) => {
+    if (v === "mes") upd(s.id, { cada: "mes", ordem: Number(s.ordem) || 1 });
+    else { const n = Number(v); upd(s.id, n > 1 ? { cada: n, inicio: (escalaSemanas(s, 1)[0] || {}).inicio || todayStr() } : { cada: 1 }); }
+  };
   return (
-    <div className="escala-ed">
-      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Sem escala. Adicione os horários que se repetem, como “Seg a Sex de manhã” ou “um fim de semana sim, outro não”.</div>}
-      {list.map((s) => (
-        <div key={s.id} className="escala-slot">
-          <div className="chip-row" role="group" aria-label="Dias da semana">
-            {ORDEM_SEM.map((d) => { const on = (s.dias || []).includes(d); return (
-              <button key={d} type="button" className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { dias: on ? s.dias.filter((x) => x !== d) : [...(s.dias || []), d] })}>{DIAS_SEM[d]}</button>
-            ); })}
+    <div className="esc">
+      {list.length === 0 && <div className="field-hint" style={{ marginTop: 0 }}>Opcional. Use para os horários que se repetem, como “Seg a Sex de manhã”. As horas entram no Calendário.</div>}
+      {list.map((s) => {
+        const c = slotCada(s), mes = slotMensal(s), fds = slotFds(s), temDias = (s.dias || []).length > 0;
+        const px = (c > 1 || mes) && temDias ? escalaProximas(s, 3) : [];
+        if (edit !== s.id) return (
+          <div key={s.id} className="esc-sum" data-escala={s.id}>
+            <button type="button" className="esc-sum-b" onClick={() => setEdit(s.id)} aria-label={"Editar " + diasTxt(s.dias)}>
+              <b>{diasTxt(s.dias)} · {TURNOS[s.turno] || "Manhã"} · {fmtHoras(Number(s.horas) || 0)}</b>
+              <small>{freqTxt(s)}{px.length ? " · próximas: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") : ""}</small>
+            </button>
+            <button type="button" className="btn-icon" aria-label="Editar horário" onClick={() => setEdit(s.id)}><IconEdit size={15} /></button>
+            <button type="button" className="btn-icon" aria-label="Remover horário" onClick={() => remover(s.id)}><IconTrash size={15} /></button>
           </div>
-          <div className="escala-row">
-            <label>Turno<select value={s.turno} onChange={(e) => upd(s.id, { turno: e.target.value })}>{Object.keys(TURNOS).map((k) => <option key={k} value={k}>{TURNOS[k]}</option>)}</select></label>
-            <label>Horas por dia<input type="number" inputMode="decimal" min="0" step="0.5" value={s.horas} onChange={(e) => upd(s.id, { horas: e.target.value })} /></label>
-            <button type="button" className="btn-icon" aria-label="Remover horário" onClick={() => onChange(list.filter((x) => x.id !== s.id))}><IconTrash size={15} /></button>
+        );
+        const ops = c > 1 ? escalaSemanas(s, c).slice(0, c) : [];
+        const atual = ops.find((o) => slotNaSemana(s, o.inicio));
+        return (
+          <div key={s.id} className="esc-ed" data-escala={s.id}>
+            <div className="esc-l">Dias</div>
+            <div className="esc-dias" role="group" aria-label="Dias da semana">
+              {ORDEM_SEM.map((d) => { const on = (s.dias || []).includes(d); return (
+                <button key={d} type="button" className={`esc-dia ${on ? "on" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { dias: on ? s.dias.filter((x) => x !== d) : [...(s.dias || []), d] })}>{DIAS_SEM[d].slice(0, 1)}<span>{DIAS_SEM[d]}</span></button>
+              ); })}
+            </div>
+            <div className="esc-grid">
+              <label><span className="esc-l">Turno</span>
+                <select value={s.turno} onChange={(e) => upd(s.id, { turno: e.target.value })}>{Object.keys(TURNOS).map((k) => <option key={k} value={k}>{TURNOS[k]}</option>)}</select></label>
+              <div><span className="esc-l">Horas por dia</span>
+                <div className="esc-step">
+                  <button type="button" aria-label="Menos meia hora" onClick={() => upd(s.id, { horas: Math.max(0.5, (Number(s.horas) || 0) - 0.5) })}>−</button>
+                  <b>{fmtHoras(Number(s.horas) || 0)}</b>
+                  <button type="button" aria-label="Mais meia hora" onClick={() => upd(s.id, { horas: Math.min(24, (Number(s.horas) || 0) + 0.5) })}>+</button>
+                </div></div>
+              <label className="esc-rep"><span className="esc-l">Repete</span>
+                <select value={freqVal(s)} onChange={(e) => setFreq(s, e.target.value)}>
+                  {[1, 2, 3].map((n) => <option key={n} value={String(n)}>{repTxt(n, fds, true)}</option>)}
+                  <option value="mes">1 vez por mês</option>
+                </select></label>
+              {c > 1 && temDias && (
+                <label><span className="esc-l">Próxima vez</span>
+                  <select value={atual ? atual.inicio : ""} onChange={(e) => upd(s.id, { inicio: e.target.value })}>
+                    {!atual && <option value="">escolha</option>}
+                    {ops.map((o) => <option key={o.inicio} value={o.inicio}>{o.label}</option>)}
+                  </select></label>
+              )}
+              {mes && (
+                <label><span className="esc-l">Qual {fds ? "fim de semana" : "semana"}</span>
+                  <select value={Number(s.ordem) || 1} onChange={(e) => upd(s.id, { ordem: Number(e.target.value) })}>
+                    {[1, 2, 3, 4, 5].map((o) => <option key={o} value={o}>{o === 5 ? "Último" : ORD_TXT[o]} do mês</option>)}
+                  </select></label>
+              )}
+            </div>
+            {px.length > 0 && <div className="esc-prox" data-prox>Próximas: {px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ")}</div>}
+            <div className="esc-btns">
+              <button type="button" className="btn btn-primary sm" onClick={() => setEdit(null)}>Pronto</button>
+              <button type="button" className="btn btn-ghost sm" onClick={() => remover(s.id)}>Remover</button>
+            </div>
           </div>
-          {(() => {
-            const fds = slotFds(s), mes = slotMensal(s), c = slotCada(s), ops = escalaSemanas(s, Math.max(c, 2));
-            const px = c > 1 || mes ? escalaProximas(s, 4) : [];
-            const temDias = (s.dias || []).length > 0;
-            return (
-              <div className="escala-rep" data-rep-box>
-                <div className="escala-q">Com que frequência?</div>
-                <div className="chip-row" role="group" aria-label="Frequência">
-                  {[1, 2, 3].map((n) => (
-                    <button key={n} type="button" data-rep={n} className={`chip sm ${!mes && c === n ? "active" : ""}`} aria-pressed={!mes && c === n}
-                      onClick={() => upd(s.id, n > 1 ? { cada: n, inicio: (!mes && c > 1 && s.inicio) ? s.inicio : ((escalaSemanas(s, 1)[0] || {}).inicio || todayStr()) } : { cada: 1 })}>{repTxt(n, fds, true)}</button>
-                  ))}
-                  <button type="button" data-rep="mes" className={`chip sm ${mes ? "active" : ""}`} aria-pressed={mes} onClick={() => upd(s.id, { cada: "mes", ordem: Number(s.ordem) || 1 })}>1 vez por mês</button>
-                </div>
-                {!mes && c > 1 && temDias && (
-                  <>
-                    <div className="escala-q">{fds ? "Qual é o próximo fim de semana em que você trabalha?" : "Qual é a próxima semana em que você trabalha?"}</div>
-                    <div className="chip-row" role="group" aria-label="Próxima vez">
-                      {ops.slice(0, c).map((o) => { const on = slotNaSemana(s, o.inicio); return <button key={o.inicio} type="button" data-prox-op={o.inicio} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { inicio: o.inicio })}>{o.label}</button>; })}
-                    </div>
-                  </>
-                )}
-                {mes && (
-                  <>
-                    <div className="escala-q">{fds ? "Qual fim de semana do mês?" : "Qual semana do mês?"}</div>
-                    <div className="chip-row" role="group" aria-label="Semana do mês">
-                      {[1, 2, 3, 4, 5].map((o) => { const on = (Number(s.ordem) || 1) === o; return <button key={o} type="button" data-ordem={o} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => upd(s.id, { ordem: o })}>{o === 5 ? "Último" : ORD_TXT[o]}</button>; })}
-                    </div>
-                  </>
-                )}
-                {(c > 1 || mes) && <div className="escala-prox" data-prox>{!temDias ? "Escolha os dias da semana acima." : px.length ? "Você trabalha em: " + px.map((d) => fmtDatePt(d).slice(0, 5)).join(", ") + "…" : ""}</div>}
-              </div>
-            );
-          })()}
-        </div>
-      ))}
-      <div className="escala-add">
-        <button type="button" className="btn btn-ghost sm" onClick={() => add([1, 2, 3, 4, 5])}><IconPlus size={14} /> Seg a Sex</button>
-        <button type="button" className="btn btn-ghost sm" onClick={() => add([6, 0])}><IconPlus size={14} /> Fim de semana</button>
-        <button type="button" className="btn btn-ghost sm" onClick={() => add([])}><IconPlus size={14} /> Outros dias</button>
+        );
+      })}
+      <div className="esc-foot">
+        <button type="button" className="btn btn-ghost sm" onClick={add}><IconPlus size={14} /> {list.length ? "Adicionar outro horário" : "Adicionar horário"}</button>
+        {list.length > 0 && <span>≈ {fmtHoras(escalaHorasSemana(list))} por semana{list.some((x) => slotCada(x) > 1 || slotMensal(x)) ? ", em média" : ""}</span>}
       </div>
-      {list.length > 0 && <div className="field-hint">Cerca de {fmtHoras(escalaHorasSemana(list))} por semana{list.some((s) => slotCada(s) > 1 || slotMensal(s)) ? ", em média" : ""}. Essas horas entram no Calendário e na rentabilidade do trabalho.</div>}
     </div>
   );
 }
