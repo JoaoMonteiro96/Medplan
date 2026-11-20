@@ -1623,7 +1623,25 @@ function CloudCard({ cfg, session, cloud, onConnect, onDisconnect, onSyncNow, on
   );
 }
 
+// celular: diminui o número até caber no quadro; se a linha de 3 ficar apertada demais, vira 2 + 1
+function ajustarKpis() {
+  const cel = window.innerWidth <= 480;
+  document.querySelectorAll(".kpi-row").forEach((row) => {
+    const vals = [...row.querySelectorAll(".kpi-value")];
+    if (!cel) { vals.forEach((v) => { v.style.fontSize = ""; }); row.classList.remove("kpi-apertado"); return; }
+    const caber = () => { let menor = 99; vals.forEach((v) => { v.style.fontSize = ""; let f = parseFloat(getComputedStyle(v).fontSize) || 20; while (v.scrollWidth > v.clientWidth + 1 && f > 11) { f -= 0.5; v.style.fontSize = f + "px"; } menor = Math.min(menor, f); }); return menor; };
+    row.classList.remove("kpi-apertado");
+    const m = caber();
+    if (row.classList.contains("three") && m < 15) { row.classList.add("kpi-apertado"); caber(); }
+  });
+}
 function App() {
+  useEffect(() => {
+    let t = null; const agenda = () => { clearTimeout(t); t = setTimeout(ajustarKpis, 120); };
+    const mo = new MutationObserver(agenda); mo.observe(document.body, { subtree: true, childList: true, characterData: true });
+    window.addEventListener("resize", agenda); agenda();
+    return () => { mo.disconnect(); window.removeEventListener("resize", agenda); clearTimeout(t); };
+  }, []);
   const [vinculos, setVinculos] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [presencas, setPresencas] = useState([]);
@@ -3973,11 +3991,14 @@ function App() {
         .kpi-box { min-width: 0; }
         @media (min-width: 481px) and (max-width: 760px) { .kpi-row.three { grid-template-columns: 1fr 1fr; } .kpi-row.three > :nth-child(3) { grid-column: 1 / -1; } }
         @media (max-width: 480px) {
-          .kpi-row, .kpi-row.three { grid-template-columns: 1fr; gap: 8px; }
-          .kpi-row .kpi-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; padding: 12px 14px; }
-          .kpi-row .kpi-box .kpi-label { grid-column: 1; }
-          .kpi-row .kpi-box .kpi-value { grid-column: 2; grid-row: 1 / span 2; margin: 0; text-align: right; font-size: clamp(16px, 5.2vw, 20px); }
-          .kpi-row .kpi-box .kpi-sub { grid-column: 1; margin-top: 2px; }
+          .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+          .kpi-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          .kpi-row.three.kpi-apertado { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .kpi-row.three.kpi-apertado > :nth-child(3) { grid-column: 1 / -1; }
+          .kpi-row .kpi-box { padding: 12px; }
+          .kpi-row .kpi-box .kpi-label { font-size: 12.5px; line-height: 1.3; }
+          .kpi-row .kpi-box .kpi-value { font-size: 20px; margin-top: 4px; overflow: hidden; }
+          .kpi-row .kpi-box .kpi-sub { font-size: 11.5px; line-height: 1.3; }
           .subtabs-row { flex-wrap: wrap; row-gap: 4px; }
           .subtabs-row .subtabs { order: 2; width: 100%; gap: 18px; }
           .subtabs-row .inv-acoes, .subtabs-row > .btn { order: 1; width: 100%; }
