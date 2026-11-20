@@ -1,4 +1,4 @@
-# Mediplan: como publicar com banco de dados e domínio próprio
+# Sallos (antigo Mediplan): como publicar com banco de dados e domínio próprio
 
 Este pacote tem o app pronto. Faltam só as partes que precisam da sua conta ou de pagamento. Siga na ordem. Leva uns 30 minutos, mais a espera do domínio.
 

@@ -1,7 +1,7 @@
 {
-  "name": "Mediplan",
-  "short_name": "Mediplan",
-  "description": "Gestão financeira para médicos: plantões, vínculos, despesas e investimentos",
+  "name": "Sallos",
+  "short_name": "Sallos",
+  "description": "Finanças para médicos: plantões, vínculos, despesas e investimentos",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

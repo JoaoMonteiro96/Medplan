@@ -1,4 +1,4 @@
-// Mediplan: código-fonte. O site usa a versão compilada (app.js), gerada por build.py.
+// Sallos (antigo Mediplan): código-fonte. O site usa a versão compilada (app.js), gerada por build.py.
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import * as ReactDOM from "react-dom/client";
@@ -132,7 +132,7 @@ function buildMonthlyReport(doc, D) {
   // ---- cabeçalho ----
   doc.setFillColor(...HEAD); doc.rect(0, 0, W, 30, "F");
   doc.setFillColor(...GREEN); doc.rect(0, 30, W, 1.2, "F");
-  font(18, true, [255, 255, 255]); doc.text("Mediplan", MX, 14);
+  font(18, true, [255, 255, 255]); doc.text("Sallos", MX, 14);
   font(10, false, [203, 213, 225]); doc.text("Relatório financeiro mensal", MX, 21);
   font(14, true, [255, 255, 255]); doc.text(pdfTxt(D.mesNome), W - MX, 14, { align: "right" });
   font(8.5, false, [203, 213, 225]); doc.text(pdfTxt("Gerado em " + D.geradoEm), W - MX, 21, { align: "right" });
@@ -216,7 +216,7 @@ function buildMonthlyReport(doc, D) {
   const n = doc.getNumberOfPages();
   for (let p = 1; p <= n; p++) {
     doc.setPage(p); doc.setDrawColor(...RULE); doc.setLineWidth(0.2); doc.line(MX, H - 11, W - MX, H - 11);
-    font(8, false, DIM); doc.text(pdfTxt("Mediplan · " + D.mesNome), MX, H - 6.5); doc.text(`Página ${p} de ${n}`, W - MX, H - 6.5, { align: "right" });
+    font(8, false, DIM); doc.text(pdfTxt("Sallos · " + D.mesNome), MX, H - 6.5); doc.text(`Página ${p} de ${n}`, W - MX, H - 6.5, { align: "right" });
   }
   return n;
 }
@@ -664,9 +664,9 @@ const IconHome = (p) => <Ico {...p}><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v
 const IconTarget = (p) => <Ico {...p}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></Ico>;
 const IconBell = (p) => <Ico {...p}><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></Ico>;
 const IconFileText = (p) => <Ico {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></Ico>;
-// logo: o "M" de Mediplan dentro do anel de progresso das metas
+// logo: os dois "l" de Sallos viram barras subindo, com uma moeda em cima
 const IconEdit = (p) => <Ico {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></Ico>;
-const IconLogo = (p) => (<svg width={p.size||22} height={p.size||22} viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="#273244" strokeWidth="10" /><circle cx="50" cy="50" r="40" fill="none" stroke="#34D399" strokeWidth="10" strokeLinecap="round" strokeDasharray="188 252" transform="rotate(-90 50 50)" /><path d="M32 68 V34 L50 55 L68 34 V68" fill="none" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" /></svg>);
+const IconLogo = (p) => (<svg width={p.size||22} height={p.size||22} viewBox="0 0 100 100" aria-hidden="true"><g transform="translate(50 50) scale(.86) translate(-50 -46)"><rect x="32" y="44" width="13" height="34" rx="6.5" fill="#111827" /><rect x="55" y="28" width="13" height="50" rx="6.5" fill="#111827" /><circle cx="61.5" cy="17" r="7" fill="#FFFFFF" /></g></svg>);
 
 // ---- self-contained SVG charts (no external charting library) ----
 
@@ -1234,7 +1234,7 @@ function DSide({ active, onPick, onNovo, ocultar = [] }) {
   ); });
   return (
     <aside className="dsb" aria-label="Páginas">
-      <div className="dsb-brand"><span className="tb-logo"><IconLogo size={22} /></span>Mediplan</div>
+      <div className="dsb-brand"><span className="tb-logo"><IconLogo size={32} /></span><span className="brand-nm">Sa<span>ll</span>os</span></div>
       <button type="button" className="dsb-new" onClick={onNovo}><IconPlus size={16} color="#fff" /> Novo lançamento</button>
       <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "organizacao", "metas", "visao", "contabilidade"])}
         <div className="dsb-g">Ferramentas</div>{grupo(["importar", "backup"])}</nav>
@@ -1512,7 +1512,7 @@ const AUTH_CSS = `
   .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #F6F7F9; padding: 20px; font-family: 'Inter', system-ui, sans-serif; color: #0F172A; }
   .auth-card { width: 100%; max-width: 400px; background: #fff; border: 1px solid #E7EBF0; border-radius: 20px; padding: 28px 24px; box-shadow: 0 10px 30px rgba(15,23,42,0.06); }
   .auth-logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; letter-spacing: -0.03em; margin-bottom: 6px; }
-  .auth-logo span { width: 36px; height: 36px; border-radius: 10px; background: #111827; display: inline-flex; align-items: center; justify-content: center; }
+  .auth-logo span { width: 36px; height: 36px; border-radius: 10px; background: #34D399; display: inline-flex; align-items: center; justify-content: center; }
   .auth-sub { color: #64748B; font-size: 14px; margin: 0 0 20px; }
   .auth-tabs { display: flex; background: #F1F5F9; border-radius: 10px; padding: 3px; margin-bottom: 16px; }
   .auth-tabs button { flex: 1; border: none; background: none; padding: 9px; border-radius: 8px; font-weight: 600; font-size: 14px; color: #475569; cursor: pointer; font-family: inherit; }
@@ -1552,7 +1552,7 @@ function AuthScreen({ cfg, onSkip, recovery, onRecovered }) {
     <div className="auth-wrap">
       <style>{AUTH_CSS}</style>
       <div className="auth-card">
-        <div className="auth-logo"><span><IconLogo size={26} /></span>Mediplan</div>
+        <div className="auth-logo"><span><IconLogo size={30} /></span><span className="brand-nm">Sa<span>ll</span>os</span></div>
         <p className="auth-sub">{mode === "nova" ? "Crie uma nova senha para sua conta." : mode === "esqueci" ? "Vamos enviar um link para você criar uma nova senha." : "Entre para ver seus dados em qualquer aparelho."}</p>
         {(mode === "entrar" || mode === "criar") && (
           <div className="auth-tabs">
@@ -3462,7 +3462,7 @@ function App() {
 
         .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 244px; background: #fff; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px 16px; z-index: 40; overflow-y: auto; }
         .sb-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -0.03em; padding: 2px 8px 18px; }
-        .sb-brand .brand-icon, .tb-logo { width: 32px; height: 32px; border-radius: 10px; background: #111827; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .sb-brand .brand-icon, .tb-logo { width: 32px; height: 32px; border-radius: 10px; background: #34D399; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .sb-new { display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px; border: none; border-radius: 10px; background: var(--teal); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; font-family: inherit; margin-bottom: 6px; }
         .sb-new:hover { background: #15803D; }
         .sb-group { font-size: 12px; color: #94A3B8; font-weight: 600; padding: 16px 10px 6px; }
@@ -3965,6 +3965,7 @@ function App() {
         :root[data-theme="dark"] .rt-pill.up { background: rgba(22,163,74,.16); color: #4ADE80; } :root[data-theme="dark"] .rt-pill.down { background: rgba(220,38,38,.16); color: #FCA5A5; }
         .dgrid .rt-card { margin-bottom: 0; }
 
+        .brand-nm span { color: #16A34A; } :root[data-theme="dark"] .brand-nm span { color: #34D399; }
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -4451,7 +4452,7 @@ function App() {
       <div className="topwrap">
         <header className="topbar2">
           <div className="tb-left">
-            <div className="tb-logo"><IconLogo size={22} /></div>
+            <div className="tb-logo"><IconLogo size={28} /></div>
             <div>
               <h1 className="tb-title">{(PAGE_TITLES[activeTab] || [""])[0]}<button className={`cloud-dot ${cloud.status}`} title={cloudLabel} aria-label={cloudLabel} onClick={() => goTab("backup")} /></h1>
               <p className="tb-sub">{(PAGE_TITLES[activeTab] || ["", ""])[1]}</p>
@@ -5385,7 +5386,7 @@ function LembretesCard({ on, setOn, itens }) {
         Um aviso um dia antes do vencimento de cada despesa e um dia antes de cada pagamento que você vai receber (salário, plantão e outras entradas).
       </p>
       {!sup ? (
-        <div className="note-info" style={{ marginBottom: 0 }}>Este navegador não permite avisos. No iPhone, adicione o Mediplan à Tela de Início e abra por lá. No Android, use o Chrome.</div>
+        <div className="note-info" style={{ marginBottom: 0 }}>Este navegador não permite avisos. No iPhone, adicione o Sallos à Tela de Início e abra por lá. No Android, use o Chrome.</div>
       ) : (
         <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -5406,7 +5407,7 @@ function LembretesCard({ on, setOn, itens }) {
             </div>
           )}
           <div className="field-hint" style={{ marginTop: 10 }}>
-            Vale para este aparelho. Para o aviso chegar com o app fechado, use o Chrome no Android com o Mediplan instalado na tela inicial. Quem decide a hora de conferir é o celular, então o aviso pode atrasar. Sempre que você abre o app, ele confere na hora.
+            Vale para este aparelho. Para o aviso chegar com o app fechado, use o Chrome no Android com o Sallos instalado na tela inicial. Quem decide a hora de conferir é o celular, então o aviso pode atrasar. Sempre que você abre o app, ele confere na hora.
           </div>
         </>
       )}
@@ -5436,8 +5437,8 @@ async function bioDisponivel() {
 }
 async function bioCadastrar() {
   const cred = await navigator.credentials.create({ publicKey: {
-    challenge: crypto.getRandomValues(new Uint8Array(32)), rp: { name: "Mediplan" },
-    user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "mediplan", displayName: "Mediplan" },
+    challenge: crypto.getRandomValues(new Uint8Array(32)), rp: { name: "Sallos" },
+    user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "mediplan", displayName: "Sallos" },
     pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
     authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" }, timeout: 60000 } });
   return b64u(cred.rawId);
@@ -5469,7 +5470,7 @@ function PinGate({ hash, bioId, onOk, onForget }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "var(--bg, #f5f5f5)", display: "grid", placeItems: "center", padding: 16, zIndex: 1000 }}>
       <div style={{ width: "100%", maxWidth: 320, textAlign: "center" }}>
-        <h2 style={{ margin: "0 0 6px" }}>Mediplan bloqueado</h2>
+        <h2 style={{ margin: "0 0 6px" }}>Sallos bloqueado</h2>
         <p style={{ margin: "0 0 16px", color: "var(--text-dim)" }}>Digite seu código de 4 números.</p>
         <input type="password" inputMode="numeric" autoComplete="off" maxLength={4} aria-label="Código" value={pin} autoFocus
           onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setErro(""); }}
@@ -5824,7 +5825,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   // relatório
   const relatorio = (ano) => {
     const inc = ano ? yearIncomeItems : monthIncomeItems, exps = ano ? dedAno : yearExpenseItems.filter((e) => e.dateIso && e.dateIso.slice(0, 7) === mk && ehDedutivel(e));
-    const L = [["Mediplan · relatório para o contador", ano ? "ano de " + viewYear : mes + " de " + viewYear], [], ["RECEITAS"], ["Data", "Tomador", "Valor bruto", "Imposto estimado", "Líquido", "Recebido", "Nota emitida"]];
+    const L = [["Sallos · relatório para o contador", ano ? "ano de " + viewYear : mes + " de " + viewYear], [], ["RECEITAS"], ["Data", "Tomador", "Valor bruto", "Imposto estimado", "Líquido", "Recebido", "Nota emitida"]];
     inc.forEach((i) => L.push([fmtDatePt(i.dateIso), i.nome, Number(i.gross) || 0, (Number(i.gross) || 0) - (Number(i.net) || 0), Number(i.net) || 0, i.recebido ? "sim" : "não", notasMap[(i.dateIso || "").slice(0, 7) + "|" + i.nome] ? "sim" : "não"]));
     L.push([], ["Total bruto", "", inc.reduce((a, i) => a + (Number(i.gross) || 0), 0)]);
     if (!ano) { L.push([], ["GUIAS DO MÊS"], ["Guia", "Vencimento", "Valor", "Pago"]); guias.forEach((g) => L.push([g.nome, fmtDatePt(g.data), g.valor, pagos[g.id] ? "sim" : "não"])); }
