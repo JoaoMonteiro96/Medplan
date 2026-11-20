@@ -1073,6 +1073,75 @@ function NavStrip({ items, active, onPick }) {
   );
 }
 
+// ================= anexos (notas fiscais e recibos): na nuvem quando há conta, senão neste aparelho =================
+const ANEXO_BUCKET = "notas", ANEXO_MAX = 10 * 1024 * 1024;
+const idbAbrir = () => new Promise((res, rej) => { const r = indexedDB.open("mediplan-anexos", 1); r.onupgradeneeded = () => r.result.createObjectStore("f"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const idbOp = async (modo, fn) => { const db = await idbAbrir(); return new Promise((res, rej) => { const t = db.transaction("f", modo); const req = fn(t.objectStore("f")); t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); }); };
+const nomeSeguro = (n) => String(n || "nota").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-60);
+async function sbComSessao() {
+  const cfg = getCloudCfg(); if (!cfg) return null;
+  const sb = await getSupabase(cfg); const { data } = await sb.auth.getSession();
+  return data && data.session && data.session.user ? { sb, uid: data.session.user.id } : null;
+}
+async function salvarAnexo(file) {
+  if (!file) throw new Error("Nenhum arquivo.");
+  if (file.size > ANEXO_MAX) throw new Error("O arquivo passa de 10 MB. Tire uma foto menor ou salve o PDF reduzido.");
+  const id = uid();
+  const meta = { id, nome: file.name || "nota", tipo: file.type || "", tamanho: file.size, data: todayStr() };
+  try {
+    const c = await sbComSessao();
+    if (c) {
+      const path = c.uid + "/" + id + "-" + nomeSeguro(file.name);
+      const { error } = await c.sb.storage.from(ANEXO_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
+      if (!error) return { ...meta, path };
+      if (/bucket|not found|policy|row-level|unauthori|403|404/i.test(String(error.message || error.statusCode || ""))) meta.semNuvem = true;
+    }
+  } catch (e) { /* sem internet: fica no aparelho */ }
+  await idbOp("readwrite", (st) => st.put(file, id));
+  return { ...meta, local: true };
+}
+async function abrirAnexo(a) {
+  const w = window.open("", "_blank");
+  try {
+    let url;
+    if (a.path) { const c = await sbComSessao(); if (!c) throw new Error("Entre na sua conta para abrir este arquivo."); const { data, error } = await c.sb.storage.from(ANEXO_BUCKET).createSignedUrl(a.path, 600); if (error) throw error; url = data.signedUrl; }
+    else { const blob = await idbOp("readonly", (st) => st.get(a.id)); if (!blob) throw new Error("Este arquivo foi guardado em outro aparelho."); url = URL.createObjectURL(blob); }
+    if (w) w.location.href = url; else window.location.href = url;
+  } catch (e) { if (w) w.close(); window.alert(e.message || "Não foi possível abrir o arquivo."); }
+}
+async function apagarAnexo(a) {
+  try { if (a.path) { const c = await sbComSessao(); if (c) await c.sb.storage.from(ANEXO_BUCKET).remove([a.path]); } else await idbOp("readwrite", (st) => st.delete(a.id)); } catch (e) {}
+}
+function AnexosField({ value = [], onChange }) {
+  const ref = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState("");
+  const enviar = async (files) => {
+    setErro(""); setBusy(true);
+    const novos = [];
+    for (const f of Array.from(files || [])) { try { novos.push(await salvarAnexo(f)); } catch (e) { setErro(e.message || "Não foi possível anexar."); } }
+    setBusy(false); if (novos.length) onChange([...(value || []), ...novos]);
+    if (ref.current) ref.current.value = "";
+  };
+  const remover = async (a) => { if (!window.confirm(`Remover o anexo "${a.nome}"?`)) return; await apagarAnexo(a); onChange((value || []).filter((x) => x.id !== a.id)); };
+  const local = (value || []).some((a) => a.local), semNuvem = (value || []).some((a) => a.semNuvem);
+  return (
+    <div className="anx" data-anexos>
+      {(value || []).map((a) => (
+        <div key={a.id} className="anx-it">
+          <button type="button" className="anx-open" onClick={() => abrirAnexo(a)} title="Abrir"><span aria-hidden="true">{/pdf/i.test(a.tipo) ? "📄" : "🖼️"}</span><b>{a.nome}</b><small>{Math.max(1, Math.round((a.tamanho || 0) / 1024))} KB{a.local ? " · neste aparelho" : " · na nuvem"}</small></button>
+          <button type="button" className="btn-icon" aria-label={"Remover " + a.nome} onClick={() => remover(a)}><IconX size={14} /></button>
+        </div>
+      ))}
+      <input ref={ref} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={(e) => enviar(e.target.files)} />
+      <button type="button" className="btn btn-ghost sm anx-add" disabled={busy} onClick={() => ref.current && ref.current.click()}>{busy ? "Enviando…" : "📎 Anexar nota fiscal ou recibo"}</button>
+      {erro && <div className="note-bad" style={{ marginTop: 6 }}>{erro}</div>}
+      {semNuvem ? <div className="field-hint">Guardado só neste aparelho: a nuvem ainda não está pronta para arquivos. Rode o script atualizado no Supabase (schema.sql) para guardar na nuvem.</div>
+        : local ? <div className="field-hint">Guardado só neste aparelho. Entre na sua conta para guardar os próximos na nuvem.</div> : null}
+    </div>
+  );
+}
+
 // ================= computador: menu lateral, painéis e gavetas =================
 const DESK_MQ = "(min-width: 1100px)";
 function useDesk() {
@@ -1593,7 +1662,7 @@ function App() {
   const [chartMonths, setChartMonths] = useState(12);
   const [quickOpen, setQuickOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(null);
-  const [signals, setSignals] = useState({ despesas: 0, investimentos: 0 });
+  const [signals, setSignals] = useState({ despesas: 0, investimentos: 0, dedutivel: 0 });
   const [chartScope, setChartScope] = useState("month");
   const [gainScope, setGainScope] = useState("mensal");
 
@@ -1880,7 +1949,7 @@ function App() {
     const items = [];
     expenses.filter((e) => inMonth(e.dueDate, y, m)).forEach((e) => {
       items.push({ key: "exp-" + e.id, description: e.description, category: e.category || guessExpCat(e.description), amount: Number(e.amount || 0), dateLabel: fmtDatePt(e.dueDate), dateIso: e.dueDate, itens: Array.isArray(e.itens) && e.itens.length ? e.itens : null, ajuste: Number(e.ajuste) || 0,
-        tipo: "pontual", dedutivel: e.dedutivel, paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id), ref: { t: "exp", id: e.id } });
+        tipo: "pontual", dedutivel: e.dedutivel, anexos: e.anexos || [], paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id), ref: { t: "exp", id: e.id } });
     });
     recurringExpenses.filter((r) => r.startMonth <= mk && (!r.endMonth || mk <= r.endMonth)).forEach((r) => {
       const aj = (r.ajustes && r.ajustes[mk]) || {};
@@ -1888,7 +1957,7 @@ function App() {
       const info = r.paidMonths && r.paidMonths[mk];
       const desc = aj.description || r.description;
       items.push({ key: "rec-" + r.id + "-" + mk, description: desc, category: aj.category || r.category || guessExpCat(desc), amount: Number(aj.amount !== undefined ? aj.amount : r.amount || 0), dateLabel: fmtDatePt(dateStr(y, m, day)), dateIso: dateStr(y, m, day),
-        tipo: "recorrente", dedutivel: aj.dedutivel !== undefined ? aj.dedutivel : r.dedutivel, paid: !!(info && info.paid), toggle: () => toggleRecurringExpensePaid(r.id, mk), remove: () => removeRecurringExpense(r.id), ref: { t: "rec", id: r.id, mk } });
+        tipo: "recorrente", dedutivel: aj.dedutivel !== undefined ? aj.dedutivel : r.dedutivel, anexos: (r.anexosMes && r.anexosMes[mk]) || [], paid: !!(info && info.paid), toggle: () => toggleRecurringExpensePaid(r.id, mk), remove: () => removeRecurringExpense(r.id), ref: { t: "rec", id: r.id, mk } });
     });
     return items;
   };
@@ -2039,11 +2108,16 @@ function App() {
   const updateShift = (id, data) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, gross: Number(data.gross) || 0, hours: Number(data.hours) || 0, date: data.date, prazoDias: Number(data.prazoDias) || 0, payDate: addDaysIso(data.date, Number(data.prazoDias) || 0) } : s));
   const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || o.forma || "pf", tipoReceita: data.tipoReceita || o.tipoReceita } : o));
   const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || "pf", tipoReceita: data.tipoReceita || "outro", source: "manual" }]);
-  const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category, ...(d.dedutivel !== undefined ? { dedutivel: !!d.dedutivel } : {}) } : e));
+  const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category, ...(d.dedutivel !== undefined ? { dedutivel: !!d.dedutivel } : {}), ...(d.anexos ? { anexos: d.anexos } : {}) } : e));
   // conta que se repete: "só este mês" guarda um ajuste no mês; "daqui em diante" encerra a antiga no mês anterior e cria outra a partir deste
-  const updateRecurringExpense = (id, d, mk, modo) => setRecurringExpenses((prev) => {
+  const updateRecurringExpense = (id, d, mk, modo) => setRecurringExpenses((prev0) => {
+    const prev = d.anexos ? prev0.map((x) => x.id === id ? { ...x, anexosMes: { ...(x.anexosMes || {}), [mk]: d.anexos } } : x) : prev0;
     const r = prev.find((x) => x.id === id); if (!r) return prev;
     const novo = { description: d.description, amount: Number(d.amount) || 0, diaVencimento: Number(d.diaVencimento) || 5, category: d.category, ...(d.dedutivel !== undefined ? { dedutivel: !!d.dedutivel } : {}) };
+    const aj = (r.ajustes && r.ajustes[mk]) || {};
+    const atual = { description: aj.description || r.description, amount: Number(aj.amount !== undefined ? aj.amount : r.amount) || 0, diaVencimento: Number(aj.diaVencimento || r.diaVencimento) || 5, category: aj.category || r.category, dedutivel: aj.dedutivel !== undefined ? !!aj.dedutivel : r.dedutivel };
+    const igual = ["description", "amount", "diaVencimento", "category"].every((k) => String(atual[k]) === String(novo[k])) && (novo.dedutivel === undefined || !!atual.dedutivel === novo.dedutivel || (atual.dedutivel === undefined && novo.dedutivel === ["saude", "educacao"].includes(novo.category)));
+    if (igual) return prev; // só o anexo mudou
     if (modo === "mes") return prev.map((x) => x.id === id ? { ...x, ajustes: { ...(x.ajustes || {}), [mk]: novo } } : x);
     if (mk <= r.startMonth) return prev.map((x) => x.id === id ? { ...x, ...novo, ajustes: {} } : x);
     const pick = (o, f) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => f(k)));
@@ -2119,7 +2193,7 @@ function App() {
   const removeExtraRecurringIncome = (id) => setExtraRecurringIncomes((prev) => prev.filter((e) => e.id !== id));
   const toggleExtraIncomeRecebido = (id, mk) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, recebidoMonths: { ...e.recebidoMonths, [mk]: !(e.recebidoMonths && e.recebidoMonths[mk]) } } : e));
 
-  const addExpense = (description, amount, dueDate, category) => setExpenses((prev) => [...prev, { id: uid(), description, category: category || guessExpCat(description), amount: Number(amount) || 0, dueDate, paid: false, paidDate: null }]);
+  const addExpense = (description, amount, dueDate, category, extra) => setExpenses((prev) => [...prev, { id: uid(), description, category: category || guessExpCat(description), amount: Number(amount) || 0, dueDate, paid: false, paidDate: null, ...(extra || {}) }]);
   const toggleExpensePaid = (id) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, paid: !e.paid, paidDate: !e.paid ? todayStr() : null } : e));
   const removeExpense = (id) => setExpenses((prev) => prev.filter((e) => e.id !== id));
   // guia de imposto marcada como paga vira uma despesa paga em Impostos
@@ -2137,7 +2211,7 @@ function App() {
   useEffect(() => { if (!contabAba && activeTab === "contabilidade") setActiveTab("inicio"); }, [contabAba, activeTab]);
 
   const addRecurringExpense = (data) => setRecurringExpenses((prev) => [...prev, { id: uid(), description: data.description, category: data.category || guessExpCat(data.description), amount: Number(data.amount) || 0,
-    diaVencimento: Number(data.diaVencimento) || 5, startMonth: data.startMonth || monthKey, paidMonths: {} }]);
+    diaVencimento: Number(data.diaVencimento) || 5, startMonth: data.startMonth || monthKey, paidMonths: {}, ...(data.dedutivel !== undefined ? { dedutivel: !!data.dedutivel } : {}), ...(data.anexos && data.anexos.length ? { anexosMes: { [data.startMonth || monthKey]: data.anexos } } : {}) }]);
   const removeRecurringExpense = (id) => { if (window.confirm("Excluir esta despesa recorrente? Ela deixará de aparecer em todos os meses futuros.")) setRecurringExpenses((prev) => prev.filter((r) => r.id !== id)); };
   const toggleRecurringExpensePaid = (id, mk) => setRecurringExpenses((prev) => prev.map((r) => {
     if (r.id !== id) return r;
@@ -3786,6 +3860,18 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v47: anexos e despesas dedutíveis ================= */
+        .anx { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+        .anx-it { display: flex; align-items: center; gap: 4px; width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 4px 4px 4px 10px; background: var(--surface, #fff); }
+        .anx-open { flex: 1; min-width: 0; display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; text-align: left; border: none; background: none; font: inherit; color: var(--text); cursor: pointer; padding: 4px 0; }
+        .anx-open > span { grid-row: span 2; font-size: 17px; align-self: center; }
+        .anx-open b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .anx-open small { font-size: 11.5px; color: var(--text-dim); }
+        .xl-anx { font-size: 12px; } .xl-ded { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #6D28D9; background: #EDE9FE; border-radius: 5px; padding: 1px 5px; vertical-align: 1px; }
+        .ded-lista { margin-top: 10px; border-top: 1px solid var(--border); }
+        .ded-it { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+        .ded-it small { display: block; color: var(--text-dim); font-size: 12px; } .ded-r { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .ded-sem { color: #B45309 !important; font-weight: 600; }
+        :root[data-theme="dark"] .xl-ded { background: rgba(139,92,246,.18); color: #C4B5FD; }
+
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -4338,7 +4424,7 @@ function App() {
         {activeTab === "despesas" && (
           <ExpensesTab
             monthExpenseItems={monthExpenseItems} addExpense={addExpense} addRecurringExpense={addRecurringExpense}
-            viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} limits={limits} setLimit={setLimit} updateExpense={updateExpense} updateRecurringExpense={updateRecurringExpense}
+            viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} dedSignal={signals.dedutivel} limits={limits} setLimit={setLimit} updateExpense={updateExpense} updateRecurringExpense={updateRecurringExpense}
             desk={desk} history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} goTab={goTab}
           />
         )}
@@ -4361,7 +4447,7 @@ function App() {
             prevIncomeItems={buildIncomeItems(...(viewMonth === 0 ? [viewYear - 1, 11] : [viewYear, viewMonth - 1]))}
             yearIncomeItems={Array.from({ length: 12 }, (_, m) => buildIncomeItems(viewYear, m)).flat()}
             yearExpenseItems={Array.from({ length: 12 }, (_, m) => buildExpenseItems(viewYear, m)).flat()}
-            pagarGuia={pagarGuia} desfazerGuia={desfazerGuia} />
+            pagarGuia={pagarGuia} desfazerGuia={desfazerGuia} onAddDed={() => { setSignals((x) => ({ ...x, dedutivel: x.dedutivel + 1 })); goTab("despesas"); }} />
         )}
         {activeTab === "importar" && (
           <ImportTab buildExpenseItems={buildExpenseItems} buildIncomeItems={buildIncomeItems} importedKeys={importedKeys}
@@ -5563,7 +5649,8 @@ function baixarCsv(nome, linhas) {
   const csv = "﻿" + linhas.map((l) => l.map((c) => esc(num(c))).join(";")).join("\n");
   try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); } catch (e) {}
 }
-function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk, viewYear, viewMonth, monthIncomeItems = [], prevIncomeItems = [], yearIncomeItems = [], yearExpenseItems = [], pagarGuia, desfazerGuia }) {
+function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateGeral, desk, viewYear, viewMonth, monthIncomeItems = [], prevIncomeItems = [], yearIncomeItems = [], yearExpenseItems = [], pagarGuia, desfazerGuia }) {
+  const [dedVerTodas, setDedVerTodas] = useState(false);
   const set = (k, v) => setContab((p) => ({ ...p, [k]: v }));
   const mk = monthKeyOf(viewYear, viewMonth);
   const mes = MONTHS_PT[viewMonth].toLowerCase(), mesAnt = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
@@ -5632,8 +5719,8 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
     inc.forEach((i) => L.push([fmtDatePt(i.dateIso), i.nome, Number(i.gross) || 0, (Number(i.gross) || 0) - (Number(i.net) || 0), Number(i.net) || 0, i.recebido ? "sim" : "não", notasMap[(i.dateIso || "").slice(0, 7) + "|" + i.nome] ? "sim" : "não"]));
     L.push([], ["Total bruto", "", inc.reduce((a, i) => a + (Number(i.gross) || 0), 0)]);
     if (!ano) { L.push([], ["GUIAS DO MÊS"], ["Guia", "Vencimento", "Valor", "Pago"]); guias.forEach((g) => L.push([g.nome, fmtDatePt(g.data), g.valor, pagos[g.id] ? "sim" : "não"])); }
-    L.push([], ["DESPESAS DEDUTÍVEIS"], ["Data", "Descrição", "Categoria", "Valor"]);
-    exps.forEach((e) => L.push([fmtDatePt(e.dateIso), e.description, (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, e.amount]));
+    L.push([], ["DESPESAS DEDUTÍVEIS"], ["Data", "Descrição", "Categoria", "Valor", "Nota anexada"]);
+    exps.forEach((e) => L.push([fmtDatePt(e.dateIso), e.description, (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, e.amount, (e.anexos || []).length ? (e.anexos || []).map((a) => a.nome).join(", ") : "não"]));
     baixarCsv(`mediplan-contador-${ano ? viewYear : mk}.csv`, L);
   };
   const tag = (t, c) => <span className={`ctg ${c}`}>{t}</span>;
@@ -5760,10 +5847,24 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
       <div className="field-hint">Estimativa simplificada com a tabela de {viewYear >= 2026 ? 2026 : viewYear} e a redução para rendas até R$ 88.200 por ano. Não substitui a declaração nem o contador.</div>
     </div>
   );
-  const dedBody = porCat.length === 0 ? <div className="empty-state">Nenhuma despesa dedutível em {viewYear}. Saúde e escola entram sozinhas; para outras, abra a despesa pelo lápis e marque “Dedutível”.</div> : (
+  const dedAteHoje = [...dedAno].filter((e) => String(e.dateIso).slice(0, 7) <= todayStr().slice(0, 7)).sort((x, y) => String(y.dateIso).localeCompare(String(x.dateIso)));
+  const dedSemNota = dedAteHoje.filter((e) => !(e.anexos || []).length).length;
+  const dedLista = dedVerTodas ? dedAteHoje : dedAteHoje.slice(0, 6);
+  const dedBody = (
     <div>
-      <div className="dprox">{porCat.map((c) => <div key={c.nome}><span><b><span className="legend-dot" style={{ background: c.cor, marginRight: 8 }} />{c.nome}</b><small>{c.n} lançamento(s)</small></span><b className="mono">{fmtBRL(c.v)}</b></div>)}</div>
-      {outrosDed.length > 0 && <div className="field-hint">Cursos, congressos e anuidade do conselho só abatem no IR de quem é autônomo e faz livro-caixa. Eles vão para o relatório do contador.</div>}
+      {onAddDed && <button type="button" className="btn btn-primary sm" style={{ marginBottom: 10 }} onClick={onAddDed}><IconPlus size={14} color="#fff" /> Adicionar despesa dedutível</button>}
+      {porCat.length === 0 ? <div className="empty-state">Nenhuma despesa dedutível em {viewYear}. Saúde e escola entram sozinhas; para outras, marque “Dedutível” ao lançar ou pelo lápis em Despesas.</div> : (<>
+        <div className="dprox">{porCat.map((c) => <div key={c.nome}><span><b><span className="legend-dot" style={{ background: c.cor, marginRight: 8 }} />{c.nome}</b><small>{c.n} lançamento(s)</small></span><b className="mono">{fmtBRL(c.v)}</b></div>)}</div>
+        <div className="ded-lista">
+          {dedLista.map((e) => (
+            <div key={e.key} className="ded-it"><span><b>{e.description}</b><small>{fmtDatePt(e.dateIso)} · {(EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label}</small></span>
+              <span className="ded-r"><b className="mono">{fmtBRL(e.amount)}</b>{(e.anexos || []).length ? e.anexos.map((a) => <button key={a.id} type="button" className="link-btn" onClick={() => abrirAnexo(a)}>📎 ver nota</button>) : <small className="ded-sem">sem nota</small>}</span></div>
+          ))}
+        </div>
+        {dedAteHoje.length > 6 && <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => setDedVerTodas(!dedVerTodas)}>{dedVerTodas ? "Mostrar só as mais recentes" : `Ver todas as ${dedAteHoje.length} despesas até este mês`}</button>}
+        {dedSemNota > 0 && <div className="field-hint">{dedSemNota} despesa(s) sem nota anexada. Para anexar, abra pelo lápis em Despesas.</div>}
+        {outrosDed.length > 0 && <div className="field-hint">Cursos, congressos e anuidade do conselho só abatem no IR de quem é autônomo e faz livro-caixa. Eles vão para o relatório do contador.</div>}
+      </>)}
     </div>
   );
   const relBody = (
@@ -6615,11 +6716,12 @@ function ExpenseEditForm({ item, onSubmit, onCancel, onDelete }) {
   const [category, setCategory] = useState(item.category || "outros");
   const [modo, setModo] = useState("diante");
   const [dedutivel, setDedutivel] = useState(ehDedutivel(item));
+  const [anexos, setAnexos] = useState(item.anexos || []);
   const [erro, setErro] = useState("");
   const submit = () => {
     if (!description.trim()) { setErro("Dê um nome para a conta."); return; }
     if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
-    onSubmit({ description: description.trim(), amount: Number(amount), dueDate, diaVencimento: Number(dia) || 5, category, dedutivel }, modo);
+    onSubmit({ description: description.trim(), amount: Number(amount), dueDate, diaVencimento: Number(dia) || 5, category, dedutivel, anexos }, modo);
   };
   return (
     <div className="mini-form">
@@ -6636,6 +6738,7 @@ function ExpenseEditForm({ item, onSubmit, onCancel, onDelete }) {
           <input type="checkbox" checked={dedutivel} onChange={(e) => setDedutivel(e.target.checked)} />
           <span>Dedutível no imposto de renda<small>Saúde e escola já vêm marcadas. Use também para cursos, congressos e anuidade do conselho, para o relatório do contador.</small></span>
         </label>
+        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Nota fiscal ou recibo{rec ? " deste mês" : ""}</label><AnexosField value={anexos} onChange={setAnexos} /></div>
         {rec && (
           <div className="field" style={{ gridColumn: "1 / -1" }}><label>A mudança vale para</label>
             <div className="chip-row" role="group" aria-label="A mudança vale para">
@@ -7333,7 +7436,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   );
 }
 
-function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
+function ExpensesTab({ dedSignal, monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
   const [editKey, setEditKey] = useState(null);
   const gv = useGv();
   const [showForm, setShowForm] = useState(false);
@@ -7345,6 +7448,9 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
   const [diaVencimento, setDiaVencimento] = useState(5);
   const [cat, setCat] = useState("outros");
   const [catTouched, setCatTouched] = useState(false);
+  const [dedut, setDedut] = useState(null);
+  const [anexosNovos, setAnexosNovos] = useState([]);
+  useEffect(() => { if (dedSignal) { setShowForm(true); setDedut(true); } }, [dedSignal]);
   const [filter, setFilter] = useState("todas");
   const [sort, setSort] = useState("data");
   const [openFat, setOpenFat] = useState(null);
@@ -7357,11 +7463,13 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
   useEffect(() => { setDueDate(dateStr(viewYear, viewMonth, 5)); }, [viewYear, viewMonth]);
   const onDesc = (v) => { setDescription(v); if (!catTouched) setCat(guessExpCat(v)); };
 
+  const dedFinal = dedut === null ? ["saude", "educacao"].includes(cat) : dedut;
   const submit = () => {
     if (!description || !amount) return;
-    if (mode === "pontual") addExpense(description, amount, dueDate, cat);
-    else addRecurringExpense({ description, amount, diaVencimento, startMonth: monthKeyOf(viewYear, viewMonth), category: cat });
-    setDescription(""); setAmount(""); setCat("outros"); setCatTouched(false); setShowForm(false);
+    const extra = { dedutivel: dedFinal, ...(anexosNovos.length ? { anexos: anexosNovos } : {}) };
+    if (mode === "pontual") addExpense(description, amount, dueDate, cat, extra);
+    else addRecurringExpense({ description, amount, diaVencimento, startMonth: monthKeyOf(viewYear, viewMonth), category: cat, ...extra });
+    setDescription(""); setAmount(""); setCat("outros"); setCatTouched(false); setShowForm(false); setDedut(null); setAnexosNovos([]);
   };
 
   const total = monthExpenseItems.reduce((a, e) => a + e.amount, 0);
@@ -7438,7 +7546,7 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
                       </button>
                       <span className="xl-date mono">{dm}</span>
                       <div className="xl-main">
-                        <div className="xl-title">{e.description}</div>
+                        <div className="xl-title">{e.description}{(e.anexos || []).length > 0 && <span className="xl-anx" title="Nota anexada" aria-label="Nota anexada"> 📎</span>}{ehDedutivel(e) && <span className="xl-ded" title="Dedutível no IR">IR</span>}</div>
                         {e.itens && <button type="button" className="xl-more" data-fat-open aria-expanded={openFat === e.key} onClick={() => setOpenFat(openFat === e.key ? null : e.key)}>{openFat === e.key ? "Fechar" : `Ver os ${e.itens.length} gastos`} <span aria-hidden="true">{openFat === e.key ? "▴" : "▾"}</span></button>}
                         <div className="xl-sub"><span className="mono">{dm}</span><span>·</span><i style={{ background: meta.color }} /><span>{meta.label}</span>{e.tipo === "recorrente" && <><span>·</span><span>todo mês</span></>}</div>
                       </div>
@@ -7527,6 +7635,11 @@ function ExpensesTab({ monthExpenseItems, addExpense, addRecurringExpense, viewY
                   ))}
                 </div>
               </div>
+              <label className="ct-check" style={{ marginTop: 0 }}>
+                <input type="checkbox" checked={dedFinal} onChange={(e) => setDedut(e.target.checked)} />
+                <span>Dedutível no imposto de renda<small>Saúde e escola já vêm marcadas. Marque também cursos, congressos e anuidade do conselho, para o relatório do contador.</small></span>
+              </label>
+              <div className="field" style={{ marginBottom: 14 }}><label>Nota fiscal ou recibo (opcional)</label><AnexosField value={anexosNovos} onChange={setAnexosNovos} /></div>
               <button className="btn btn-primary" onClick={submit}><IconPlus size={15} color="#fff" /> Salvar despesa</button>
             </div>
           )}

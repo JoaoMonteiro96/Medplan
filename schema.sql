@@ -109,3 +109,16 @@ select user_id, id,
        nullif(data->>'prazo','')::date          as prazo,
        updated_at
 from public.records where collection = 'goals' and not deleted;
+
+-- ============ Notas fiscais e recibos (anexos das despesas) ============
+-- Cria uma pasta privada "notas". Cada usuário só vê, envia e apaga os próprios arquivos.
+insert into storage.buckets (id, name, public) values ('notas', 'notas', false) on conflict (id) do nothing;
+drop policy if exists "notas: ver as minhas" on storage.objects;
+drop policy if exists "notas: enviar as minhas" on storage.objects;
+drop policy if exists "notas: apagar as minhas" on storage.objects;
+create policy "notas: ver as minhas" on storage.objects for select to authenticated
+  using (bucket_id = 'notas' and auth.uid()::text = (storage.foldername(name))[1]);
+create policy "notas: enviar as minhas" on storage.objects for insert to authenticated
+  with check (bucket_id = 'notas' and auth.uid()::text = (storage.foldername(name))[1]);
+create policy "notas: apagar as minhas" on storage.objects for delete to authenticated
+  using (bucket_id = 'notas' and auth.uid()::text = (storage.foldername(name))[1]);
