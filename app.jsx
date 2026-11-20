@@ -1003,7 +1003,7 @@ const PAGE_TITLES = {
   investimentos: ["Investimentos", "Carteira, distribuição e rentabilidade"],
   metas: ["Metas", "Teto de gastos e seus objetivos"],
   visao: ["Relatórios", "Comparativos e ganho por hora"],
-  contabilidade: ["Contabilidade", "Quanto a sua PJ paga de imposto"],
+  contabilidade: ["Contabilidade", "Impostos, notas e imposto de renda"],
   backup: ["Configurações", "Conta, nuvem, tributação e backup"],
   importar: ["Importar", "Extrato, fatura do cartão e planilhas da B3"],
 };
@@ -1159,8 +1159,8 @@ function DProximos({ incomeItems = [], expenseItems = [], max = 6, onVer }) {
     </div>
   );
 }
-function DSide({ active, onPick, onNovo }) {
-  const grupo = (ids) => ids.map((id) => { const t = NAV_ALL.find((x) => x.id === id); if (!t) return null; const Ic = id === "backup" ? IconGear : t.icon; return (
+function DSide({ active, onPick, onNovo, ocultar = [] }) {
+  const grupo = (ids) => ids.filter((id) => !ocultar.includes(id)).map((id) => { const t = NAV_ALL.find((x) => x.id === id); if (!t) return null; const Ic = id === "backup" ? IconGear : t.icon; return (
     <button key={id} type="button" data-tab={id} className={`dsb-i ${active === id ? "on" : ""}`} aria-current={active === id ? "page" : undefined} onClick={() => onPick(id)}><Ic size={18} /><span>{NAV_LABELS[id]}</span></button>
   ); });
   return (
@@ -1177,7 +1177,7 @@ function DSide({ active, onPick, onNovo }) {
 const DOCK_IDS = ["inicio", "faturamento", "calendario", "despesas", "investimentos"];
 const DOCK_MAIS = ["organizacao", "metas", "visao", "contabilidade", "importar", "backup"];
 const DOCK_NOMES = { organizacao: "Organização", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
-function Dock({ active, onPick }) {
+function Dock({ active, onPick, ocultar = [] }) {
   const [mais, setMais] = useState(false);
   useEffect(() => {
     if (!mais) return;
@@ -1193,7 +1193,7 @@ function Dock({ active, onPick }) {
           <div className="dk-sheet" role="dialog" aria-label="Todas as seções" onClick={(e) => e.stopPropagation()}>
             <h4>Todas as seções</h4>
             <div className="dk-grid">
-              {DOCK_MAIS.map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = id === "backup" ? IconGear : t.icon; return (
+              {DOCK_MAIS.filter((id) => !ocultar.includes(id)).map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = id === "backup" ? IconGear : t.icon; return (
                 <button key={id} type="button" data-tab={id} className={`dk-item ${active === id ? "on" : ""}`} aria-current={active === id ? "page" : undefined} onClick={() => ir(id)}>
                   <span><Ic size={22} /></span>{DOCK_NOMES[id]}
                 </button>
@@ -1869,7 +1869,7 @@ function App() {
     const items = [];
     expenses.filter((e) => inMonth(e.dueDate, y, m)).forEach((e) => {
       items.push({ key: "exp-" + e.id, description: e.description, category: e.category || guessExpCat(e.description), amount: Number(e.amount || 0), dateLabel: fmtDatePt(e.dueDate), dateIso: e.dueDate, itens: Array.isArray(e.itens) && e.itens.length ? e.itens : null, ajuste: Number(e.ajuste) || 0,
-        tipo: "pontual", paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id), ref: { t: "exp", id: e.id } });
+        tipo: "pontual", dedutivel: e.dedutivel, paid: !!e.paid, toggle: () => toggleExpensePaid(e.id), remove: () => removeExpense(e.id), ref: { t: "exp", id: e.id } });
     });
     recurringExpenses.filter((r) => r.startMonth <= mk && (!r.endMonth || mk <= r.endMonth)).forEach((r) => {
       const aj = (r.ajustes && r.ajustes[mk]) || {};
@@ -1877,7 +1877,7 @@ function App() {
       const info = r.paidMonths && r.paidMonths[mk];
       const desc = aj.description || r.description;
       items.push({ key: "rec-" + r.id + "-" + mk, description: desc, category: aj.category || r.category || guessExpCat(desc), amount: Number(aj.amount !== undefined ? aj.amount : r.amount || 0), dateLabel: fmtDatePt(dateStr(y, m, day)), dateIso: dateStr(y, m, day),
-        tipo: "recorrente", paid: !!(info && info.paid), toggle: () => toggleRecurringExpensePaid(r.id, mk), remove: () => removeRecurringExpense(r.id), ref: { t: "rec", id: r.id, mk } });
+        tipo: "recorrente", dedutivel: aj.dedutivel !== undefined ? aj.dedutivel : r.dedutivel, paid: !!(info && info.paid), toggle: () => toggleRecurringExpensePaid(r.id, mk), remove: () => removeRecurringExpense(r.id), ref: { t: "rec", id: r.id, mk } });
     });
     return items;
   };
@@ -2028,11 +2028,11 @@ function App() {
   const updateShift = (id, data) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, gross: Number(data.gross) || 0, hours: Number(data.hours) || 0, date: data.date, prazoDias: Number(data.prazoDias) || 0, payDate: addDaysIso(data.date, Number(data.prazoDias) || 0) } : s));
   const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido } : o));
   const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, source: "manual" }]);
-  const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category } : e));
+  const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category, ...(d.dedutivel !== undefined ? { dedutivel: !!d.dedutivel } : {}) } : e));
   // conta que se repete: "só este mês" guarda um ajuste no mês; "daqui em diante" encerra a antiga no mês anterior e cria outra a partir deste
   const updateRecurringExpense = (id, d, mk, modo) => setRecurringExpenses((prev) => {
     const r = prev.find((x) => x.id === id); if (!r) return prev;
-    const novo = { description: d.description, amount: Number(d.amount) || 0, diaVencimento: Number(d.diaVencimento) || 5, category: d.category };
+    const novo = { description: d.description, amount: Number(d.amount) || 0, diaVencimento: Number(d.diaVencimento) || 5, category: d.category, ...(d.dedutivel !== undefined ? { dedutivel: !!d.dedutivel } : {}) };
     if (modo === "mes") return prev.map((x) => x.id === id ? { ...x, ajustes: { ...(x.ajustes || {}), [mk]: novo } } : x);
     if (mk <= r.startMonth) return prev.map((x) => x.id === id ? { ...x, ...novo, ajustes: {} } : x);
     const pick = (o, f) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => f(k)));
@@ -2091,6 +2091,19 @@ function App() {
   const addExpense = (description, amount, dueDate, category) => setExpenses((prev) => [...prev, { id: uid(), description, category: category || guessExpCat(description), amount: Number(amount) || 0, dueDate, paid: false, paidDate: null }]);
   const toggleExpensePaid = (id) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, paid: !e.paid, paidDate: !e.paid ? todayStr() : null } : e));
   const removeExpense = (id) => setExpenses((prev) => prev.filter((e) => e.id !== id));
+  // guia de imposto marcada como paga vira uma despesa paga em Impostos
+  const pagarGuia = (mk, g) => {
+    const id = uid();
+    setExpenses((prev) => [...prev, { id, description: g.nome, amount: Math.round(g.valor * 100) / 100, category: "impostos", dueDate: g.data, date: g.data, paid: true, fromContab: true }]);
+    setContab((p) => ({ ...p, pagos: { ...(p.pagos || {}), [mk]: { ...((p.pagos || {})[mk] || {}), [g.id]: id } } }));
+  };
+  const desfazerGuia = (mk, gid) => {
+    const exp = ((contab.pagos || {})[mk] || {})[gid];
+    if (exp) setExpenses((prev) => prev.filter((e) => e.id !== exp));
+    setContab((p) => { const m = { ...((p.pagos || {})[mk] || {}) }; delete m[gid]; return { ...p, pagos: { ...(p.pagos || {}), [mk]: m } }; });
+  };
+  const contabAba = contab.aba !== false;
+  useEffect(() => { if (!contabAba && activeTab === "contabilidade") setActiveTab("inicio"); }, [contabAba, activeTab]);
 
   const addRecurringExpense = (data) => setRecurringExpenses((prev) => [...prev, { id: uid(), description: data.description, category: data.category || guessExpCat(data.description), amount: Number(data.amount) || 0,
     diaVencimento: Number(data.diaVencimento) || 5, startMonth: data.startMonth || monthKey, paidMonths: {} }]);
@@ -3742,6 +3755,54 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v44: contabilidade (gavetas e cartões também no celular) ================= */
+        .dgvs { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: start; }
+        .dgv { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+        .dgv-h { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto 18px; gap: 12px; align-items: center; width: 100%; padding: 13px 14px; border: none; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+        .dgv-ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; }
+        .dgv-t { min-width: 0; } .dgv-t b { display: block; font-size: 14.5px; } .dgv-t small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dgv-v { font-size: 13px; font-weight: 700; white-space: nowrap; }
+        .dgv-ch { color: var(--text-dim); display: inline-flex; transition: transform .18s; } .dgv.open .dgv-ch { transform: rotate(90deg); }
+        .dgv.open .dgv-h { border-bottom: 1px solid var(--border); }
+        .dgv-b { padding: 14px; }
+        .dgv-b > div > .card { border: none; box-shadow: none; padding: 0; margin: 0 0 12px; background: none; }
+        .dkpi { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+        .dkpi small { display: block; font-size: 12.5px; color: var(--text-dim); }
+        .dkpi b { display: block; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; margin: 3px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dkpi em { display: block; font-style: normal; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+        .dprox > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; font-size: 13.5px; }
+        .dprox > div + div { border-top: 1px solid var(--border); }
+        .dprox small { display: block; color: var(--text-dim); font-size: 12px; margin-top: 1px; }
+        .ct-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .ct-sec { font-size: 13px; font-weight: 600; color: var(--text-dim); margin: 18px 4px 8px; }
+        .ct-pag { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+        .ct-bol { display: grid; grid-template-columns: 1fr 120px; gap: 10px; margin-bottom: 6px; } .ct-bol .field { margin: 0; }
+        .ct-list { margin: 4px 0 6px; }
+        .ct-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--border); }
+        .ct-row:first-child { border-top: none; }
+        .ct-row > .btn { grid-column: 1 / -1; justify-self: start; }
+        .ct-row.ct-chk { grid-template-columns: 22px minmax(0, 1fr) auto; cursor: pointer; } .ct-row.ct-chk input { width: 18px; height: 18px; }
+        .ct-l { min-width: 0; } .ct-l b { font-size: 14px; } .ct-l small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+        .ct-v { font-size: 14px; white-space: nowrap; text-align: right; }
+        .ct-row.pago .ct-l b, .ct-row.pago .ct-v { color: var(--text-dim); }
+        .ctg { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 2px 7px; margin-left: 7px; vertical-align: 1px; }
+        .ctg.ok { background: #DCFCE7; color: #15803D; } .ctg.warn { background: #FEF3C7; color: #92400E; } .ctg.bad { background: #FEE2E2; color: #B91C1C; }
+        .ct-cx { display: flex; gap: 14px; align-items: center; margin: 4px 0 8px; }
+        .ct-ir .form-grid { margin-bottom: 10px; }
+        .ct-ir-res { background: var(--surface-2); border-radius: 12px; padding: 10px 14px; }
+        .ct-ir-box { border-radius: 12px; padding: 12px 14px; margin-top: 10px; } .ct-ir-box small { display: block; font-size: 12.5px; color: var(--text-dim); } .ct-ir-box b { display: block; font-size: 21px; font-weight: 800; margin-top: 2px; }
+        .ct-ir-box.ok { background: #ECFDF5; } .ct-ir-box.ok b { color: #15803D; } .ct-ir-box.bad { background: #FEF2F2; } .ct-ir-box.bad b { color: #B91C1C; }
+        .ct-off { text-align: center; margin: 18px 0 4px; }
+        .ct .card { margin-bottom: 12px; }
+        @media (min-width: 1100px) {
+          .ct .ct-row { grid-template-columns: minmax(0, 1fr) auto 150px; } .ct .ct-row > .btn { grid-column: auto; justify-self: end; }
+          .ct .ct-row.ct-chk { grid-template-columns: 22px minmax(0, 1fr) auto; }
+          .ct .dgvs { grid-template-columns: 1fr 1fr; gap: 12px; }
+          .ct .dkpi b { font-size: 24px; }
+        }
+        :root[data-theme="dark"] .ctg.ok { background: rgba(52,211,153,.16); color: #34D399; } :root[data-theme="dark"] .ctg.warn { background: rgba(245,158,11,.16); color: #FBBF24; } :root[data-theme="dark"] .ctg.bad { background: rgba(239,68,68,.16); color: #F87171; }
+        :root[data-theme="dark"] .ct-ir-box.ok { background: rgba(52,211,153,.12); } :root[data-theme="dark"] .ct-ir-box.bad { background: rgba(239,68,68,.12); }
+
         /* ================= v42: computador (menu lateral, painéis e gavetas) ================= */
         .dsb { display: none; }
         @media (max-width: 1099px) { .main { margin-left: 0; } }
@@ -4139,10 +4200,10 @@ function App() {
             <button className="btn btn-primary tb-new" onClick={() => setQuickOpen(true)}><IconPlus size={16} color="#fff" /> Novo</button>
           </div>
         </header>
-        <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup")} active={activeTab} onPick={goTab} />
+        <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup" && (contabAba || t.id !== "contabilidade"))} active={activeTab} onPick={goTab} />
       </div>
-      <Dock active={activeTab} onPick={goTab} />
-      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} />
+      <Dock active={activeTab} onPick={goTab} ocultar={contabAba ? [] : ["contabilidade"]} />
+      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={contabAba ? [] : ["contabilidade"]} />
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
@@ -4206,8 +4267,13 @@ function App() {
           <OverviewTab chartScope={chartScope} setChartScope={setChartScope} expensesByDesc={expensesByDesc} investByCategory={investByCategory}
             hourlyRate={hourlyRate} leftover={leftover} scopedHours={scopedHours} history12={history12} insights={insights} />
         )}
-        {activeTab === "contabilidade" && (
-          <ContabTab contab={contab} setContab={setContab} app={contabApp} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} />
+        {activeTab === "contabilidade" && contabAba && (
+          <ContabTab contab={contab} setContab={setContab} app={contabApp} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral}
+            desk={desk} viewYear={viewYear} viewMonth={viewMonth} monthIncomeItems={monthIncomeItems}
+            prevIncomeItems={buildIncomeItems(...(viewMonth === 0 ? [viewYear - 1, 11] : [viewYear, viewMonth - 1]))}
+            yearIncomeItems={Array.from({ length: 12 }, (_, m) => buildIncomeItems(viewYear, m)).flat()}
+            yearExpenseItems={Array.from({ length: 12 }, (_, m) => buildExpenseItems(viewYear, m)).flat()}
+            pagarGuia={pagarGuia} desfazerGuia={desfazerGuia} />
         )}
         {activeTab === "importar" && (
           <ImportTab buildExpenseItems={buildExpenseItems} buildIncomeItems={buildIncomeItems} importedKeys={importedKeys}
@@ -4215,7 +4281,7 @@ function App() {
             commitB3={commitB3} portfolio={portfolio} investments={investments} commitPrint={commitPrint} fonteInicial={importSrc} limparFonte={() => setImportSrc(null)} />
         )}
         {activeTab === "backup" && (
-          <BackupTab taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
+          <BackupTab contabAba={contabAba} setContabAba={(v) => setContab((p) => ({ ...p, aba: v }))} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
             notifCard={<LembretesCard on={notifOn} setOn={setNotifOn} itens={lembretes} />}
             themeCard={<ThemeCard tema={tema} setTema={setTema} />} goTab={goTab} conta={session && session.user ? session.user.email : ""} cloudLabel={cloudLabel} resumo={{ tema, discreto, pinOn: !!pinHash, notifOn }}
             privacyCard={<PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} />}
@@ -5106,7 +5172,7 @@ function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioI
   );
 }
 
-function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard, themeCard, goTab, conta, cloudLabel, resumo = {} }) {
+function BackupTab({ contabAba = true, setContabAba, taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard, themeCard, goTab, conta, cloudLabel, resumo = {} }) {
   const [sec, setSec] = useState(null);
   const taxa = (
     <div className="day-panel" style={{ marginTop: 0 }}>
@@ -5133,7 +5199,15 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
       {saveError && <div style={{ color: "var(--brick)", marginTop: 10, fontSize: 13 }}>Não foi possível salvar as últimas alterações neste navegador.</div>}
     </div>
   );
-  const SECS = { nuvem: cloudCard, aparencia: themeCard, privacidade: privacyCard, lembretes: notifCard, imposto: taxa, carteira: posicaoCard, backup, apagar: wipeCard };
+  const abaContab = (
+    <div className="day-panel" style={{ marginTop: 0 }}>
+      <div className="day-panel-title"><span>Aba Contabilidade</span></div>
+      <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginTop: 0 }}>A aba é opcional. Ela mostra a agenda de impostos, a caixinha do imposto, as notas emitidas e a estimativa do imposto de renda. Quem não tem empresa ou deixa tudo com o contador pode escondê-la.</p>
+      <button type="button" className={`btn ${contabAba ? "btn-ghost" : "btn-primary"}`} id="cfg-contab-aba" onClick={() => setContabAba && setContabAba(!contabAba)}>{contabAba ? "Esconder a aba" : "Mostrar a aba"}</button>
+      <div className="field-hint">A tributação padrão continua em “Imposto padrão”, mesmo com a aba escondida.</div>
+    </div>
+  );
+  const SECS = { contababa: abaContab, nuvem: cloudCard, aparencia: themeCard, privacidade: privacyCard, lembretes: notifCard, imposto: taxa, carteira: posicaoCard, backup, apagar: wipeCard };
   if (sec) return (
     <div className="cfg-sub">
       <button type="button" className="cfg-back" onClick={() => setSec(null)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg> Configurações</button>
@@ -5164,6 +5238,7 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
         {row("lembretes", "#F59E0B", ic(<><path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7" /><path d="M10 20a2 2 0 0 0 4 0" /></>), "Lembretes no celular", resumo.notifOn ? "Ligados" : "Desligados")}
       </div>
       <div className="cfg-group">
+        {row("contababa", "#0F766E", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /></>), "Aba Contabilidade", contabAba ? "Aparecendo" : "Escondida")}
         {row("imposto", "#14B8A6", ic(<><line x1="19" y1="5" x2="5" y2="19" /><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" /></>), "Imposto padrão", contabAuto ? "Calculado pela Contabilidade" : (Number(taxRateGeral) || 0).toLocaleString("pt-BR") + "%")}
         {row("carteira", "#22C55E", ic(<><polyline points="3 17 9 11 13 15 21 7" /><polyline points="15 7 21 7 21 13" /></>), "Posição inicial da carteira", "O que você já tinha investido")}
         {row("backup", "#3B82F6", ic(<><path d="M12 4v11" /><polyline points="7 10 12 15 17 10" /><path d="M5 20h14" /></>), "Backup dos dados", "Baixar ou restaurar uma cópia")}
@@ -5173,10 +5248,222 @@ function BackupTab({ taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef
         <div className="cfg-group">
           {row("ir-metas", "#F59E0B", ic(<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></>), "Metas", null, () => goTab("metas"))}
           {row("ir-relatorios", "#7C5CFC", ic(<><path d="M12 3a9 9 0 1 0 9 9h-9Z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15Z" /></>), "Relatórios", null, () => goTab("visao"))}
-          {row("ir-contabilidade", "#14B8A6", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /><line x1="8.5" y1="17" x2="12" y2="17" /></>), "Contabilidade", null, () => goTab("contabilidade"))}
+          {contabAba && row("ir-contabilidade", "#14B8A6", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /><line x1="8.5" y1="17" x2="12" y2="17" /></>), "Contabilidade", null, () => goTab("contabilidade"))}
           {row("ir-importar", "#64748B", ic(<><path d="M12 15V4" /><polyline points="7 9 12 4 17 9" /><path d="M5 20h14" /></>), "Importar extrato, fatura ou nota", null, () => goTab("importar"))}
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ================= Contabilidade (aba opcional): agenda de impostos, caixinha, notas e o ano =================
+function baixarCsv(nome, linhas) {
+  const esc = (v) => { const t = String(v === undefined || v === null ? "" : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const num = (v) => (typeof v === "number" ? v.toFixed(2).replace(".", ",") : v);
+  const csv = "﻿" + linhas.map((l) => l.map((c) => esc(num(c))).join(";")).join("\n");
+  try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); } catch (e) {}
+}
+function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk, viewYear, viewMonth, monthIncomeItems = [], prevIncomeItems = [], yearIncomeItems = [], yearExpenseItems = [], pagarGuia, desfazerGuia }) {
+  const set = (k, v) => setContab((p) => ({ ...p, [k]: v }));
+  const mk = monthKeyOf(viewYear, viewMonth);
+  const mes = MONTHS_PT[viewMonth].toLowerCase(), mesAnt = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
+  const hoje = todayStr();
+  const boleto = contab.pagamento === "boleto";
+  // agenda
+  const prevGross = prevIncomeItems.reduce((a, i) => a + (Number(i.gross) || 0), 0);
+  const prevTax = prevIncomeItems.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
+  const guias = contabGuias(contab, viewYear, viewMonth, prevGross, prevTax);
+  const pagos = (contab.pagos && contab.pagos[mk]) || {};
+  const totGuias = guias.reduce((a, g) => a + g.valor, 0);
+  const totPago = guias.filter((g) => pagos[g.id]).reduce((a, g) => a + g.valor, 0);
+  // caixinha: a parte de imposto de cada recebimento
+  const recebidos = monthIncomeItems.filter((i) => i.recebido && (Number(i.gross) || 0) - (Number(i.net) || 0) > 0.004);
+  const sep = contab.separado || {};
+  const alvo = recebidos.reduce((a, i) => a + (i.gross - i.net), 0);
+  const guardado = recebidos.filter((i) => sep[i.key]).reduce((a, i) => a + (i.gross - i.net), 0);
+  const pctCx = alvo > 0 ? Math.round((guardado / alvo) * 100) : 0;
+  const gruposCx = Object.values(recebidos.reduce((acc, i) => { const g = acc[i.nome] || (acc[i.nome] = { nome: i.nome, keys: [], imp: 0, bruto: 0, n: 0, ult: "" }); g.keys.push(i.key); g.imp += i.gross - i.net; g.bruto += i.gross; g.n += 1; if (i.dateIso > g.ult) g.ult = i.dateIso; return acc; }, {}));
+  const grupoSep = (g) => g.keys.every((k) => sep[k]);
+  const toggleGrupo = (g) => { const v = !grupoSep(g); setContab((p) => { const n = { ...(p.separado || {}) }; g.keys.forEach((k) => { n[k] = v; }); return { ...p, separado: n }; }); };
+  // notas por tomador
+  const notasMap = contab.notas || {};
+  const tomadores = Object.values(monthIncomeItems.reduce((acc, i) => {
+    const k = i.nome || "Outros"; const t = acc[k] || (acc[k] = { nome: k, cor: i.cor, bruto: 0, n: 0, pend: 0, atras: false, data: null });
+    t.bruto += Number(i.gross) || 0; t.n += 1;
+    if (!i.recebido) { t.pend += 1; if (i.dateIso < hoje) t.atras = true; if (!t.data || i.dateIso < t.data) t.data = i.dateIso; }
+    return acc;
+  }, {})).sort((a, b) => b.bruto - a.bruto);
+  const notaKey = (n) => mk + "|" + n;
+  const toggleNota = (n) => setContab((p) => ({ ...p, notas: { ...(p.notas || {}), [notaKey(n)]: !(p.notas || {})[notaKey(n)] } }));
+  const semPag = tomadores.filter((t) => notasMap[notaKey(t.nome)] && t.pend > 0);
+  const semNota = tomadores.filter((t) => !notasMap[notaKey(t.nome)]);
+  // o ano
+  const ir = contab.ir || {};
+  const setIr = (k, v) => setContab((p) => ({ ...p, ir: { ...(p.ir || {}), [k]: v } }));
+  const pl = numOf(contab.proLabore);
+  const calcPl = contab.modo === "contab" && pl > 0 ? (contab.regime === "presumido" ? calcPresumido(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0)) : calcSimples(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0))) : null;
+  const vItem = (id) => (calcPl ? (calcPl.itens.find((i) => i.id === id) || { valor: 0 }).valor : 0);
+  const sug = { rend: pl * 12, inss: vItem("inss") * 12, retido: vItem("irrf") * 12 };
+  const val = (k) => (ir[k] === undefined || ir[k] === "" || ir[k] === null ? sug[k] || 0 : numOf(ir[k]));
+  const dedAno = yearExpenseItems.filter(ehDedutivel);
+  const somaCat = (c) => dedAno.filter((e) => e.category === c).reduce((a, e) => a + e.amount, 0);
+  const dep = Math.max(0, Math.round(numOf(ir.dependentes)));
+  const rend = val("rend");
+  const saude = somaCat("saude"), educ = Math.min(somaCat("educacao"), IR_EDU_LIMITE * (1 + dep));
+  const pgbl = Math.min(numOf(ir.pgbl), rend * 0.12);
+  const deducoes = val("inss") + saude + educ + dep * IR_DEP_ANUAL + pgbl;
+  const irr = irAnual(rend, deducoes);
+  const retido = val("retido");
+  const saldoIr = retido - irr.devido;
+  const outrosDed = dedAno.filter((e) => !["saude", "educacao"].includes(e.category));
+  const porCat = Object.values(dedAno.reduce((m, e) => { const c = EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros; (m[c.id] = m[c.id] || { nome: c.label, cor: c.color, v: 0, n: 0 }).v += e.amount; m[c.id].n += 1; return m; }, {})).sort((a, b) => b.v - a.v);
+  // relatório
+  const relatorio = (ano) => {
+    const inc = ano ? yearIncomeItems : monthIncomeItems, exps = ano ? dedAno : yearExpenseItems.filter((e) => e.dateIso && e.dateIso.slice(0, 7) === mk && ehDedutivel(e));
+    const L = [["Mediplan · relatório para o contador", ano ? "ano de " + viewYear : mes + " de " + viewYear], [], ["RECEITAS"], ["Data", "Tomador", "Valor bruto", "Imposto estimado", "Líquido", "Recebido", "Nota emitida"]];
+    inc.forEach((i) => L.push([fmtDatePt(i.dateIso), i.nome, Number(i.gross) || 0, (Number(i.gross) || 0) - (Number(i.net) || 0), Number(i.net) || 0, i.recebido ? "sim" : "não", notasMap[(i.dateIso || "").slice(0, 7) + "|" + i.nome] ? "sim" : "não"]));
+    L.push([], ["Total bruto", "", inc.reduce((a, i) => a + (Number(i.gross) || 0), 0)]);
+    if (!ano) { L.push([], ["GUIAS DO MÊS"], ["Guia", "Vencimento", "Valor", "Pago"]); guias.forEach((g) => L.push([g.nome, fmtDatePt(g.data), g.valor, pagos[g.id] ? "sim" : "não"])); }
+    L.push([], ["DESPESAS DEDUTÍVEIS"], ["Data", "Descrição", "Categoria", "Valor"]);
+    exps.forEach((e) => L.push([fmtDatePt(e.dateIso), e.description, (EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros).label, e.amount]));
+    baixarCsv(`mediplan-contador-${ano ? viewYear : mk}.csv`, L);
+  };
+  const tag = (t, c) => <span className={`ctg ${c}`}>{t}</span>;
+  const stGuia = (g) => pagos[g.id] ? tag("pago", "ok") : g.data < hoje ? tag("vencida", "bad") : g.data === hoje ? tag("vence hoje", "bad") : tag("a pagar", "warn");
+
+  const kpis = (
+    <div className={desk ? "dkpis" : "ct-kpis"}>
+      <DKpi label={"Impostos de " + mes} value={fmtBRL(totGuias)} sub={guias.length ? `${guias.length} ${guias.length === 1 ? "guia" : "guias"} · ${guias.filter((g) => pagos[g.id]).length} paga(s)` : "nada a pagar"} />
+      <DKpi label="Caixinha do imposto" value={fmtBRL(guardado)} sub={alvo - guardado > 0.004 ? "falta separar " + fmtBRL(alvo - guardado) : "tudo separado"} subTone={alvo - guardado > 0.004 ? "#B45309" : "#15803D"} />
+      <DKpi label="Notas sem pagamento" value={String(semPag.length)} sub={semPag.length ? fmtBRL(semPag.reduce((a, t) => a + t.bruto, 0)) + " a receber" : semNota.length ? semNota.length + " sem nota marcada" : "tudo em dia"} subTone={semPag.some((t) => t.atras) ? "#B91C1C" : "#64748B"} />
+      <DKpi label={"IR de " + viewYear + " (estimativa)"} value={rend > 0 ? (saldoIr >= 0 ? "+ " : "− ") + fmtBRL(Math.abs(saldoIr)) : "—"} tone={rend > 0 ? (saldoIr >= 0 ? "#15803D" : "#B91C1C") : null} sub={rend > 0 ? (saldoIr >= 0 ? "a restituir" : "a pagar") : "informe seus rendimentos"} />
+    </div>
+  );
+  const agenda = (
+    <div className="card" id="ct-agenda">
+      <div className="card-head"><h3 className="card-title">Agenda de impostos</h3><span className="card-note">{mes} · referente a {mesAnt}</span></div>
+      <div className="ct-pag" role="group" aria-label="Como você paga os impostos">
+        <button type="button" className={`chip sm ${!boleto ? "active" : ""}`} aria-pressed={!boleto} onClick={() => set("pagamento", "guias")}>Pago as guias</button>
+        <button type="button" className={`chip sm ${boleto ? "active" : ""}`} aria-pressed={boleto} onClick={() => set("pagamento", "boleto")}>Boleto único do contador</button>
+      </div>
+      {boleto && (
+        <div className="ct-bol">
+          <div className="field"><label htmlFor="ct-bol-v">Valor do boleto (R$)</label><MoneyInput id="ct-bol-v" value={contab.boletoValor === undefined ? "" : contab.boletoValor} onChange={(v) => set("boletoValor", v)} placeholder="em branco: o app estima" /></div>
+          <div className="field"><label htmlFor="ct-bol-d">Vence todo dia</label><input id="ct-bol-d" type="number" min="1" max="31" value={contab.boletoDia || 20} onChange={(e) => set("boletoDia", e.target.value)} /></div>
+        </div>
+      )}
+      {guias.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>{prevGross > 0 ? "Nenhuma guia neste mês." : `Sem receitas em ${mesAnt}, então não há imposto a pagar em ${mes}.`}</div> : (
+        <div className="ct-list">
+          {guias.map((g) => (
+            <div key={g.id} className={`ct-row ${pagos[g.id] ? "pago" : ""}`} data-guia={g.id}>
+              <span className="ct-l"><b>{g.nome}</b>{stGuia(g)}<small>vence {fmtDatePt(g.data)}{g.sub ? " · " + g.sub : ""}</small></span>
+              <b className="mono ct-v">{fmtBRL(g.valor)}</b>
+              <button type="button" className={`btn ${pagos[g.id] ? "btn-ghost" : "btn-primary"} sm`} onClick={() => pagos[g.id] ? desfazerGuia(mk, g.id) : pagarGuia(mk, g)}>{pagos[g.id] ? "Desfazer" : "Marcar como pago"}</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="field-hint">Ao marcar como pago, a guia entra em Despesas, em Impostos. {guias.some((g) => g.estimado) ? "Valores estimados: confira com o contador." : ""}</div>
+    </div>
+  );
+  const caixinha = (
+    <div className="card" id="ct-caixa">
+      <div className="card-head"><h3 className="card-title">Caixinha do imposto</h3><span className="card-note">a parte do imposto de cada recebimento</span></div>
+      {recebidos.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Quando um pagamento cair, aparece aqui quanto dele é imposto para você separar.</div> : (<>
+        <div className="ct-cx">
+          <Ring pct={pctCx} size={86} stroke={9} color="#0F766E"><b style={{ fontSize: 15 }}>{pctCx}%</b></Ring>
+          <div><b className="mono" style={{ fontSize: 20, display: "block" }}>{fmtBRL(guardado)} separados</b><span className="line-sub">de {fmtBRL(alvo)} de imposto dos recebimentos de {mes}</span>{alvo - guardado > 0.004 && <span style={{ display: "block", color: "#B45309", fontWeight: 600, fontSize: 13.5 }}>Falta separar {fmtBRL(alvo - guardado)}</span>}</div>
+        </div>
+        <div className="ct-list">
+          {gruposCx.map((g) => { const ok = grupoSep(g); return (
+            <label key={g.nome} className="ct-row ct-chk">
+              <input type="checkbox" checked={ok} onChange={() => toggleGrupo(g)} />
+              <span className="ct-l"><b>{g.nome}{g.n > 1 ? <small style={{ display: "inline", marginLeft: 6 }}>({g.n})</small> : null}</b><small>{g.n > 1 ? "último em " : "recebido "}{fmtDatePt(g.ult)} · {fmtBRL(g.bruto)}</small></span>
+              <b className="mono ct-v" style={{ color: ok ? "#15803D" : null }}>{ok ? "✓ " : "separe "}{fmtBRL(g.imp)}</b>
+            </label>
+          ); })}
+        </div>
+        <div className="field-hint">Marque quando passar o valor para uma conta ou caixinha separada. O valor vem da tributação de cada vínculo.</div>
+      </>)}
+    </div>
+  );
+  const notas = (
+    <div className="card" id="ct-notas">
+      <div className="card-head"><h3 className="card-title">Nota × recebimento</h3><span className="card-note">{mes}</span></div>
+      {tomadores.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Nenhuma receita em {mes}.</div> : (
+        <div className="ct-list">
+          {tomadores.map((t) => { const emit = !!notasMap[notaKey(t.nome)]; return (
+            <div key={t.nome} className="ct-row" data-tomador={t.nome}>
+              <span className="ct-l"><b><span className="legend-dot" style={{ background: t.cor, marginRight: 7 }} />{t.nome}{t.n > 1 ? <small style={{ display: "inline", marginLeft: 6 }}>({t.n})</small> : null}</b>
+                <small>{emit ? "nota emitida" : <b style={{ color: "#B45309" }}>falta emitir a nota</b>} · {t.pend === 0 ? <b style={{ color: "#15803D" }}>recebido</b> : t.atras ? <b style={{ color: "#B91C1C" }}>pagamento atrasado</b> : "previsto " + fmtDatePt(t.data)}</small></span>
+              <b className="mono ct-v">{fmtBRL(t.bruto)}</b>
+              <button type="button" className={`btn ${emit ? "btn-ghost" : "btn-primary"} sm`} onClick={() => toggleNota(t.nome)}>{emit ? "Desmarcar nota" : "Nota emitida"}</button>
+            </div>
+          ); })}
+        </div>
+      )}
+    </div>
+  );
+  const irBody = (
+    <div className="ct-ir">
+      <div className="form-grid">
+        <div className="field"><label>Rendimentos tributáveis no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Pró-labore, salário CLT, aluguel. {sug.rend > 0 ? "Em branco usa o pró-labore × 12." : ""} Lucros da empresa são isentos e não entram.</div></div>
+        <div className="field"><label>Imposto já retido no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Está no informe de rendimentos.</div></div>
+        <div className="field"><label>INSS pago no ano (R$)</label><MoneyInput value={ir.inss === undefined || ir.inss === "" ? "" : ir.inss} placeholder={sug.inss ? Math.round(sug.inss).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("inss", v)} /></div>
+        <div className="field"><label>Previdência privada PGBL no ano (R$)</label><MoneyInput value={ir.pgbl === undefined ? "" : ir.pgbl} onChange={(v) => setIr("pgbl", v)} /></div>
+        <div className="field"><label>Dependentes</label><input type="number" min="0" value={ir.dependentes || ""} placeholder="0" onChange={(e) => setIr("dependentes", e.target.value)} /></div>
+      </div>
+      <div className="ct-ir-res">
+        <div className="kv-line"><span>Saúde (despesas dedutíveis)</span><b className="mono">{fmtBRL(saude)}</b></div>
+        <div className="kv-line"><span>Educação (até o limite)</span><b className="mono">{fmtBRL(educ)}</b></div>
+        <div className="kv-line"><span>{irr.usaSimp ? "Desconto simplificado (melhor para você)" : "Deduções (declaração completa, melhor para você)"}</span><b className="mono">− {fmtBRL(irr.usaSimp ? irr.simp : irr.deducoes)}</b></div>
+        <div className="kv-line"><span>Imposto devido no ano</span><b className="mono">{fmtBRL(irr.devido)}</b></div>
+        <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Informe seus rendimentos" : (saldoIr >= 0 ? "A restituir " : "A pagar ") + fmtBRL(Math.abs(saldoIr))}</b></div>
+      </div>
+      <div className="field-hint">Estimativa simplificada com a tabela de {viewYear >= 2026 ? 2026 : viewYear} e a redução para rendas até R$ 88.200 por ano. Não substitui a declaração nem o contador.</div>
+    </div>
+  );
+  const dedBody = porCat.length === 0 ? <div className="empty-state">Nenhuma despesa dedutível em {viewYear}. Saúde e escola entram sozinhas; para outras, abra a despesa pelo lápis e marque “Dedutível”.</div> : (
+    <div>
+      <div className="dprox">{porCat.map((c) => <div key={c.nome}><span><b><span className="legend-dot" style={{ background: c.cor, marginRight: 8 }} />{c.nome}</b><small>{c.n} lançamento(s)</small></span><b className="mono">{fmtBRL(c.v)}</b></div>)}</div>
+      {outrosDed.length > 0 && <div className="field-hint">Cursos, congressos e anuidade do conselho só abatem no IR de quem é autônomo e faz livro-caixa. Eles vão para o relatório do contador.</div>}
+    </div>
+  );
+  const relBody = (
+    <div>
+      <p className="line-sub" style={{ marginTop: 0 }}>Planilha com receitas por tomador, notas, guias e despesas dedutíveis. Abre no Excel ou no Google Planilhas.</p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn btn-primary" onClick={() => relatorio(false)}><IconDownload size={15} /> Planilha de {mes}</button>
+        <button className="btn btn-ghost" onClick={() => relatorio(true)}><IconDownload size={15} /> Ano de {viewYear}</button>
+      </div>
+    </div>
+  );
+  const calcSub = contab.modo === "contab" ? (contab.regime === "presumido" ? "Lucro Presumido" : "Simples Nacional") + " · calculado pelo app" : "porcentagem fixa de " + (Number(taxRateGeral) || 0).toLocaleString("pt-BR") + "%";
+  const gavetas = (
+    <>
+      <div className={desk ? "dsec" : "ct-sec"}>Para o ano</div>
+      <div className="dgvs">
+        <DGv id="ct-ir" wide={desk} open icon={<IconCalc size={18} />} tone="#15803D" title={"Imposto de renda de " + viewYear} sub="estimativa com o que está no app" val={rend > 0 ? (saldoIr >= 0 ? "a restituir " : "a pagar ") + fmtBRL(Math.abs(saldoIr)) : ""}>{irBody}</DGv>
+        <DGv id="ct-ded" icon={<IconReceipt size={18} />} tone="#6D28D9" title="Despesas dedutíveis" sub="saúde, escola, cursos e conselho" val={fmtBRL(dedAno.reduce((a, e) => a + e.amount, 0))}>{dedBody}</DGv>
+        <DGv id="ct-rel" icon={<IconDownload size={18} />} tone="#1D4ED8" title="Relatório para o contador" sub="planilha do mês ou do ano" val="">{relBody}</DGv>
+        <DGv id="ct-calc" icon={<IconCalc size={18} />} tone="#334155" title="Como o imposto é calculado" sub={calcSub} val="">
+          <ContabCalc contab={contab} setContab={setContab} app={app} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} />
+        </DGv>
+      </div>
+    </>
+  );
+  return (
+    <div className={`ct ${desk ? "desk" : ""}`}>
+      {kpis}
+      {desk ? (
+        <>
+          <div className="dgrid" style={{ gridTemplateColumns: "1.4fr 1fr", alignItems: "start" }}>{agenda}{caixinha}</div>
+          {notas}
+        </>
+      ) : (<>{agenda}{caixinha}{notas}</>)}
+      {gavetas}
+      <div className="ct-off"><button type="button" className="link-btn" onClick={() => { if (window.confirm("Esconder a aba Contabilidade? Dá para mostrar de novo em Configurações.")) set("aba", false); }}>Não uso esta aba: esconder</button></div>
     </div>
   );
 }
@@ -5294,6 +5581,54 @@ function proLaboreParaFatorR(p) {
 }
 
 const fmtHoras = (h) => (Math.round((Number(h) || 0) * 10) / 10).toLocaleString("pt-BR") + "h";
+// despesa dedutível: marcada à mão ou, sem marcação, saúde e educação
+const ehDedutivel = (e) => (e.dedutivel !== undefined && e.dedutivel !== null ? !!e.dedutivel : ["saude", "educacao"].includes(e.category));
+// IRPF anual do ano-calendário 2026 (declaração de 2027), com a redução da Lei 15.270/2025
+const IRPF_ANUAL_2026 = [[28467.20, 0, 0], [33919.80, 7.5, 2135.04], [45012.60, 15, 4679.03], [55976.16, 22.5, 8054.97], [Infinity, 27.5, 10853.78]];
+const IR_DEP_ANUAL = 2275.08, IR_EDU_LIMITE = 3561.50, IR_SIMPLIFICADO_LIMITE = 16754.34;
+function irAnual(rend, deducoes) {
+  const simp = Math.min(rend * 0.2, IR_SIMPLIFICADO_LIMITE);
+  const usaSimp = simp >= deducoes;
+  const base = Math.max(0, rend - (usaSimp ? simp : deducoes));
+  const fx = IRPF_ANUAL_2026.find((f) => base <= f[0]);
+  const bruto = Math.max(0, base * fx[1] / 100 - fx[2]);
+  const red = rend <= 60000 ? Math.min(bruto, 2694.15) : rend <= 88200 ? Math.max(0, 8429.73 - 0.095575 * rend) : 0;
+  return { base, bruto, reducao: Math.min(bruto, red), devido: Math.max(0, bruto - Math.min(bruto, red)), usaSimp, simp, deducoes };
+}
+// guias do mês mk (competência do mês anterior). prevGross: bruto do mês anterior; prevTax: imposto estimado do mês anterior
+function contabParams(contab, receitaMes) {
+  return { receitaMes, rbt12: numOf(contab.rbt12), proLabore: numOf(contab.proLabore), folha: numOf(contab.folha), issPct: numOf(contab.issPct), hospitalar: !!contab.hospitalar, contador: 0 };
+}
+function contabGuias(contab, y, m, prevGross, prevTax) {
+  const g = [];
+  const contador = numOf(contab.contador);
+  if (contab.modo === "contab" && prevGross > 0) {
+    const r = contab.regime === "presumido" ? calcPresumido(contabParams(contab, prevGross)) : calcSimples(contabParams(contab, prevGross));
+    const v = (ids) => r.itens.filter((i) => ids.includes(i.id)).reduce((a, i) => a + i.valor, 0);
+    if (contab.regime === "presumido") {
+      g.push({ id: "piscofins", nome: "PIS e Cofins", dia: 25, valor: v(["pis", "cofins"]) });
+      if (v(["iss"]) > 0) g.push({ id: "iss", nome: "ISS", dia: 10, valor: v(["iss"]), sub: "o dia varia conforme a cidade" });
+      if ([0, 3, 6, 9].includes(m)) g.push({ id: "irpjcsll", nome: "IRPJ e CSLL do trimestre", dia: 30, valor: v(["irpj", "adicional", "csll"]) * 3, sub: "pago a cada 3 meses" });
+      g.push({ id: "dctf", nome: "INSS e IR (DCTFWeb)", dia: 20, valor: v(["cpp", "inss", "irrf"]), sub: "inclui o do seu pró-labore" });
+    } else {
+      g.push({ id: "das", nome: "DAS do Simples", dia: 20, valor: v(["das"]) });
+      if (v(["inss", "irrf"]) > 0) g.push({ id: "dctf", nome: "INSS e IR do pró-labore", dia: 20, valor: v(["inss", "irrf"]) });
+    }
+    if (v(["fgts"]) > 0) g.push({ id: "fgts", nome: "FGTS dos funcionários", dia: 20, valor: v(["fgts"]) });
+  } else if (prevTax > 0.004) {
+    g.push({ id: "impostos", nome: "Impostos do mês anterior", dia: 20, valor: prevTax, sub: "estimativa pela tributação dos seus vínculos", estimado: true });
+  }
+  if (contab.pagamento === "boleto") {
+    const total = g.reduce((a, x) => a + x.valor, 0) + contador;
+    const fixo = numOf(contab.boletoValor);
+    const dia = Number(contab.boletoDia) || 20;
+    const valor = fixo > 0 ? fixo : total;
+    return valor > 0.004 ? [{ id: "boleto", nome: "Boleto do contador", dia, data: dateStr(y, m, clampDay(y, m, dia)), valor, sub: fixo > 0 ? "o contador paga os impostos" : "estimativa: impostos + contador. O contador paga as guias.", estimado: !(fixo > 0) }] : [];
+  }
+  if (contador > 0) g.push({ id: "contador", nome: "Contador", dia: Number(contab.contadorDia) || 10, valor: contador });
+  return g.filter((x) => x.valor > 0.004).map((x) => ({ ...x, data: dateStr(y, m, clampDay(y, m, x.dia)) }));
+}
+
 const CONTAB_DEFAULT = { modo: "fixa", regime: "simples", receitaMes: "", rbt12: "", proLabore: "", folha: "", issPct: "5", hospitalar: false, contador: "" };
 
 // Rentabilidade do trabalho: horas do mês e ganho líquido por hora, pelo mês trabalhado
@@ -5513,7 +5848,7 @@ function EscalaEditor({ value, onChange }) {
 }
 
 // Contabilidade: porcentagem fixa ou cálculo simples dos impostos da PJ, com a conta detalhada à parte
-function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
+function ContabCalc({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   const set = (k, v) => setContab((p) => ({ ...p, [k]: v }));
   const usaContab = contab.modo === "contab";
   const p = { receitaMes: numOf(contab.receitaMes), rbt12: numOf(contab.rbt12), proLabore: numOf(contab.proLabore), folha: numOf(contab.folha), issPct: numOf(contab.issPct), hospitalar: !!contab.hospitalar, contador: numOf(contab.contador) };
@@ -5917,11 +6252,12 @@ function ExpenseEditForm({ item, onSubmit, onCancel, onDelete }) {
   const [dia, setDia] = useState(Number(String(item.dateIso || "").slice(8, 10)) || 5);
   const [category, setCategory] = useState(item.category || "outros");
   const [modo, setModo] = useState("diante");
+  const [dedutivel, setDedutivel] = useState(ehDedutivel(item));
   const [erro, setErro] = useState("");
   const submit = () => {
     if (!description.trim()) { setErro("Dê um nome para a conta."); return; }
     if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
-    onSubmit({ description: description.trim(), amount: Number(amount), dueDate, diaVencimento: Number(dia) || 5, category }, modo);
+    onSubmit({ description: description.trim(), amount: Number(amount), dueDate, diaVencimento: Number(dia) || 5, category, dedutivel }, modo);
   };
   return (
     <div className="mini-form">
@@ -5932,8 +6268,12 @@ function ExpenseEditForm({ item, onSubmit, onCancel, onDelete }) {
           ? <div className="field"><label>Vence todo dia</label><input type="number" min="1" max="31" value={dia} onChange={(e) => setDia(e.target.value)} /></div>
           : <div className="field"><label>Vencimento</label><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>}
         <div className="field" style={{ gridColumn: "1 / -1" }}><label>Categoria</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>{EXP_CATS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
+          <select value={category} onChange={(e) => { setCategory(e.target.value); if (item.dedutivel === undefined) setDedutivel(["saude", "educacao"].includes(e.target.value)); }}>{EXP_CATS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
         </div>
+        <label className="ct-check" style={{ gridColumn: "1 / -1", marginTop: 0 }}>
+          <input type="checkbox" checked={dedutivel} onChange={(e) => setDedutivel(e.target.checked)} />
+          <span>Dedutível no imposto de renda<small>Saúde e escola já vêm marcadas. Use também para cursos, congressos e anuidade do conselho, para o relatório do contador.</small></span>
+        </label>
         {rec && (
           <div className="field" style={{ gridColumn: "1 / -1" }}><label>A mudança vale para</label>
             <div className="chip-row" role="group" aria-label="A mudança vale para">
