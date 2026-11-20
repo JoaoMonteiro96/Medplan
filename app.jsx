@@ -4062,6 +4062,30 @@ function App() {
 
         .anx-add { display: inline-flex; align-items: center; gap: 6px; } .xl-anx { display: inline-flex; vertical-align: -1px; margin-left: 6px; }
         .ded-r .link-btn { display: inline-flex; align-items: center; gap: 4px; }
+        /* ================= v52: faturamento por hospital ================= */
+        .fg-list { display: flex; flex-direction: column; }
+        .fg { border-top: 1px solid var(--border); } .fg:first-child { border-top: none; }
+        .fg-h { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 14px 18px; background: none; border: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+        .fg-h:hover { background: var(--surface-2); }
+        .fg-h svg { transition: transform .2s; } .fg.open .fg-h svg { transform: rotate(180deg); }
+        .fg-t { display: flex; flex-direction: column; min-width: 0; } .fg-t b { font-size: 15px; } .fg-t small { font-size: 12.5px; color: var(--text-dim); }
+        .fg-v { display: flex; flex-direction: column; align-items: flex-end; } .fg-v b { font-size: 15px; white-space: nowrap; }
+        .fg-v small { font-size: 12px; font-weight: 600; } .fg-v small.pend { color: #B45309; } .fg-v small.ok { color: #15803D; }
+        .fg-body { background: var(--surface-2); border-top: 1px solid var(--border); padding-bottom: 4px; }
+        .fg-body .tbl { background: transparent; } .fg-body .tbl th { background: transparent; }
+        .fg-todos { margin: 10px 18px 2px; font-size: 13px; }
+        .fg-body .tbl thead th:nth-child(2), .fg-body .tbl tbody tr:not(.fz-row) > td:nth-child(2) { display: none; }
+        .fg-item { display: flex; flex-direction: column; } .fg-item small { font-size: 12px; color: var(--text-dim); }
+        @media (max-width: 480px) {
+          .fg-h { padding: 13px 14px; gap: 10px; } .fg-todos { margin: 10px 14px 2px; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) { grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; padding: 9px 14px; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(1) { grid-column: 1; grid-row: 1; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(4) { grid-column: 2; grid-row: 1; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(5) { grid-column: 3; grid-row: 1; padding-left: 0; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(6) { grid-column: 4; grid-row: 1; }
+          .fg-body .fg-item b { font-size: 13.5px; font-weight: 600; } .fg-body .badge { font-size: 11px; padding: 3px 8px; } .fg-body .fz-pen { width: 32px; height: 32px; }
+        }
+
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -5230,6 +5254,29 @@ function FaturamentoTab({
     ...extraRecurringIncomes.filter((e) => !extraNoMes.has(e.id)).map((e) => ({ k: "e-" + e.id, nome: e.description, cor: SLATE, sub: "receita recorrente", ed: () => editorExtra(e) }))];
   const gavetas = outros.length ? [["outros", `Outros vínculos e receitas (${outros.length})`]] : [];
   const sorted = [...monthIncomeItems].sort((a, b) => a.tipo === b.tipo ? 0 : (a.tipo === "plantao" ? -1 : 1));
+  // "05/11 · qui" (e "paga em 05/12" quando o pagamento é depois)
+  const rotuloPlantao = (it) => {
+    const m = String(it.dateLabel || "").match(/(\d{2})\/(\d{2})(?:\/(\d{4}))?/); if (!m) return it.dateLabel;
+    const ano = Number(m[3] || String(it.dateIso || "").slice(0, 4) || new Date().getFullYear());
+    const sem = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][new Date(ano, Number(m[2]) - 1, Number(m[1])).getDay()];
+    const paga = String(it.dateLabel).match(/paga em (\d{2}\/\d{2})/);
+    return `${m[1]}/${m[2]} · ${sem}${paga ? " · paga em " + paga[1] : ""}`;
+  };
+  // lançamentos separados por hospital / vínculo, cada um numa caixa que abre e fecha
+  const [abertos, setAbertos] = useState({});
+  const grupos = (() => {
+    const m = new Map();
+    sorted.forEach((it) => {
+      const k = it.vinculoId ? "v-" + it.vinculoId : it.ref && it.ref.t === "extra" ? "e-" + it.ref.id : it.ref && it.ref.t === "avulsa" ? "avulsas" : "o-" + it.nome;
+      const v = it.vinculoId ? vinculos.find((x) => x.id === it.vinculoId) : null;
+      const nome = v ? v.nome : k === "avulsas" ? "Receitas extras" : String(it.nome || "").split(" · ")[0];
+      if (!m.has(k)) m.set(k, { key: k, nome, cor: it.cor, itens: [], net: 0, plantoes: 0 });
+      const g = m.get(k); g.itens.push(it); g.net += it.net; if (it.tipo === "plantao") g.plantoes += 1;
+    });
+    const arr = [...m.values()];
+    arr.forEach((g) => g.itens.sort((a, b) => String(a.dateIso || "").localeCompare(String(b.dateIso || ""))));
+    return arr.sort((a, b) => b.plantoes - a.plantoes || b.net - a.net);
+  })();
   const received = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0);
   const donutData = netByVinculo.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }));
 
@@ -5267,14 +5314,27 @@ function FaturamentoTab({
       <div className="card flush">
         <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3><span className="card-note">toque no status para marcar como recebido</span></div>
         {sorted.length === 0 ? <div className="empty-state">Nenhuma receita neste mês ainda.</div> : (
-          <div className="table-wrap">
-            <table className="tbl tbl-fat">
-              <thead><tr><th>Vínculo</th><th className="hide-sm">Data</th><th className="num hide-sm">Bruto</th><th className="num">Líquido</th><th>Status</th><th /></tr></thead>
-              <tbody>
-                {sorted.map((it) => (
+          <div className="fg-list">
+            {grupos.map((g) => {
+              const aberto = !!abertos[g.key], pend = g.itens.filter((x) => !x.recebido);
+              return (
+                <div key={g.key} className={`fg ${aberto ? "open" : ""}`} data-grupo={g.nome}>
+                  <button type="button" className="fg-h" aria-expanded={aberto} onClick={() => setAbertos((o) => ({ ...o, [g.key]: !o[g.key] }))}>
+                    <span className="legend-dot" style={{ background: g.cor }} />
+                    <span className="fg-t"><b>{g.nome}</b><small>{g.plantoes ? `${g.plantoes} ${g.plantoes === 1 ? "plantão" : "plantões"}` : g.itens.length === 1 ? (g.itens[0].dateLabel || "") : `${g.itens.length} lançamentos`}</small></span>
+                    <span className="fg-v"><b className="mono">{fmtBRL(g.net)}</b><small className={pend.length ? "pend" : "ok"}>{pend.length ? `${pend.length} a receber` : "tudo recebido"}</small></span>
+                    <IconChevronDown size={18} color="#8FA3A0" />
+                  </button>
+                  {aberto && (
+                    <div className="fg-body">
+                      {pend.length > 1 && <button type="button" className="link-btn fg-todos" onClick={() => pend.forEach((x) => x.toggle())}>Marcar os {pend.length} como recebidos</button>}
+                      <table className="tbl tbl-fat">
+                        <thead><tr><th>Data</th><th className="hide-sm">Detalhe</th><th className="num hide-sm">Bruto</th><th className="num">Líquido</th><th>Status</th><th /></tr></thead>
+                        <tbody>
+                          {g.itens.map((it) => (
                   <React.Fragment key={it.key}>
                   <tr className={editKey === it.key ? "fz-aberta" : ""}>
-                    <td className="grow"><span className="asset-cell"><span className="legend-dot" style={{ background: it.cor }} /><span><b>{it.nome}</b><span className="cell-sub show-sm">{it.dateLabel}</span></span></span></td>
+                    <td className="grow"><span className="fg-item"><b>{it.tipo === "plantao" ? rotuloPlantao(it) : it.dateLabel || it.nome}</b></span></td>
                     <td className="hide-sm">{it.dateLabel}{it.tipo !== "plantao" && !/ref\./.test(it.dateLabel) ? (it.tipo === "mensal" ? "" : "") : ""}</td>
                     <td className="num mono hide-sm">{fmtBRL(it.gross)}</td>
                     <td className="num mono">{fmtBRL(it.net)}</td>
@@ -5283,9 +5343,14 @@ function FaturamentoTab({
                   </tr>
                   {editKey === it.key && <tr className="fz-row"><td colSpan={6}><div className="fz-ed">{editor(it)}</div></td></tr>}
                   </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="fz-add-wrap">
