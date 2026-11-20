@@ -67,6 +67,7 @@ const INV_CATEGORIES = [
   { id: "ETF", color: "#8B5CF6", kind: "ticker", type: "E", hint: "Digite o ETF, ex: BOVA11" },
   { id: "Renda Fixa", color: "#F59E0B", kind: "list", hint: "Escolha ou digite o título" },
   { id: "Reserva de oportunidade", color: "#0EA5E9", kind: "list", hint: "Onde está a reserva?" },
+  { id: "Exterior", color: "#0F766E", kind: "free", moeda: "USD", hint: "Código no exterior, ex: VOO, AAPL" },
   { id: "Outro", color: "#7A93A0", kind: "free", hint: "Descreva o investimento" },
 ];
 const INV_CAT_MAP = Object.fromEntries(INV_CATEGORIES.map((c) => [c.id, c]));
@@ -233,6 +234,9 @@ function ajustesPM(investments) {
   return tot;
 }
 // Calcula posições da carteira (preço médio, valor atual, rentabilidade) a partir dos lançamentos
+const DOLAR_PADRAO = 5.3;
+const dolarHoje = (cotacoes) => numOf(cotacoes && cotacoes.__USD) || numOf(cotacoes && cotacoes.__USDauto) || DOLAR_PADRAO;
+const fmtUSD = (v) => "US$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function computePortfolio(investments, cotacoes) {
   const groups = {};
   [...investments].sort((a, b) => (a.date || "").localeCompare(b.date || "") || String(a.id).localeCompare(String(b.id))).forEach((i) => {
@@ -260,7 +264,11 @@ function computePortfolio(investments, cotacoes) {
     const isQty = g.qty > 0.0000001;
     const cot = cotacoes ? numOf(cotacoes[g.description]) : 0;
     const value = isQty ? (cot > 0 ? g.qty * cot + g.legacyCost : g.cost) : (cot > 0 ? cot : g.cost);
-    return { ...g, meta, isQty, cotacao: cot, avg: isQty ? g.cost / g.qty : 0, value, profit: value - g.cost, profitPct: g.cost > 0 ? ((value - g.cost) / g.cost) * 100 : 0 };
+    const base = { ...g, meta, isQty, cotacao: cot, avg: isQty ? g.cost / g.qty : 0, value, profit: value - g.cost, profitPct: g.cost > 0 ? ((value - g.cost) / g.cost) * 100 : 0 };
+    if (meta.moeda !== "USD") return base;
+    // exterior: lançamentos em dólar, totais convertidos para real pelo dólar de hoje
+    const fx = dolarHoje(cotacoes);
+    return { ...base, usd: true, fx, costUsd: g.cost, valueUsd: value, avgUsd: base.avg, cotacaoUsd: cot, profitUsd: value - g.cost, cost: g.cost * fx, value: value * fx, profit: (value - g.cost) * fx };
   }).sort((a, b) => b.value - a.value);
   const totalCost = positions.reduce((a, p) => a + p.cost, 0);
   const totalValue = positions.reduce((a, p) => a + p.value, 0);
@@ -1006,7 +1014,7 @@ const PAGE_TITLES = {
   visao: ["Relatórios", "Comparativos e ganho por hora"],
   contabilidade: ["Contabilidade", "Impostos, notas e imposto de renda"],
   backup: ["Configurações", "Conta, nuvem, tributação e backup"],
-  importar: ["Importar", "Extrato, fatura do cartão e planilhas da B3"],
+  importar: ["Importar", "Notas de corretagem, carteira e fatura do cartão"],
 };
 const IconRefresh = (p) => <Ico {...p}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></Ico>;
 const prefersReducedMotion = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
@@ -1428,7 +1436,7 @@ const NAV_MORE = [
   { id: "metas", short: "Metas", long: "Metas", icon: IconTarget },
   { id: "visao", short: "Relatórios", long: "Relatórios", icon: IconPie },
   { id: "contabilidade", short: "Contábil", long: "Contabilidade", icon: IconCalc },
-  { id: "importar", short: "Importar", long: "Importar extrato", icon: IconUpload },
+  { id: "importar", short: "Importar", long: "Importar", icon: IconUpload },
   { id: "backup", short: "Ajustes", long: "Configurações", icon: IconDownload },
 ];
 const NAV_ALL = NAV_MAIN.concat(NAV_MORE);
@@ -2216,7 +2224,7 @@ function App() {
   const adjustAvg = (p, novo) => {
     const n = numOf(novo);
     if (!p || !(p.qty > 0) || !(n > 0)) return false;
-    const delta = Math.round((n * p.qty - p.cost) * 100) / 100;
+    const delta = Math.round((n * p.qty - (p.usd ? p.costUsd : p.cost)) * 100) / 100;
     if (Math.abs(delta) < 0.005) return true;
     setInvestments((prev) => [...prev, { id: uid(), description: p.description, assetName: p.assetName || "", category: p.category, date: todayStr(), tipo: "ajuste", qty: 0, price: n, amount: 0, ajuste: delta }]);
     return true;
@@ -2442,6 +2450,17 @@ function App() {
   const totalInvestedAllTime = investments.filter((i) => !i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0);
   // os ajustes de preço médio entram aqui para o patrimônio não mudar quando o custo da posição é corrigido
   const posicaoInicialTotal = investments.filter((i) => i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0) + ajustesPM(investments);
+  // dólar do dia para a carteira no exterior (uma vez por dia, só se houver investimento em dólar)
+  useEffect(() => {
+    if (!investments.some((i) => i.moeda === "USD")) return;
+    if (cotacoes.__USDdia === todayStr() && numOf(cotacoes.__USDauto) > 0) return;
+    let vivo = true;
+    fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL").then((r) => r.json()).then((j) => {
+      const v = Number(j && j.USDBRL && j.USDBRL.bid);
+      if (vivo && v > 0) setCotacoes((p) => ({ ...p, __USDauto: Math.round(v * 10000) / 10000, __USDdia: todayStr() }));
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [investments.length]);
   const portfolio = useMemo(() => computePortfolio(investments, cotacoes), [investments, cotacoes]);
   // meta: valor informado à mão, o valor atual dos investimentos ou o patrimônio total (os dois últimos mudam sozinhos)
   // ---- patrimônio total (recebido - pago, independente de estar em caixa ou investido) ----
@@ -2611,7 +2630,7 @@ function App() {
     if (late.length) {
       const tot = late.reduce((a, i) => a + i.net, 0);
       const names = [...new Set(late.map((i) => `${i.nome} (${i.mon})`))].slice(0, 3).join(", ");
-      list.push({ id: "atraso", tone: "bad", title: `${fmtBRL(tot)} de meses anteriores sem recebimento`, text: `Ainda não marcados como recebidos: ${names}${late.length > 3 ? " e outros" : ""}. Se já caiu na conta, marque em Receitas ou importe o extrato.` });
+      list.push({ id: "atraso", tone: "bad", title: `${fmtBRL(tot)} de meses anteriores sem recebimento`, text: `Ainda não marcados como recebidos: ${names}${late.length > 3 ? " e outros" : ""}. Se já caiu na conta, marque como recebido em Faturamento.` });
     }
 
     // 8. concentração da renda
@@ -2707,7 +2726,7 @@ function App() {
       if (r.action === "ignorar") return;
       if (r.kind === "trade") {
         keys.push(r.key);
-        newInv.push(mk({ description: r.ticker, assetName: r.name || ASSET_NAME[r.ticker] || "", category: r.category, date: r.date, tipo: r.side, qty: r.qty, price: r.price, amount: r.side === "venda" ? -r.amount : r.amount, source: "b3" }));
+        newInv.push(mk({ description: r.ticker, assetName: r.name || ASSET_NAME[r.ticker] || "", category: r.category, date: r.date, tipo: r.side, qty: r.qty, price: r.price, amount: r.side === "venda" ? -r.amount : r.amount, source: "b3", ...(r.moeda ? { moeda: r.moeda } : {}) }));
         return;
       }
       if (r.category === "Renda Fixa") {
@@ -2729,11 +2748,19 @@ function App() {
     setImportLog((p) => [entry, ...p].slice(0, 30));
     return entry;
   };
-  const commitPrint = (rows, modo, date) => {
-    const bid = uid(); const d = date || todayStr();
-    const newInv = rows.map((r, n) => ({ id: uid() + n, batch: bid, description: r.ticker, assetName: ASSET_NAME[r.ticker] || "", category: b3Category(r.ticker), date: d, tipo: "compra", qty: r.qty, price: r.pm, amount: Math.round(r.qty * r.pm * 100) / 100, source: "print", ...(modo === "inicial" ? { posicaoInicial: true } : {}) }));
+  const commitPrint = (rows, modo, date, ext) => {
+    const bid = uid(); const d = date || todayStr(); const cot = {};
+    const newInv = rows.map((r, n) => {
+      const comQtd = r.qty > 0 && r.pm > 0;
+      if (r.price > 0 && comQtd) cot[r.ticker] = r.price;
+      if (!comQtd && r.value > 0) cot[r.ticker] = r.value;
+      return { id: uid() + n, batch: bid, description: r.ticker, assetName: ext ? "" : (ASSET_NAME[r.ticker] || ""), category: ext ? "Exterior" : b3Category(r.ticker), date: d, tipo: "compra",
+        qty: comQtd ? r.qty : 0, price: comQtd ? r.pm : 0, amount: comQtd ? Math.round(r.qty * r.pm * 100) / 100 : Math.round((r.inv || 0) * 100) / 100, source: "print",
+        ...(ext ? { moeda: "USD" } : {}), ...(modo === "inicial" ? { posicaoInicial: true } : {}) };
+    });
     setInvestments((p) => [...p, ...newInv]);
-    const entry = { id: bid, date: todayStr(), label: modo === "inicial" ? "Print da corretora (carteira inicial)" : "Print da corretora (aporte)", despesas: 0, entradas: 0, baixas: 0, investimentos: newInv.length, cotacoes: 0, total: 0 };
+    if (Object.keys(cot).length) setCotacoes((p) => ({ ...p, ...cot }));
+    const entry = { id: bid, date: todayStr(), label: (ext ? "Carteira no exterior" : "Carteira") + (modo === "inicial" ? " (carteira inicial)" : " (compra nova)"), despesas: 0, entradas: 0, baixas: 0, investimentos: newInv.length, cotacoes: Object.keys(cot).length, total: 0 };
     setImportLog((p) => [entry, ...p].slice(0, 30));
     return entry;
   };
@@ -2836,7 +2863,7 @@ function App() {
       cartoes: monthExpenseItems.filter((e) => Array.isArray(e.itens) && e.itens.length).map((e) => { const g = faturaGrupos(e.itens); return { nome: e.description, n: e.itens.length, total: e.amount, grupos: g.map((x) => ({ nome: x.label, n: x.itens.length, valor: x.valor })) }; }),
       categorias: Object.values(cats).sort((a, b) => b.valor - a.valor), limiteGeral: Number(limits.__total || 0),
       aportes: [...monthInvestments].filter((i) => i.tipo !== "ajuste").sort((a, b) => (a.date || "").localeCompare(b.date || "")).map((i) => { const venda = i.tipo === "venda" || Number(i.amount) < 0; return { data: fmtDatePt(i.date), ativo: i.description, classe: i.category, operacao: venda ? "Venda" : "Compra", qtd: i.qty > 0 ? fmtQty(i.qty) : "-", preco: i.qty > 0 ? fmtBRL(i.price) : "-", total: Number(i.amount || 0) }; }),
-      carteira: portfolio.positions.map((p) => ({ ativo: p.description, classe: p.category, qtd: p.isQty ? fmtQty(p.qty) : "-", pm: p.isQty ? fmtBRL(p.avg) : "-", cotacao: p.isQty && p.cotacao > 0 ? fmtBRL(p.cotacao) : "-", custo: p.cost, valor: p.value, resultado: p.profit, pct: p.cost > 0 ? p.profitPct : null })),
+      carteira: portfolio.positions.map((p) => ({ ativo: p.description, classe: p.category, qtd: p.isQty ? fmtQty(p.qty) : "-", pm: p.isQty ? (p.usd ? fmtUSD : fmtBRL)(p.avg) : "-", cotacao: p.isQty && p.cotacao > 0 ? (p.usd ? fmtUSD : fmtBRL)(p.cotacao) : "-", custo: p.cost, valor: p.value, resultado: p.profit, pct: p.cost > 0 ? p.profitPct : null })),
       carteiraCusto: portfolio.totalCost, carteiraValor: portfolio.totalValue, historico: hist,
     };
     buildMonthlyReport(doc, D);
@@ -3874,6 +3901,40 @@ function App() {
         .ded-so { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #0F766E; background: #CCFBF1; border-radius: 5px; padding: 1px 5px; vertical-align: 1px; }
         :root[data-theme="dark"] .ded-so { background: rgba(20,184,166,.18); color: #5EEAD4; }
         .ded-rm { font-size: 12px; color: var(--text-dim) !important; }
+        /* ================= v48: importar com novas fontes de carteira ================= */
+        .choice-row.imp3 { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 720px) { .choice-row.imp3 { grid-template-columns: 1fr; } }
+        .cart-fontes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        @media (max-width: 720px) { .cart-fontes { grid-template-columns: 1fr; } }
+        .cart-f { display: flex; gap: 10px; align-items: flex-start; text-align: left; border: 1.5px solid var(--border); background: var(--surface); border-radius: 12px; padding: 11px 12px; font: inherit; color: var(--text); cursor: pointer; }
+        .cart-f.on { border-color: var(--teal); background: rgba(22,160,107,0.06); }
+        .cart-f-ic { font-size: 20px; line-height: 1.2; } .cart-f-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .cart-f-t b { font-size: 14px; } .cart-f-t small { font-size: 12.5px; color: var(--text-dim); line-height: 1.35; }
+        .cart-f-t i { font-style: normal; font-size: 10.5px; font-weight: 700; color: #15803D; background: #DCFCE7; border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+        .cart-colar { width: 100%; font: inherit; font-size: 14px; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--surface); color: var(--text); resize: vertical; }
+        .cl-fx { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px 10px; font-size: 13px; color: var(--text-dim); }
+        .cl-fx > span small { display: block; font-size: 11.5px; color: var(--text-dim); opacity: .85; }
+        .cl-fx-in { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
+        .cl-fx-in input { width: 90px; font: inherit; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--surface); color: var(--text); }
+
+        .ci-lidos { margin-top: 10px; font-size: 12.5px; color: var(--text-dim); }
+        .ci-top { display: flex; flex-direction: column; gap: 2px; margin: 14px 0 8px; } .ci-top span { font-size: 12.5px; color: var(--text-dim); }
+        .ci-head, .ci-row { display: grid; grid-template-columns: 26px minmax(90px, 1.1fr) 1fr 1fr 1fr; gap: 10px; align-items: center; }
+        .ci-head { font-size: 11.5px; color: var(--text-dim); font-weight: 600; padding: 0 10px 6px; }
+        .ci-row { border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 6px; background: var(--surface); }
+        .ci-row.off { opacity: .5; } .ci-row.falta { border-color: #FCA5A5; background: #FEF2F2; }
+        :root[data-theme="dark"] .ci-row.falta { background: rgba(220,38,38,.1); }
+        .ci-tk { display: flex; flex-direction: column; min-width: 0; } .ci-tk small { font-size: 11.5px; color: var(--text-dim); }
+        .ci-fs { display: contents; } .ci-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .ci-f small { display: none; font-size: 11px; color: var(--text-dim); }
+        .ci-f input { width: 100%; font: inherit; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px; background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; }
+        .ci-usar { font-size: 12px; text-align: left; } .ci-calc { font-style: normal; font-size: 11px; color: #B45309; }
+        .ci-semq { grid-column: 3 / -1; display: grid; grid-template-columns: 2fr 1fr; gap: 10px; align-items: center; font-size: 12.5px; color: var(--text-dim); }
+        @media (max-width: 720px) {
+          .ci-head { display: none; }
+          .ci-row { grid-template-columns: 26px 1fr; row-gap: 8px; }
+          .ci-fs { grid-column: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+          .ci-f small { display: block; } .ci-semq { grid-column: 2; grid-template-columns: 1fr; }
+        }
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
         .fm-ops { display: flex; flex-direction: column; gap: 8px; }
         .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
@@ -4541,7 +4602,7 @@ function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, 
             ))}
             <div className="add-mais">
               <button type="button" className="link-btn" onClick={() => onOutro("aporte")}>Investimento</button>
-              <button type="button" className="link-btn" onClick={() => onOutro("importar")}>Importar extrato</button>
+              <button type="button" className="link-btn" onClick={() => onOutro("importar")}>Importar</button>
             </div>
           </>
         )}
@@ -5636,7 +5697,7 @@ function BackupTab({ contabAba = true, setContabAba, taxRateGeral, setTaxRateGer
           {row("ir-metas", "#F59E0B", ic(<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></>), "Metas", null, () => goTab("metas"))}
           {row("ir-relatorios", "#7C5CFC", ic(<><path d="M12 3a9 9 0 1 0 9 9h-9Z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15Z" /></>), "Relatórios", null, () => goTab("visao"))}
           {contabAba && row("ir-contabilidade", "#14B8A6", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /><line x1="8.5" y1="17" x2="12" y2="17" /></>), "Contabilidade", null, () => goTab("contabilidade"))}
-          {row("ir-importar", "#64748B", ic(<><path d="M12 15V4" /><polyline points="7 9 12 4 17 9" /><path d="M5 20h14" /></>), "Importar extrato, fatura ou nota", null, () => goTab("importar"))}
+          {row("ir-importar", "#64748B", ic(<><path d="M12 15V4" /><polyline points="7 9 12 4 17 9" /><path d="M5 20h14" /></>), "Importar nota, carteira ou fatura", null, () => goTab("importar"))}
         </div>
       )}
     </div>
@@ -7648,7 +7709,7 @@ function ExpensesTab({ dedSignal, monthExpenseItems, addExpense, addRecurringExp
           <div className="card-head"><h3 className="card-title">{showForm ? "Nova despesa" : "Adicionar despesa"}</h3>{showForm && <button className="btn-icon" onClick={() => setShowForm(false)}><IconX size={16} /></button>}</div>
           {!showForm ? (
             <div>
-              <p className="line-sub" style={{ marginTop: 0 }}>Cadastre contas fixas uma vez só e elas aparecem todo mês. Também dá para importar o extrato do banco.</p>
+              <p className="line-sub" style={{ marginTop: 0 }}>Cadastre contas fixas uma vez só e elas aparecem todo mês. A fatura do cartão pode ser importada.</p>
               <button className="btn btn-primary" onClick={() => setShowForm(true)}><IconPlus size={16} color="#fff" /> Nova despesa</button>
             </div>
           ) : (
@@ -7697,7 +7758,7 @@ function ExpensesTab({ dedSignal, monthExpenseItems, addExpense, addRecurringExp
           <DGv id="desp-venc" icon={<IconCalendar size={18} />} tone="#B91C1C" title="Próximos vencimentos" sub={monthExpenseItems.filter((e) => !e.paid).length + " conta(s) a pagar"} val={fmtBRL(totalPending)}>
             <DProximos incomeItems={[]} expenseItems={monthExpenseItems} max={10} />
           </DGv>
-          <DGv id="desp-imp" icon={<IconUpload size={18} />} tone="#334155" title="Importar extrato ou fatura" sub="PDF, OFX ou planilha" val="">
+          <DGv id="desp-imp" icon={<IconUpload size={18} />} tone="#334155" title="Importar fatura do cartão" sub="PDF, OFX ou CSV" val="">
             <p className="line-sub" style={{ marginTop: 0 }}>Traga as despesas do banco ou do cartão de uma vez.</p>
             <button className="btn btn-ghost" onClick={() => goTab && goTab("importar")}>Abrir Importar</button>
           </DGv>
@@ -7794,7 +7855,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
     else if (isTicker) { desc = desc.toUpperCase(); name = name || ASSET_NAME[desc] || ""; }
     if (!desc) return;
     if (useQty && numOf(qty) <= 0) return;
-    addInvestment({ description: desc, assetName: name, category, date, tipo, qty: useQty ? numOf(qty) : 0, price: useQty ? numOf(price) : 0, amount: tipo === "venda" ? -formTotal : formTotal });
+    addInvestment({ description: desc, assetName: name, category, date, tipo, qty: useQty ? numOf(qty) : 0, price: useQty ? numOf(price) : 0, amount: tipo === "venda" ? -formTotal : formTotal, ...(emDolar ? { moeda: "USD" } : {}) });
     setDescription(""); setAssetName(""); setQty(""); setPrice(""); setAmount(""); setShowForm(false); setTab("ativos");
   };
 
@@ -7828,7 +7889,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const maiorCat = gruposOrd.length ? gruposOrd[0].cat : null;
   const tickerCount = positions.filter((p) => p.isQty && p.meta.kind === "ticker").length;
   // posição que o lançamento em preenchimento vai alterar, para mostrar o efeito antes de salvar
-  const held = needsDesc && description.trim() ? positions.find((p) => p.category === category && p.description.toUpperCase() === description.trim().toUpperCase()) : null;
+  const held0 = needsDesc && description.trim() ? positions.find((p) => p.category === category && p.description.toUpperCase() === description.trim().toUpperCase()) : null;
+  const held = held0 && held0.usd ? { ...held0, cost: held0.costUsd, value: held0.valueUsd, cotacao: held0.cotacaoUsd } : held0;
+  const emDolar = invCatMeta(category).moeda === "USD", fmtM = emDolar ? fmtUSD : fmtBRL, simb = emDolar ? "US$" : "R$";
   const startTrade = (p, kind) => {
     setTipo(kind); setCategory(p.category); setScope("ativo"); setEntry(p.isQty ? "qtd" : "valor");
     setDescription(p.description); setAssetName(p.assetName || ""); setQty(""); setAmount("");
@@ -7908,10 +7971,10 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             {useQty ? (
               <>
                 <div className="field"><label>Quantidade</label><input type="number" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" /></div>
-                <div className="field"><label>Preço unitário (R$)</label><MoneyInput value={price} onChange={setPrice} /></div>
+                <div className="field"><label>Preço unitário ({simb})</label><MoneyInput value={price} onChange={setPrice} /></div>
               </>
             ) : (
-              <div className="field"><label>{tipo === "venda" ? "Valor resgatado / vendido (R$)" : "Valor investido (R$)"}</label><MoneyInput value={amount} onChange={setAmount} /></div>
+              <div className="field"><label>{tipo === "venda" ? `Valor resgatado / vendido (${simb})` : `Valor investido (${simb})`}</label><MoneyInput value={amount} onChange={setAmount} /></div>
             )}
             <div className="field"><label>Data</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
@@ -7927,26 +7990,26 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                   {held.isQty ? (
                     <>
                       <div><span>Você tem</span><b className="mono">{fmtQty(held.qty)}</b></div>
-                      <div><span>Preço médio</span><b className="mono">{fmtBRL(held.avg)}</b></div>
-                      <div><span>Cotação</span><b className="mono">{held.cotacao > 0 ? fmtBRL(held.cotacao) : "—"}</b></div>
+                      <div><span>Preço médio</span><b className="mono">{fmtM(held.avg)}</b></div>
+                      <div><span>Cotação</span><b className="mono">{held.cotacao > 0 ? fmtM(held.cotacao) : "—"}</b></div>
                     </>
                   ) : (
                     <>
-                      <div><span>Investido</span><b className="mono">{fmtBRL(held.cost)}</b></div>
-                      <div><span>Valor atual</span><b className="mono">{held.cotacao > 0 ? fmtBRL(held.value) : "—"}</b></div>
+                      <div><span>Investido</span><b className="mono">{fmtM(held.cost)}</b></div>
+                      <div><span>Valor atual</span><b className="mono">{held.cotacao > 0 ? fmtM(held.value) : "—"}</b></div>
                     </>
                   )}
                 </div>
                 {useQty && held.isQty && held.cotacao > 0 && !price && (
-                  <button type="button" className="btn btn-ghost sm" style={{ marginTop: 10 }} onClick={() => setPrice(String(held.cotacao))}>Usar a cotação atual ({fmtBRL(held.cotacao)})</button>
+                  <button type="button" className="btn btn-ghost sm" style={{ marginTop: 10 }} onClick={() => setPrice(String(held.cotacao))}>Usar a cotação atual ({fmtM(held.cotacao)})</button>
                 )}
                 {useQty && held.isQty && q > 0 && pr > 0 && buying && (
-                  <div className="pp-after">Depois desta compra: <b className="mono">{fmtQty(newQty)}</b> no total, com preço médio de <b className="mono">{fmtBRL(newAvg)}</b>.</div>
+                  <div className="pp-after">Depois desta compra: <b className="mono">{fmtQty(newQty)}</b> no total, com preço médio de <b className="mono">{fmtM(newAvg)}</b>.</div>
                 )}
                 {useQty && held.isQty && q > 0 && pr > 0 && !buying && (
                   <div className="pp-after">
                     {q > held.qty + 0.0000001 ? `Você só tem ${fmtQty(held.qty)}. A venda será limitada a essa quantidade. ` : ""}
-                    Resultado desta venda: <b className="mono" style={{ color: sellResult >= 0 ? "var(--teal)" : "var(--brick)" }}>{sellResult >= 0 ? "+" : "−"} {fmtBRL(Math.abs(sellResult))}</b>. Restam <b className="mono">{fmtQty(held.qty - sellQty)}</b>.
+                    Resultado desta venda: <b className="mono" style={{ color: sellResult >= 0 ? "var(--teal)" : "var(--brick)" }}>{sellResult >= 0 ? "+" : "−"} {fmtM(Math.abs(sellResult))}</b>. Restam <b className="mono">{fmtQty(held.qty - sellQty)}</b>.
                   </div>
                 )}
               </div>
@@ -8041,10 +8104,16 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
               <section key={g.cat} className={`cl-card ${aberta ? "open" : ""}`} data-classe={g.cat}>
                 <button type="button" className="cl-head" aria-expanded={aberta} onClick={alternar}>
                   <span className="cl-dot" style={{ background: invCatMeta(g.cat).color }} />
-                  <span className="cl-name"><b>{g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}</small></span>
+                  <span className="cl-name"><b>{g.cat === "Exterior" ? "Exterior (em dólar)" : g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}{g.cat === "Exterior" ? " · " + fmtUSD(g.items.reduce((a, p) => a + (p.valueUsd || 0), 0)) : ""}</small></span>
                   <span className="cl-val"><b className="mono">{fmtBRL(sub)}</b><small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</small></span>
                   <span className="cl-chev" aria-hidden="true"><IconChevronDown size={18} /></span>
                 </button>
+                {aberta && g.cat === "Exterior" && (
+                  <div className="cl-fx" data-fx>
+                    <span>Dólar usado na conversão<small>{numOf(cotacoes.__USD) > 0 ? "valor digitado por você. Apague para usar o do dia" : numOf(cotacoes.__USDauto) > 0 ? "cotação do dia, automática" : "sem internet: usando um valor aproximado. Digite o do dia"}</small></span>
+                    <label className="cl-fx-in">R$ <input type="number" inputMode="decimal" step="0.01" aria-label="Cotação do dólar" value={cotacoes.__USD ?? ""} placeholder={String(Math.round(dolarHoje({ __USDauto: cotacoes.__USDauto }) * 100) / 100).replace(".", ",")} onChange={(e) => setCotacao("__USD", e.target.value)} /></label>
+                  </div>
+                )}
                 {aberta && (
                 <div className="asset-grid">
                   {itens.map((p) => {
@@ -8055,14 +8124,15 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                     const hist = open ? investments.filter((i) => i.description === p.description && (i.category || "Outro") === p.category).sort((a, b) => (b.date || "").localeCompare(a.date || "")) : [];
                     const quoteInput = (
                       <input className="cell-input ac-input" type="number" inputMode="decimal" aria-label={(p.isQty ? "Cotação de " : "Valor atual de ") + p.description}
-                        value={cotacoes[p.description] ?? ""} placeholder={p.isQty ? p.avg.toFixed(2) : p.cost.toFixed(2)} onChange={(e) => setCotacao(p.description, e.target.value)} />
+                        value={cotacoes[p.description] ?? ""} placeholder={p.isQty ? p.avg.toFixed(2) : (p.usd ? p.costUsd : p.cost).toFixed(2)} onChange={(e) => setCotacao(p.description, e.target.value)} />
                     );
                     return (
                       <article key={p.key} className={`asset-card cl-row ${open ? "open" : ""}`} data-asset={p.description}>
                         <button className="ac-top" aria-expanded={open} onClick={() => setOpenKey(open ? null : p.key)}>
-                          <span className="ac-id"><b>{p.description}</b><span className="mono">{p.isQty ? `${fmtQty(p.qty)} · PM ${fmtBRL(p.avg)}${hasQuote ? " · hoje " + fmtBRL(p.cotacao) : ""}` : `aplicado ${fmtBRL(p.cost)}`}</span></span>
+                          <span className="ac-id"><b>{p.description}</b><span className="mono">{p.usd ? (p.isQty ? `${fmtQty(p.qty)} · PM ${fmtUSD(p.avgUsd)}${hasQuote ? " · hoje " + fmtUSD(p.cotacaoUsd) : ""}` : `aplicado ${fmtUSD(p.costUsd)}`) : p.isQty ? `${fmtQty(p.qty)} · PM ${fmtBRL(p.avg)}${hasQuote ? " · hoje " + fmtBRL(p.cotacao) : ""}` : `aplicado ${fmtBRL(p.cost)}`}</span></span>
                           <span className="ac-val">
                             <b className="mono">{fmtBRL(p.value)}</b>
+                            {p.usd && <small className="mono">{fmtUSD(p.valueUsd)}</small>}
                             {hasQuote ? <small className="mono" style={{ color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{signPct(p.profitPct)}</small> : <small>sem cotação</small>}
                           </span>
                         </button>
@@ -8071,20 +8141,20 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                           {p.isQty ? (
                             <>
                               <div className="ac-stat"><span>Quantidade</span><b className="mono" title={fmtQty(p.qty)}>{fmtQty(p.qty)}</b></div>
-                              <div className="ac-stat"><span>Preço médio (R$)</span><MoneyInput className="cell-input ac-input pm-in" aria-label={"Preço médio de " + p.description} value={pmDraft[p.key] !== undefined ? pmDraft[p.key] : Math.round(p.avg * 100) / 100} onChange={(v) => setPmDraft((d) => ({ ...d, [p.key]: v }))} /></div>
-                              <div className="ac-stat"><span>Cotação (R$)</span>{quoteInput}</div>
+                              <div className="ac-stat"><span>Preço médio ({p.usd ? "US$" : "R$"})</span><MoneyInput className="cell-input ac-input pm-in" aria-label={"Preço médio de " + p.description} value={pmDraft[p.key] !== undefined ? pmDraft[p.key] : Math.round(p.avg * 100) / 100} onChange={(v) => setPmDraft((d) => ({ ...d, [p.key]: v }))} /></div>
+                              <div className="ac-stat"><span>Cotação ({p.usd ? "US$" : "R$"})</span>{quoteInput}</div>
                             </>
                           ) : (
                             <>
                               <div className="ac-stat"><span>Investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
-                              <div className="ac-stat"><span>Valor atual (R$)</span>{quoteInput}</div>
+                              <div className="ac-stat"><span>Valor atual ({p.usd ? "US$" : "R$"})</span>{quoteInput}</div>
                             </>
                           )}
                           <div className="ac-stat"><span>Resultado</span><b className="mono" style={hasQuote ? { color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" } : null}>{hasQuote ? sgn(p.profit) + " " + fmtBRL(Math.abs(p.profit)) : "—"}</b></div>
                         </div>
                         {p.isQty && pmDraft[p.key] !== undefined && Math.abs((Number(pmDraft[p.key]) || 0) - Math.round(p.avg * 100) / 100) >= 0.005 && (
                           <div className="pm-bar" data-pm-bar>
-                            <p>{Number(pmDraft[p.key]) > 0 ? <>Preço médio passa de {fmtBRL(p.avg)} para <b>{fmtBRL(Number(pmDraft[p.key]))}</b>. Total investido fica {fmtBRL(Number(pmDraft[p.key]) * p.qty)}.</> : "Digite um preço maior que zero."}</p>
+                            <p>{Number(pmDraft[p.key]) > 0 ? <>Preço médio passa de {(p.usd ? fmtUSD : fmtBRL)(p.avg)} para <b>{(p.usd ? fmtUSD : fmtBRL)(Number(pmDraft[p.key]))}</b>. Total investido fica {(p.usd ? fmtUSD : fmtBRL)(Number(pmDraft[p.key]) * p.qty)}.</> : "Digite um preço maior que zero."}</p>
                             <div className="pm-btns">
                               <button type="button" className="btn btn-primary sm" data-pm-salvar disabled={!(Number(pmDraft[p.key]) > 0)} onClick={() => { if (adjustAvg(p, pmDraft[p.key])) setPmDraft((d) => { const n = { ...d }; delete n[p.key]; return n; }); }}>Salvar preço médio</button>
                               <button type="button" className="btn btn-ghost sm" onClick={() => setPmDraft((d) => { const n = { ...d }; delete n[p.key]; return n; })}>Cancelar</button>
@@ -8251,10 +8321,334 @@ function parseNotaCorretagem(lines) {
   return { rows, outros, ehNota: ehNota || rows.length > 0, datas: [...new Set(rows.map((r) => r.date))].sort() };
 }
 
+// ================= leitura de carteira e de notas em qualquer formato =================
+// Funciona com texto de PDF, de print (lido no aparelho), de planilha ou colado.
+// "loc" é o jeito de escrever números: "br" (1.234,56) ou "us" (1,234.56).
+function detectLoc(txt) {
+  const t = String(txt || "");
+  const br = (t.match(/\d\.\d{3},\d{1,2}(?!\d)/g) || []).length * 3 + (t.match(/\d,\d{2}(?![\d.,])/g) || []).length;
+  const us = (t.match(/\d,\d{3}\.\d{1,2}(?!\d)/g) || []).length * 3 + (t.match(/\d\.\d{2}(?![\d.,])/g) || []).length;
+  return us > br ? "us" : "br";
+}
+function numLoc(raw, loc) {
+  if (typeof raw === "number") return raw;
+  let s = String(raw || "").replace(/[^\d.,\-]/g, "");
+  if (!/\d/.test(s)) return NaN;
+  const neg = /-/.test(s); s = s.replace(/-/g, "");
+  if (s.includes(".") && s.includes(",")) {
+    s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (s.includes(",")) {
+    s = (loc === "us" && /^\d{1,3}(,\d{3})+$/.test(s)) ? s.replace(/,/g, "") : (s.split(",").length > 2 ? s.replace(/,/g, "") : s.replace(",", "."));
+  } else if (s.includes(".")) {
+    if (s.split(".").length > 2 || (loc === "br" && /^\d{1,3}(\.\d{3})+$/.test(s))) s = s.replace(/\./g, "");
+  }
+  const n = Number(s); return isNaN(n) ? NaN : (neg ? -n : n);
+}
+const NUM_RE = /-?\d[\d.,]*/g;
+const numsOf = (l, loc) => (String(l).match(NUM_RE) || []).map((t) => numLoc(t.replace(/[.,]$/, ""), loc)).filter((n) => !isNaN(n));
+const US_STOP = new Set("US USD BRL COM INC CORP CO LTD PLC ETF ADR CL THE AND OF DE DA DO DOS DAS EM RS SA ON PN PNA PNB UNT CI FII PM QTD EUA TOTAL CASH BUY SELL AGENCY NA SHS REIT LP LLC HOLDINGS GROUP TRUST FUND CLASS SPDR VANGUARD ISHARES AJUDA ATIVOS VALOR SUAS ACOES MINHA DETALHES CARTEIRA MERCADO ABERTO NEGOCIAR COMPRAR VENDER".split(" "));
+// código da B3 com correção de leitura de print (O→0, I→1…) e conferência na lista de ativos
+function tickerBR(tok) {
+  const m = String(tok || "").toUpperCase().match(/^([A-Z0-9]{4})([0-9OILSB]{1,2})F?$/);
+  if (!m) return "";
+  const letras = m[1].replace(/0/g, "O").replace(/1/g, "I").replace(/5/g, "S").replace(/8/g, "B");
+  if (!/^[A-Z]{4}$/.test(letras)) return "";
+  const suf = m[2].replace(/[OQ]/g, "0").replace(/[IL]/g, "1").replace(/S/g, "5").replace(/B/g, "8");
+  const t = letras + suf;
+  if (ASSET_NAME[t]) return t;
+  const cands = ASSET_DB.filter((a) => a.t.startsWith(letras) && a.t.slice(4).startsWith(suf));
+  if (cands.length === 1) return cands[0].t;
+  return /^(3|4|5|6|7|8|11|12|13|3[1-9])$/.test(suf) ? t : "";
+}
+function acharTicker(linha, ext) {
+  const toks = String(linha || "").replace(/[|•·,;:()]/g, " ").split(/\s+/).filter(Boolean);
+  if (!ext) {
+    for (const t of toks) { const k = tickerBR(t); if (k) return k; }
+    // print: "IvvBi" vira IVVB11 quando a linha é curta
+    if (toks.length <= 3) for (const t of toks) { const m = t.match(/^([A-Za-z]{4})([0-9OoIilLsSbB]{1,2})$/); if (m) { const k = tickerBR(m[1].toUpperCase() + m[2].toUpperCase()); if (k) return k; } }
+    return "";
+  }
+  // exterior: códigos de 1 a 5 letras (ex.: AAPL, JPM, BRK.B)
+  // linha com números: o código vem antes do primeiro número; sem números: linha curta, código no fim
+  const iNum = toks.findIndex((t) => /\d/.test(t));
+  const antes = iNum >= 0 ? toks.slice(0, iNum) : toks;
+  const ok = (t) => /^[A-Z]{1,5}(\.[A-Z])?$/.test(t) && !US_STOP.has(t) && (t.length > 1 || antes.length === 1);
+  if (iNum >= 0) { const c = antes.filter(ok); return c.length ? c[c.length - 1] : ""; }
+  if (toks.length <= 2 && ok(toks[toks.length - 1])) return toks[toks.length - 1];
+  if (toks.length === 1 && /^[A-Za-z]{2,5}$/.test(toks[0]) && !US_STOP.has(toks[0].toUpperCase()) && toks[0] !== toks[0][0].toUpperCase() + toks[0].slice(1).toLowerCase()) return toks[0].toUpperCase();
+  return "";
+}
+const LBL = {
+  qty: /quantidade|\bqtde?\b|\bcotas\b|\bshares\b|quantity/i,
+  pm: /pre[cç]o m[eé]dio|custo m[eé]dio|\bp\.?m\.?\b|average|avg/i,
+  price: /pre[cç]o atual|pre[cç]o do ativo|cota[cç][aã]o|[uú]ltimo pre[cç]o|last price|current price/i,
+  value: /^posi[cç][aã]o\b|posi[cç][aã]o atual|valor atual|saldo atual|market value|valor de mercado/i,
+  inv: /valor investido|valor aplicado|custo total|total investido|cost basis/i,
+};
+const temData = (l) => /\b\d{4}-\d{2}-\d{2}\b|\b\d{2}\/\d{2}\/\d{4}\b/.test(l);
+// Lê a carteira: devolve [{ticker, qty, pm, price, value, inv}]
+function lerCarteiraTexto(texto, ext) {
+  const linhas = String(texto || "").split(/\r?\n/).map((l) => l.replace(/[|_]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const loc = detectLoc(texto);
+  const mapa = {}; const ordem = [];
+  const pega = (tk) => { if (!mapa[tk]) { mapa[tk] = { ticker: tk }; ordem.push(tk); } return mapa[tk]; };
+  const put = (r, k, v) => { if (v > 0 && !(r[k] > 0)) r[k] = v; };
+  const temMedio = /m[eé]dio|average/i.test(texto) && !/market value|pre[cç]o atual|cota[cç][aã]o/i.test(texto);
+  let atual = null, desde = 0; const soNome = [];
+  linhas.forEach((l, li) => {
+    if (/^(BUY|SELL|COMPRA|VENDA)\b/i.test(l) || temData(l)) { atual = null; return; }
+    if (atual && li - desde > 9) atual = null;
+    const tk = acharTicker(l, ext);
+    const lbl = Object.keys(LBL).find((k) => LBL[k].test(l));
+    const ns = numsOf(l.replace(/\b[A-Z]{4}\d{1,2}\b/g, " ").replace(/\(\s*-?[\d.,]+%\s*\)/g, " ").replace(/-?[\d.,]+%/g, " "), loc);
+    if (tk && !lbl) {
+      const r = pega(tk); atual = r; desde = li;
+      // linha de tabela: código + números. Procura quantidade × preço = valor
+      const nn = ns.filter((n) => n >= 0);
+      let ok = false;
+      for (let i = 0; i < Math.min(nn.length, 5) && !ok; i++) for (let j = 0; j < Math.min(nn.length, 6) && !ok; j++) for (let k = 0; k < Math.min(nn.length, 7) && !ok; k++) {
+        if (i === j || j === k || i === k || !(nn[i] > 0 && nn[j] > 0 && nn[k] > 0)) continue;
+        if (k > j && j > i - 1 && Math.abs(nn[i] * nn[j] - nn[k]) <= Math.max(0.02, nn[k] * 0.012)) { put(r, "qty", nn[i]); put(r, temMedio ? "pm" : "price", nn[j]); put(r, temMedio ? "inv" : "value", nn[k]); ok = true; }
+      }
+      // lista colada: só código e números (ex.: "ITSA4 1.300 11,17")
+      const limpa = l.replace(/R\$|US\$|\$/g, " ").split(/\s+/).filter(Boolean).every((t) => /\d/.test(t) || acharTicker(t, ext) === tk || t.length <= 2);
+      if (!ok && limpa && nn.length >= 2 && nn.length <= 3) { put(r, "qty", nn[0]); put(r, "pm", nn[1]); if (nn[2]) put(r, "price", nn[2]); }
+      if (!ok && nn.length === 0) soNome.push(r);
+      return;
+    }
+    if (atual && lbl && ns.length) {
+      const v = ns[0];
+      if (lbl === "qty") put(atual, "qty", v);
+      else if (lbl === "pm") put(atual, "pm", v);
+      else if (lbl === "price") put(atual, "price", v);
+      else if (lbl === "value") put(atual, "value", v);
+      else if (lbl === "inv") put(atual, "inv", v);
+    }
+  });
+  // lista do app (ex.: Nomad/Avenue): códigos numa coluna e "US$ valor / US$ rendimento" na outra
+  const vazios = soNome.filter((r) => !(r.qty > 0) && !(r.value > 0));
+  if (vazios.length) {
+    const vals = [];
+    const dinheiro = (m) => { let t = m.replace(/[^\d.,]/g, ""); if (loc === "br" && /^\d{1,3}\.\d{5}$/.test(t)) t = t.slice(0, -2).replace(".", "") + "," + t.slice(-2); return numLoc(t, loc); };
+    linhas.forEach((l) => { const ms = l.match(/(?:US\$|R\$)\s*-?[\d][\d.,]*/g); if (ms && !Object.keys(LBL).some((k) => LBL[k].test(l))) ms.forEach((m) => vals.push({ v: dinheiro(m), neg: /[-−▼▾*]/.test(l) })); });
+    if (vals.length === vazios.length * 2) vazios.forEach((r, i) => { r.value = vals[2 * i].v; const g = vals[2 * i + 1].v * (vals[2 * i + 1].neg ? -1 : 1); r.ganho = g; r.inv = Math.round((r.value - g) * 100) / 100; });
+  }
+  return ordem.map((t) => mapa[t]).filter((r) => r.qty > 0 || r.value > 0 || r.inv > 0 || r.pm > 0);
+}
+// Planilha qualquer: acha as colunas pelo nome
+function lerCarteiraTabelas(tables, ext) {
+  const out = [];
+  (tables || []).forEach((tb) => {
+    const rows = tb.rows || [];
+    const hi = rows.findIndex((r) => r.some((c) => /c[oó]d|ativo|ticker|papel|s[ií]mbolo|symbol|produto/i.test(String(c))) && r.some((c) => LBL.qty.test(String(c)) || /^qtd/i.test(String(c))));
+    if (hi < 0) { const txt = rows.map((r) => r.join("  ")).join("\n"); out.push(...lerCarteiraTexto(txt, ext)); return; }
+    const H = rows[hi].map((c) => String(c));
+    const col = (re, not) => H.findIndex((c) => re.test(c) && !(not && not.test(c)));
+    const cT = col(/c[oó]d|ticker|papel|s[ií]mbolo|symbol|ativo|produto/i), cQ = H.findIndex((c) => LBL.qty.test(c) || /^qtd/i.test(c));
+    const cPm = col(/m[eé]dio|\bpm\b|average|avg/i), cP = col(/atual|cota[cç]|fechamento|[uú]ltimo|price|pre[cç]o/i, /m[eé]dio|average|avg/i);
+    const cV = col(/valor atual|posi[cç]|market value|saldo|valor de mercado|valor bruto/i), cI = col(/investido|aplicado|custo total|cost basis/i);
+    const amostra = rows.slice(hi + 1, hi + 30).map((r) => [r[cQ], r[cPm], r[cP]].join(" ")).join(" ");
+    const loc = detectLoc(amostra);
+    rows.slice(hi + 1).forEach((r) => {
+      const tk = acharTicker(String(r[cT] || ""), ext) || (ext ? "" : tickerBR(String(r[cT] || "").split(/\s|-/)[0]));
+      if (!tk) return;
+      const n = (c) => (c >= 0 ? numLoc(r[c], loc) : NaN);
+      const o = { ticker: tk, qty: n(cQ), pm: n(cPm), price: n(cP), value: n(cV), inv: n(cI) };
+      Object.keys(o).forEach((k) => { if (k !== "ticker" && !(o[k] > 0)) delete o[k]; });
+      if (o.qty > 0 || o.value > 0) out.push(o);
+    });
+  });
+  return out;
+}
+// Junta o que veio de vários arquivos: o PDF traz a quantidade, o print traz o preço médio…
+function juntarCarteira(lista) {
+  const m = {};
+  lista.forEach((r) => { const a = m[r.ticker] = m[r.ticker] || { ticker: r.ticker }; ["qty", "pm", "price", "value", "inv", "ganho"].forEach((k) => { if (r[k] !== undefined && a[k] === undefined) a[k] = r[k]; }); });
+  return Object.values(m).map((r) => {
+    if (!(r.pm > 0) && r.inv > 0 && r.qty > 0) r.pm = Math.round((r.inv / r.qty) * 10000) / 10000;
+    if (!(r.price > 0) && r.value > 0 && r.qty > 0) r.price = Math.round((r.value / r.qty) * 10000) / 10000;
+    return r;
+  });
+}
+// Extrato mensal de corretora americana (Apex: Nomad, Avenue e outras) — compras e vendas do mês
+function lerTradesExterior(lines) {
+  const out = []; const loc = "us";
+  (lines || []).forEach((raw) => {
+    const l = String(raw || "").replace(/\s+/g, " ").trim();
+    const m = l.match(/^(BUY|SELL|BOUGHT|SOLD|COMPRA|VENDA)\s+(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\s+(?:(?:\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\s+)?(.+)$/i);
+    if (!m) return;
+    const resto = m[3]; const iN = resto.search(/\s-?\d[\d,]*\.?\d*\s/);
+    if (iN < 0) return;
+    const tk = acharTicker(resto, true); if (!tk) return;
+    const ns = numsOf(resto.slice(iN), loc).filter((n) => n > 0);
+    let q = 0, p = 0, a = 0;
+    for (let i = 0; i < Math.min(ns.length, 3) && !a; i++) for (let j = i + 1; j < Math.min(ns.length, 4) && !a; j++) for (let k = j + 1; k < Math.min(ns.length, 5) && !a; k++)
+      if (Math.abs(ns[i] * ns[j] - ns[k]) <= Math.max(0.02, ns[k] * 0.012)) { q = ns[i]; p = ns[j]; a = ns[k]; }
+    if (!a) return;
+    const d = /\//.test(m[2]) ? m[2].split("/").reverse().join("-") : m[2];
+    out.push({ kind: "trade", src: "neg", nota: true, moeda: "USD", date: d, ticker: tk, spec: resto.slice(0, iN).trim(), name: "", incerto: false, category: "Exterior", side: /^(SELL|SOLD|VENDA)/i.test(m[1]) ? "venda" : "compra", qty: q, price: p, amount: a });
+  });
+  return out;
+}
+// Nota de corretagem em modelo próprio (fora do padrão B3) ou lida de foto:
+// procura linhas com código, compra/venda e quantidade × preço = total.
+function lerNotaGenerica(lines) {
+  const loc = detectLoc((lines || []).join("\n"));
+  let data = null; const out = [];
+  (lines || []).forEach((raw) => {
+    const l = String(raw || "").replace(/\s+/g, " ").trim();
+    const d = notaIso(l); if (d && /preg[aã]o|neg[oó]cio|data|opera/i.test(l)) data = d; else if (d && !data) data = d;
+    const tk = acharTicker(l, false); if (!tk) return;
+    const ml = l.match(/(?:^|\s)(C|V|COMPRA|VENDA|COMPRAS|VENDAS)(?=\s)/i);
+    const lado = !ml ? "" : /^C/i.test(ml[1]) ? "compra" : "venda";
+    if (!lado) return;
+    const ns = numsOf(l.replace(/\b[A-Z]{4}\d{1,2}F?\b/g, " ").replace(/\d{2}\/\d{2}\/\d{4}/g, " "), loc).filter((n) => n > 0);
+    let q = 0, p = 0, a = 0;
+    for (let i = 0; i < ns.length && !a; i++) for (let j = 0; j < ns.length && !a; j++) for (let k = 0; k < ns.length && !a; k++)
+      if (i !== j && j !== k && i !== k && Number.isInteger(ns[i]) && Math.abs(ns[i] * ns[j] - ns[k]) <= Math.max(0.02, ns[k] * 0.005)) { q = ns[i]; p = ns[j]; a = ns[k]; }
+    if (!a) return;
+    out.push({ date: data, spec: tk, tk, side: lado, qty: q, price: p, amount: a });
+  });
+  const rows = out.map((t) => ({ kind: "trade", src: "neg", nota: true, date: t.date || todayStr(), semData: !t.date, ticker: t.tk, spec: t.spec, name: ASSET_NAME[t.tk] || "", incerto: true, category: b3Category(t.tk, "", ""), side: t.side, qty: t.qty, price: t.price, amount: t.amount }));
+  return { rows, outros: 0, ehNota: rows.length > 0, datas: [...new Set(rows.map((r) => r.date))].sort() };
+}
+if (typeof window !== "undefined") window.__mp = { pdfToLines, parseNotaCorretagem, lerCarteiraTexto, lerCarteiraTabelas, juntarCarteira, lerTradesExterior, lerNotaGenerica, detectLoc, numLoc };
+
+function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
+  const ext = fonte === "ext";
+  const [lidos, setLidos] = useState([]); // [{nome, itens}]
+  const [edits, setEdits] = useState({});
+  const [busy, setBusy] = useState(""); const [erro, setErro] = useState("");
+  const [texto, setTexto] = useState("");
+  const [modo, setModo] = useState("inicial"); const [data, setData] = useState(todayStr());
+  const [feito, setFeito] = useState(null);
+  const [pwd, setPwd] = useState({ file: null, val: "" });
+  const ref = useRef(null);
+  const fmtM = ext ? fmtUSD : fmtBRL, simb = ext ? "US$" : "R$";
+  const jaTem = new Set(investments.map((i) => String(i.description || "").toUpperCase()));
+  const accept = { print: "image/*", cpdf: ".pdf,application/pdf", cplan: ".xlsx,.xls,.csv,.ods,text/csv", ext: ".pdf,.csv,.xlsx,.xls,application/pdf,image/*" }[fonte] || "*";
+  const ler = async (files, senha) => {
+    setErro(""); setFeito(null);
+    for (const f of Array.from(files || [])) {
+      try {
+        setBusy("Lendo " + f.name + "…");
+        let itens = [];
+        if (/^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name)) itens = lerCarteiraTexto(await lerPrint(f, (p) => setBusy(`Lendo ${f.name}… ${Math.round(p * 100)}%`)), ext);
+        else if (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)) itens = lerCarteiraTexto((await pdfToLines(await f.arrayBuffer(), senha)).join("\n"), ext);
+        else itens = lerCarteiraTabelas(await fileToTables(f), ext);
+        if (!itens.length) setErro(`Não encontrei investimentos em “${f.name}”. ${/^image/.test(f.type) ? "Tente um print mais nítido, só da lista." : "Confira se é o arquivo da posição ou da carteira."}`);
+        else setLidos((p) => [...p, { nome: f.name, itens }]);
+        setPwd({ file: null, val: "" });
+      } catch (e) {
+        if (e && e.name === "PasswordException") { setPwd({ file: f, val: "" }); setErro(senha ? "Senha incorreta. Tente de novo." : "Este PDF tem senha. Digite abaixo (em geral, os primeiros dígitos do CPF)."); setBusy(""); return; }
+        setErro(`Não consegui ler “${f.name}”: ${e && e.message ? e.message : e}`);
+      }
+    }
+    setBusy("");
+  };
+  const lerTexto = () => { const itens = lerCarteiraTexto(texto, ext || /US\$/.test(texto)); if (!itens.length) setErro("Não encontrei códigos com quantidade nessa lista. Use uma linha por investimento: código, quantidade e preço médio."); else { setErro(""); setLidos((p) => [...p, { nome: "lista colada", itens }]); setTexto(""); } };
+  const base = useMemo(() => juntarCarteira(lidos.flatMap((l) => l.itens)), [lidos]);
+  const rows = base.map((r) => {
+    const e = edits[r.ticker] || {};
+    const pmCalc = !(lidos.some((l) => l.itens.some((x) => x.ticker === r.ticker && x.pm > 0))) && r.pm > 0;
+    const o = { ...r, pmCalc, on: !jaTem.has(r.ticker), ...e };
+    o.semQtd = !(Number(o.qty) > 0);
+    o.falta = o.on && (o.semQtd ? !(Number(o.inv) > 0) : !(Number(o.pm) > 0));
+    return o;
+  });
+  const setRow = (tk, p) => setEdits((d) => ({ ...d, [tk]: { ...(d[tk] || {}), ...p } }));
+  const marcados = rows.filter((r) => r.on), faltando = marcados.filter((r) => r.falta);
+  const adicionar = () => {
+    if (!marcados.length || faltando.length) return;
+    const e = commitPrint(marcados.map((r) => ({ ticker: r.ticker, qty: Number(r.qty) || 0, pm: Number(r.pm) || 0, inv: Number(r.inv) || 0, price: Number(r.price) || 0, value: Number(r.value) || 0 })), modo, modo === "aporte" ? data : todayStr(), ext);
+    setFeito(e); setLidos([]); setEdits({});
+  };
+  const numIn = (v, on) => <input inputMode="decimal" value={v === undefined || v === "" ? "" : String(v).replace(".", ",")} onChange={(e) => { const t = e.target.value.replace(/[^\d,.]/g, ""); on(t === "" ? "" : (isNaN(numLoc(t, "br")) ? "" : t.endsWith(",") ? t : numLoc(t, "br"))); }} />;
+  return (
+    <div className="pr ci" data-fonte={fonte}>
+      {feito && <div className="note-info" role="status">{feito.investimentos} {feito.investimentos === 1 ? "ativo adicionado" : "ativos adicionados"} {modo === "inicial" ? "como carteira inicial" : "como aporte"}. Dá para desfazer no histórico de importações, abaixo.{goTab && <> <button className="link-btn" onClick={() => goTab("investimentos")}>Ver investimentos</button></>}</div>}
+      {fonte === "colar" ? (<>
+        <textarea className="cart-colar" rows={6} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={"Copie do site da corretora e cole aqui. Exemplo:\nITSA4  1.300  11,17\nHGLG11  180  165,00"} />
+        <button className="btn btn-primary sm" style={{ marginTop: 8 }} disabled={!texto.trim()} onClick={lerTexto}>Ler lista</button>
+      </>) : (<>
+        <button className="drop" onClick={() => ref.current && ref.current.click()}>
+          <IconUpload size={26} color={TEAL} />
+          <b>{lidos.length ? "Adicionar outro arquivo" : fonte === "print" ? "Escolher print" : ext ? "Escolher arquivo ou print" : "Escolher arquivo"}</b>
+          <span>{{ print: "Print da tela da carteira. Pode escolher vários.", cpdf: "PDF de posição, custódia ou extrato mensal da corretora.", cplan: "Excel (.xlsx, .xls) ou CSV com código, quantidade e preço médio.", ext: "Extrato mensal em PDF, CSV ou prints do app. Pode juntar vários: o app combina as informações." }[fonte]}</span>
+        </button>
+        <input ref={ref} type="file" multiple accept={accept} style={{ display: "none" }} onChange={(e) => { ler(e.target.files); e.target.value = ""; }} />
+      </>)}
+      {busy && <div className="field-hint" style={{ marginTop: 10 }} role="status">{busy}</div>}
+      {erro && <div className="note-bad">{erro}</div>}
+      {pwd.file && <div className="form-grid" style={{ marginTop: 10 }}><div className="field"><label>Senha do PDF</label><input type="password" value={pwd.val} onChange={(e) => setPwd({ ...pwd, val: e.target.value })} autoComplete="off" /></div><div className="field" style={{ display: "flex", alignItems: "flex-end" }}><button className="btn btn-primary" onClick={() => ler([pwd.file], pwd.val)}>Abrir PDF</button></div></div>}
+      {lidos.length > 0 && <div className="ci-lidos">Lido: {lidos.map((l) => l.nome).join(", ")} <button type="button" className="link-btn" onClick={() => { setLidos([]); setEdits({}); }}>limpar</button></div>}
+      {rows.length > 0 && (
+        <div className="pr-res">
+          <div className="ci-top"><b>Encontrei {rows.length} {rows.length === 1 ? "ativo" : "ativos"}.</b><span>Confira os números. O que faltar fica em vermelho.{ext ? " Valores em dólar." : ""}</span></div>
+          <div className="ci-head" aria-hidden="true"><span /><span>Ativo</span><span>Quantidade</span><span>Preço médio ({simb})</span><span>Preço atual ({simb})</span></div>
+          {rows.map((r) => (
+            <div key={r.ticker} className={`ci-row ${r.on ? "" : "off"} ${r.falta ? "falta" : ""}`} data-tk={r.ticker}>
+              <input type="checkbox" checked={r.on} onChange={(e) => setRow(r.ticker, { on: e.target.checked })} aria-label={"Incluir " + r.ticker} />
+              <div className="ci-tk"><b>{r.ticker}</b><small>{jaTem.has(r.ticker) ? "já está na carteira" : ext ? "Exterior" : b3Category(r.ticker)}</small></div>
+              {r.semQtd ? (
+                <div className="ci-semq">
+                  <span>Sem quantidade no arquivo. Entra pelo valor: investido <b>{fmtM(r.inv || 0)}</b>{r.value > 0 ? <>, hoje <b>{fmtM(r.value)}</b></> : null}.</span>
+                  <label className="ci-f"><small>Quantidade (se souber)</small>{numIn(r.qty, (v) => setRow(r.ticker, { qty: v }))}</label>
+                </div>
+              ) : (<div className="ci-fs">
+                <label className="ci-f"><small>Quantidade</small>{numIn(r.qty, (v) => setRow(r.ticker, { qty: v }))}</label>
+                <label className="ci-f"><small>Preço médio ({simb})</small>{numIn(r.pm === undefined ? "" : Math.round(r.pm * 100) / 100, (v) => setRow(r.ticker, { pm: v }))}
+                  {!(Number(r.pm) > 0) && r.price > 0 && r.on && <button type="button" className="link-btn ci-usar" onClick={() => setRow(r.ticker, { pm: r.price })}>usar o preço atual</button>}
+                  {r.pmCalc && Number(r.pm) > 0 && <em className="ci-calc">calculado pelo rendimento do app</em>}
+                </label>
+                <label className="ci-f"><small>Preço atual ({simb})</small>{numIn(r.price === undefined ? "" : Math.round(r.price * 100) / 100, (v) => setRow(r.ticker, { price: v }))}</label>
+              </div>)}
+            </div>
+          ))}
+          {faltando.length > 0 && <div className="note-bad">Falta o preço médio de {faltando.map((r) => r.ticker).join(", ")}. Ele aparece no app da corretora, na tela de cada ativo. Se não souber, use o preço atual.</div>}
+          <div className="field" style={{ marginTop: 12 }}><label>Adicionar como</label>
+            <div className="chip-row" role="group" aria-label="Adicionar como">
+              <button type="button" className={`chip sm ${modo === "inicial" ? "active" : ""}`} aria-pressed={modo === "inicial"} onClick={() => setModo("inicial")}>Carteira que já tenho</button>
+              <button type="button" className={`chip sm ${modo === "aporte" ? "active" : ""}`} aria-pressed={modo === "aporte"} onClick={() => setModo("aporte")}>Compra nova</button>
+            </div>
+            <div className="field-hint">{modo === "inicial" ? "Para o que você já tinha antes de usar o app. Não conta como aporte do mês." : "Entra como investimento do mês, na data abaixo."}</div>
+          </div>
+          {modo === "aporte" && <div className="field" style={{ maxWidth: 220 }}><label>Data da compra</label><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></div>}
+          <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={!marcados.length || faltando.length > 0} onClick={adicionar}>Adicionar {marcados.length} {marcados.length === 1 ? "ativo" : "ativos"}</button>
+        </div>
+      )}
+      <ImportDicas source={fonte} />
+    </div>
+  );
+}
+
+const CARTEIRA_FONTES = [
+  { id: "b3", ic: "📊", nome: "Planilha da B3", rec: true, sub: "Tudo o que está no seu CPF, de todas as corretoras do Brasil." },
+  { id: "print", ic: "📱", nome: "Print do app", sub: "Uma foto da tela da carteira. Você confere antes de salvar." },
+  { id: "cpdf", ic: "📄", nome: "PDF da corretora", sub: "Extrato de posição ou de custódia." },
+  { id: "cplan", ic: "🧮", nome: "Planilha própria", sub: "Excel ou CSV com código, quantidade e preço médio." },
+  { id: "colar", ic: "📋", nome: "Copiar e colar", sub: "Copie a lista do site da corretora e cole." },
+  { id: "ext", ic: "🌎", nome: "Corretora no exterior", sub: "Avenue, Nomad, Inter, XP, Interactive Brokers. Valores em dólar." },
+];
+const CARTEIRA_SRC = CARTEIRA_FONTES.map((f) => f.id);
+function ImportDicas({ source }) {
+  const T = {
+    nota: ["Serve para qualquer corretora", "Corretoras brasileiras como XP, Rico, Clear, BTG, Itaú, Bradesco, Ágora, Genial, Inter, Nubank e Toro.", "Aceita o PDF no padrão da B3 e o modelo próprio da corretora. Se a nota tiver senha, o app pede (em geral, os primeiros dígitos do CPF).", "Também lê foto ou print da nota. Nesse caso, confira os números antes de importar.", "Notas já importadas não entram de novo. O arquivo não sai do seu celular."],
+    b3: ["Como baixar da B3", "1. Entre em investidor.b3.com.br com seu CPF.", "2. Em Extratos → Negociação, baixe todo o período desde a primeira compra, em Excel. É dela que sai o preço médio certo.", "3. Em Extratos → Posição, baixe a planilha de hoje para conferir as quantidades."],
+    print: ["Dica", "Tire o print na tela que mostra código, quantidade e preço médio. Pode mandar vários prints da mesma carteira.", "A imagem é lida no seu celular. Confira cada linha antes de salvar."],
+    cpdf: ["Onde achar", "No app ou site da corretora, procure por Extrato de custódia, Posição consolidada ou Extrato mensal."],
+    cplan: ["Formato", "Uma linha por investimento, com as colunas código, quantidade e preço médio. Os nomes das colunas podem variar; o app reconhece."],
+    colar: ["Formato", "Uma linha por investimento: código, quantidade e preço médio. Você confere antes de salvar."],
+    ext: ["Investimentos no exterior", "Os valores ficam em dólar e o app mostra o total em reais com o dólar do dia.", "Avenue, Nomad e Inter: use o extrato mensal em PDF ou um print da carteira.", "Interactive Brokers e outras: o relatório de posição em CSV."],
+    fatura: ["Qual formato escolher", "OFX ou CSV são os mais confiáveis. O Nubank envia a fatura em CSV por e-mail.", "PDF funciona na maioria dos bancos. Confira a revisão antes de importar."],
+  }[source];
+  if (!T) return null;
+  return <div className="tips" id={source === "nota" ? "nota-tips" : undefined}><b>{T[0]}</b>{T.slice(1).map((t, i) => <span key={i}>{t}</span>)}</div>;
+}
 function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitImport, importLog, undoImport, goTab, commitB3, portfolio, investments, commitPrint, fonteInicial, limparFonte }) {
   const [b3raw, setB3raw] = useState([]);
   const [b3info, setB3info] = useState(null);
-  const [source, setSource] = useState(fonteInicial || "extrato");
+  const [source, setSource] = useState(fonteInicial === "extrato" ? "fatura" : (fonteInicial || "nota"));
   useEffect(() => { if (fonteInicial && limparFonte) limparFonte(); }, []);
   const [raw, setRaw] = useState([]);
   const [label, setLabel] = useState("");
@@ -8285,8 +8679,13 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
       for (const f of list) {
         try {
           setBusy("Lendo " + f.name + "…");
-          const r = parseNotaCorretagem(await pdfToLines(await f.arrayBuffer(), pwd));
-          if (r.rows.length === 0) setError(r.ehNota ? `Li “${f.name}”, mas não achei compras ou vendas à vista nela.` : `Não reconheci “${f.name}” como nota de corretagem. Se o PDF for uma foto ou escaneado, o app não consegue ler.`);
+          const ehImg = /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name);
+          const linhas = ehImg ? String(await lerPrint(f, (p) => setBusy(`Lendo a foto ${f.name}… ${Math.round(p * 100)}%`))).split(/\r?\n/) : await pdfToLines(await f.arrayBuffer(), pwd);
+          let r = parseNotaCorretagem(linhas);
+          // corretora no exterior (extrato mensal com BUY/SELL) ou nota em modelo próprio / foto
+          if (r.rows.length === 0) { const ex = lerTradesExterior(linhas); if (ex.length) r = { rows: ex, outros: 0, ehNota: true }; }
+          if (r.rows.length === 0) { const g = lerNotaGenerica(linhas); if (g.rows.length) r = g; }
+          if (r.rows.length === 0) setError(ehImg ? `Não consegui ler compras e vendas na foto “${f.name}”. Tente uma foto mais nítida, de frente, só da parte dos negócios.` : r.ehNota ? `Li “${f.name}”, mas não achei compras ou vendas à vista nela.` : `Não reconheci “${f.name}” como nota de corretagem. Se for PDF escaneado, tire um print ou foto e anexe a imagem.`);
           rowsAll = rowsAll.concat(r.rows); outros += r.outros;
         } catch (e) {
           if (e && e.name === "PasswordException") { setPwdFile(f); setBusy(""); setError(pwd ? "Senha incorreta. Tente de novo." : "Esta nota tem senha. Digite abaixo (em geral, os primeiros dígitos do CPF)."); return; }
@@ -8337,7 +8736,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
           if (/<OFX>|<STMTTRN>/i.test(txt) || ext === "ofx" || ext === "ofc" || ext === "qfx") rows = parseOFX(txt);
           else if (ext === "csv" || ext === "txt" || /[;,\t]/.test(txt)) rows = parseCSV(txt, guessYear(txt), today);
         }
-        if (rows.length === 0) setError(`Não encontrei lançamentos em “${name}”. Se for PDF escaneado (foto), o app não consegue ler; tente baixar o extrato em OFX ou CSV no app do banco.`);
+        if (rows.length === 0) setError(`Não encontrei lançamentos em “${name}”. Se for PDF escaneado (foto), o app não consegue ler; tente baixar a fatura em OFX ou CSV no app do banco.`);
         all = all.concat(rows.map((r, i) => ({ ...r, id: name + ":" + i })));
       } catch (e) {
         if (e && e.name === "PasswordException") { setPwdFile(f); setBusy(""); setError(pwd ? "Senha incorreta. Tente de novo." : "Este PDF tem senha. Digite a senha abaixo (geralmente os primeiros dígitos do CPF)."); return; }
@@ -8402,9 +8801,10 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
       if (r0.nota) {
         // na nota, o código pode ser corrigido na revisão; sem código válido a linha não entra
         const ed = edits[id] || {};
-        const tk = cleanTicker(ed.ticker !== undefined ? ed.ticker : r0.ticker);
-        r = { ...r0, ticker: tk, name: tk === r0.ticker ? r0.name : (ASSET_NAME[tk] || ""), category: tickerValido(tk) ? ((portfolio.positions.find((x) => x.isQty && x.description === tk) || {}).category || b3Category(tk, "", "")) : r0.category };
-        if (!tickerValido(tk)) return { ...r, id, key: "", action: "ignorar", semTicker: true, reason: "Digite o código do ativo (ex.: PETR4) para importar" };
+        const tk = r0.moeda === "USD" ? String(ed.ticker !== undefined ? ed.ticker : r0.ticker).toUpperCase().replace(/[^A-Z.]/g, "") : cleanTicker(ed.ticker !== undefined ? ed.ticker : r0.ticker);
+        if (r0.moeda === "USD") { r = { ...r0, ticker: tk, category: "Exterior" }; if (!/^[A-Z]{1,5}(\.[A-Z])?$/.test(tk)) return { ...r, id, key: "", action: "ignorar", semTicker: true, reason: "Digite o código do ativo (ex.: AAPL)" }; }
+        else r = { ...r0, ticker: tk, name: tk === r0.ticker ? r0.name : (ASSET_NAME[tk] || ""), category: tickerValido(tk) ? ((portfolio.positions.find((x) => x.isQty && x.description === tk) || {}).category || b3Category(tk, "", "")) : r0.category };
+        if (r0.moeda !== "USD" && !tickerValido(tk)) return { ...r, id, key: "", action: "ignorar", semTicker: true, reason: "Digite o código do ativo (ex.: PETR4) para importar" };
       }
       if (r.kind !== "trade") return { ...r, id };
       const key = `b3t:${r.date}|${r.ticker}|${r.side}|${r.qty}|${Number(r.amount).toFixed(2)}`;
@@ -8426,7 +8826,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
     return base.map((r) => {
       if (r.nota && r.action === "importar" && r.side === "compra" && pmNota[r.ticker]) {
         const pos = portfolio.positions.find((x) => x.isQty && x.description === r.ticker), g = pmNota[r.ticker];
-        const novo = ((pos ? pos.cost : 0) + g.amount) / ((pos ? pos.qty : 0) + g.qty);
+        const novo = ((pos ? (pos.usd ? pos.costUsd : pos.cost) : 0) + g.amount) / ((pos ? pos.qty : 0) + g.qty);
         return { ...r, pmAntes: pos ? pos.avg : null, pmDepois: novo };
       }
       if (r.kind !== "pos") return r;
@@ -8502,22 +8902,33 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
 
       {raw.length === 0 && b3raw.length === 0 && (
         <div className="card">
-          <div className="card-head"><h3 className="card-title">1. O que você quer fazer?</h3></div>
-          <div className="choice-row">
-            <button className={`choice ${source === "extrato" ? "on" : ""}`} onClick={() => setSource("extrato")}><b>Extrato da conta</b><em>Todo mês</em><span>Para conferir o que entrou e o que saiu da sua conta: pagamentos recebidos, contas, PIX e boletos</span></button>
-            <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><em>Todo mês</em><span>Para lançar a fatura como uma despesa só. Os gastos ficam dentro dela, por categoria</span></button>
-            <button className={`choice ${source === "b3" ? "on" : ""}`} onClick={() => setSource("b3")}><b>Planilha da B3</b><em>Uma vez, no começo</em><span>Para cadastrar a carteira de investimentos que você já tem: ações, FIIs, ETFs e Tesouro</span></button>
-            <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><em>Todo mês</em><span>Para adicionar os investimentos feitos no mês: as compras e vendas do PDF da corretora</span></button>
+          <div className="card-head"><h3 className="card-title">O que você quer importar?</h3></div>
+          <div className="choice-row imp3">
+            <button className={`choice ${source === "nota" ? "on" : ""}`} id="src-nota" onClick={() => setSource("nota")}><b>Nota de corretagem</b><em>Todo mês</em><span>As compras e vendas de investimentos do mês. PDF de qualquer corretora ou foto da nota.</span></button>
+            <button className={`choice ${CARTEIRA_SRC.includes(source) ? "on" : ""}`} id="src-carteira" onClick={() => setSource(CARTEIRA_SRC.includes(source) ? source : "b3")}><b>Minha carteira</b><em>Uma vez, no começo</em><span>Os investimentos que você já tem hoje, no Brasil e no exterior.</span></button>
+            <button className={`choice ${source === "fatura" ? "on" : ""}`} onClick={() => setSource("fatura")}><b>Fatura do cartão</b><em>Todo mês</em><span>Entra como uma despesa só, com os gastos separados por categoria.</span></button>
           </div>
 
-          <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">{source === "print" ? "2. Escolha o print" : "2. Anexe o arquivo"}</h3></div>
-          {source === "print" ? <PrintImport commitPrint={commitPrint} investments={investments} goTab={goTab} /> : (<>
-          <button className="drop" onClick={() => fileRef.current && fileRef.current.click()}>
+          {CARTEIRA_SRC.includes(source) && (<>
+            <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">Como você quer trazer a carteira?</h3></div>
+            <div className="cart-fontes" role="radiogroup">
+              {CARTEIRA_FONTES.map((f) => (
+                <button key={f.id} type="button" role="radio" aria-checked={source === f.id} className={`cart-f ${source === f.id ? "on" : ""}`} data-fonte={f.id} onClick={() => setSource(f.id)}>
+                  <span className="cart-f-ic" aria-hidden="true">{f.ic}</span>
+                  <span className="cart-f-t"><b>{f.nome}{f.rec && <i>mais precisa</i>}</b><small>{f.sub}</small></span>
+                </button>
+              ))}
+            </div>
+          </>)}
+
+          <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">{source === "print" ? "Escolha o print" : source === "colar" ? "Cole a lista" : "Anexe o arquivo"}</h3></div>
+          {["print", "cpdf", "cplan", "colar", "ext"].includes(source) ? <CarteiraImport key={source} fonte={source} commitPrint={commitPrint} investments={investments} goTab={goTab} /> : (<>
+          {source !== "colar" && <button className="drop" onClick={() => fileRef.current && fileRef.current.click()}>
             <IconUpload size={26} color={TEAL} />
-            <b>Escolher arquivo</b>
-            <span>{source === "nota" ? "PDF da nota de corretagem (ou nota de negociação) da sua corretora. Pode escolher várias." : source === "b3" ? "Planilhas de Posição, Negociação ou Movimentação (Excel ou CSV). Pode escolher várias." : "OFX, CSV ou PDF baixados do app ou site do banco. Pode escolher vários."}</span>
-          </button>
-          <input ref={fileRef} type="file" multiple accept={source === "nota" ? ".pdf,application/pdf" : source === "b3" ? ".xlsx,.xls,.csv" : ".ofx,.ofc,.qfx,.csv,.txt,.pdf,application/pdf,text/csv"} style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+            <b>{source === "nota" || source === "ext" ? "Escolher arquivo ou foto" : "Escolher arquivo"}</b>
+            <span>{source === "nota" ? "PDF da nota de qualquer corretora, ou foto da nota. Pode escolher várias de uma vez." : source === "b3" ? "Planilhas de Posição, Negociação ou Movimentação (Excel ou CSV). Pode escolher várias." : source === "cpdf" ? "PDF de posição, custódia ou extrato mensal da corretora." : source === "cplan" ? "Excel (.xlsx, .xls) ou CSV com código, quantidade e preço médio." : source === "ext" ? "PDF do extrato mensal, CSV ou print da carteira da corretora no exterior." : "PDF, CSV ou OFX da fatura, baixado do app ou site do banco."}</span>
+          </button>}
+          <input ref={fileRef} type="file" multiple accept={source === "nota" ? ".pdf,application/pdf,image/*" : source === "b3" ? ".xlsx,.xls,.csv" : source === "cpdf" ? ".pdf,application/pdf" : source === "cplan" ? ".xlsx,.xls,.csv,.ods,text/csv" : source === "ext" ? ".pdf,.csv,.xlsx,application/pdf,image/*" : ".ofx,.ofc,.qfx,.csv,.txt,.pdf,application/pdf,text/csv"} style={{ display: "none" }} onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
           {busy && <div className="field-hint" style={{ marginTop: 10 }}>{busy}</div>}
           {error && <div className="note-bad">{error}</div>}
           {pwdFile && (
@@ -8526,33 +8937,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
               <div className="field" style={{ display: "flex", alignItems: "flex-end" }}><button className="btn btn-primary" onClick={() => handleFiles([pwdFile], password)}>Abrir PDF</button></div>
             </div>
           )}
-          {source === "nota" ? (
-          <div className="tips" id="nota-tips">
-            <b>Como funciona</b>
-            <span>1. Baixe a nota no app ou site da corretora (em geral em <b>Extratos</b> ou <b>Notas de corretagem</b>), ou use o PDF que chega por e-mail.</span>
-            <span>2. Anexe aqui. O app lê cada compra e venda de ações, FIIs e ETFs, com data, quantidade e preço.</span>
-            <span>O <b>preço médio</b> de cada ativo é recalculado com o preço de compra da nota, somando ao que você já tem na carteira.</span>
-            <span>3. Confira a lista e toque em Importar. Notas já importadas não entram de novo.</span>
-            <span>As taxas da nota (corretagem, emolumentos) não são somadas ao preço. Opções, termo e futuros ficam de fora.</span>
-            <span>O arquivo é lido no seu celular e não é enviado para lugar nenhum.</span>
-          </div>
-          ) : source === "b3" ? (
-          <div className="tips">
-            <b>Como baixar da B3</b>
-            <span>1. Entre em <b>investidor.b3.com.br</b> com seu CPF e senha.</span>
-            <span>2. Vá em <b>Extratos</b> e escolha <b>Negociação</b>. Filtre todo o período desde a sua primeira compra e baixe em Excel. É dela que sai o preço médio correto.</span>
-            <span>3. Depois, em <b>Posição</b>, baixe a planilha atual. Ela atualiza as cotações e confere as quantidades.</span>
-            <span>A planilha de <b>Movimentação</b> também funciona. Os proventos dela são ignorados, e desdobramentos e bonificações aparecem como aviso para ajuste manual.</span>
-          </div>
-          ) : (
-          <div className="tips">
-            <b>Qual formato escolher?</b>
-            <span><b>OFX</b> é o mais confiável. Quase todo banco oferece em “Extrato” → “Exportar” ou “Baixar”.</span>
-            <span><b>CSV</b> também funciona bem. O Nubank, por exemplo, envia a fatura em CSV por e-mail.</span>
-            <span><b>PDF</b> funciona na maioria dos casos, mas cada banco monta o arquivo de um jeito. Por isso, sempre confira a revisão antes de importar.</span>
-            <span>Nada é gravado antes de você confirmar, e o arquivo não sai do seu celular.</span>
-          </div>
-          )}
+          <ImportDicas source={source} />
           </>)}
         </div>
       )}
@@ -8564,8 +8949,8 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
             <Kpi label="Compras e vendas" value={b3rows.filter((r) => r.kind === "trade" && r.action !== "ignorar").length} sub="lançamentos novos" />
             {b3info && b3info.nota && !b3rows.some((r) => r.kind === "pos") ? (
               <>
-                <Kpi label="Compras" value={fmtBRL(b3rows.filter((r) => r.action !== "ignorar" && r.side === "compra").reduce((a, r) => a + r.amount, 0))} sub="total a importar" />
-                <Kpi label="Vendas" value={fmtBRL(b3rows.filter((r) => r.action !== "ignorar" && r.side === "venda").reduce((a, r) => a + r.amount, 0))} tone="var(--brick)" sub="total a importar" />
+                <Kpi label="Compras" value={(b3rows.length && b3rows.every((r) => r.moeda === "USD") ? fmtUSD : fmtBRL)(b3rows.filter((r) => r.action !== "ignorar" && r.side === "compra").reduce((a, r) => a + r.amount, 0))} sub="total a importar" />
+                <Kpi label="Vendas" value={(b3rows.length && b3rows.every((r) => r.moeda === "USD") ? fmtUSD : fmtBRL)(b3rows.filter((r) => r.action !== "ignorar" && r.side === "venda").reduce((a, r) => a + r.amount, 0))} tone="var(--brick)" sub="total a importar" />
               </>
             ) : (
               <>
@@ -8600,16 +8985,16 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
                     <div className="imp-main">
                       <div className="imp-desc">{r.kind === "trade" ? `${r.side === "compra" ? "Compra" : "Venda"} · ${r.ticker || r.spec}` : r.ticker}</div>
                       <div className="line-sub">
-                        {r.kind === "trade" ? `${fmtDatePt(r.date)} · ${r.category}${r.qty > 0 ? ` · ${Number(r.qty)} x ${fmtBRL(r.price)}` : ""}` : `${r.category}${r.qty > 0 ? ` · ${Number(r.qty)} un. · fechamento ${fmtBRL(r.price)}` : ""}`}
+                        {r.kind === "trade" ? `${fmtDatePt(r.date)} · ${r.category}${r.qty > 0 ? ` · ${fmtQty(r.qty)} x ${(r.moeda === "USD" ? fmtUSD : fmtBRL)(r.price)}` : ""}` : `${r.category}${r.qty > 0 ? ` · ${Number(r.qty)} un. · fechamento ${fmtBRL(r.price)}` : ""}`}
                         {r.nota && r.ticker ? " · na nota: " + r.spec : ""}
-                        {r.pmDepois ? <span className="pm-line" data-pm>{r.pmAntes ? <>Preço médio: {fmtBRL(r.pmAntes)} → <b>{fmtBRL(r.pmDepois)}</b></> : <>Preço médio inicial: <b>{fmtBRL(r.pmDepois)}</b></>}</span> : null}
+                        {r.pmDepois ? <span className="pm-line" data-pm>{r.pmAntes ? <>Preço médio: {(r.moeda === "USD" ? fmtUSD : fmtBRL)(r.pmAntes)} → <b>{(r.moeda === "USD" ? fmtUSD : fmtBRL)(r.pmDepois)}</b></> : <>Preço médio inicial: <b>{(r.moeda === "USD" ? fmtUSD : fmtBRL)(r.pmDepois)}</b></>}</span> : null}
                         {r.reason ? " · " + r.reason : ""}
                       </div>
                     </div>
-                    <div className="mono imp-amt" style={{ color: r.kind === "trade" ? (r.side === "compra" ? "var(--text)" : "var(--brick)") : "var(--teal)" }}>{fmtBRL(r.kind === "trade" ? r.amount : r.value)}</div>
+                    <div className="mono imp-amt" style={{ color: r.kind === "trade" ? (r.side === "compra" ? "var(--text)" : "var(--brick)") : "var(--teal)" }}>{(r.moeda === "USD" ? fmtUSD : fmtBRL)(r.kind === "trade" ? r.amount : r.value)}</div>
                   </div>
                   <div className="imp-ctrl">
-                    {r.nota && <input className={`tk-in ${r.semTicker ? "need" : ""}`} aria-label="Código do ativo" placeholder="Código (PETR4)" maxLength={7} value={(edits[r.id] && edits[r.id].ticker !== undefined) ? edits[r.id].ticker : r.ticker} onChange={(e) => setEdit(r.id, { ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} />}
+                    {r.nota && <input className={`tk-in ${r.semTicker ? "need" : ""}`} aria-label="Código do ativo" placeholder={r.moeda === "USD" ? "Código (AAPL)" : "Código (PETR4)"} maxLength={7} value={(edits[r.id] && edits[r.id].ticker !== undefined) ? edits[r.id].ticker : r.ticker} onChange={(e) => setEdit(r.id, { ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.]/g, "") })} />}
                     <select value={r.action} onChange={(e) => setEdit(r.id, { action: e.target.value })}>
                       {b3Options(r).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
