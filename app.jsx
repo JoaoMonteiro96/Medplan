@@ -1837,7 +1837,7 @@ function App() {
       const v = vinculoMap[s.vinculoId];
       const delayed = payDateOf(s) !== s.date;
       items.push({ key: "shift-" + s.id, vinculoId: s.vinculoId, forma: formaDe(v), nome: v ? v.nome : "(vínculo removido)", cor: v ? v.cor : GOLD,
-        tipo: "plantao", dateIso: payDateOf(s), dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: netOf(s.gross, v ? v.taxOverride : null),
+        tipo: "plantao", dateIso: payDateOf(s), dateLabel: delayed ? `plantão ${fmtDatePt(s.date).slice(0, 5)} · paga em ${fmtDatePt(payDateOf(s))}` : fmtDatePt(s.date), gross: Number(s.gross || 0), net: formaDe(v) === "pj" ? netOf(s.gross, v ? v.taxOverride : null) : Number(s.gross || 0),
         recebido: !!s.recebido, toggle: () => toggleShiftReceived(s.id), removable: true, remove: () => removeShift(s.id), ref: { t: "shift", id: s.id } });
     });
     const refLabel = (ck) => { const [cy, cm] = ck.split("-").map(Number); return MONTHS_ABBR_PT[cm - 1] + "/" + cy; };
@@ -1846,23 +1846,32 @@ function App() {
       const ck = shiftMonthKey(mk, -d);
       if (v.startMonth > ck) return;
       items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, forma: formaDe(v), nome: v.nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, v.diaRecebimento || 5)),
-        dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: netOf(v.valorMensal, v.taxOverride),
+        dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: formaDe(v) === "pj" ? netOf(v.valorMensal, v.taxOverride) : Number(v.valorMensal || 0),
         recebido: !!(v.recebidoMonths && v.recebidoMonths[ck]), toggle: () => toggleVinculoMensalRecebido(v.id, ck), removable: false, ref: { t: "vinculo", id: v.id } });
+      if (formaDe(v) === "clt") {
+        const sal = Number(v.valorMensal || 0);
+        const extraClt = (k, nome, valor, dia) => items.push({ key: "clt-" + v.id + "-" + mk + "-" + k, vinculoId: v.id, forma: "clt", nome: v.nome + " · " + nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, dia)),
+          dateLabel: nome, gross: valor, net: valor, recebido: !!(v.recebidoMonths && v.recebidoMonths[mk + "-" + k]), toggle: () => toggleVinculoMensalRecebido(v.id, mk + "-" + k), removable: false, ref: { t: "vinculo", id: v.id } });
+        if (v.clt13 && m === 10) extraClt("13a", "13º salário (1ª parcela)", sal / 2, 30);
+        if (v.clt13 && m === 11) extraClt("13b", "13º salário (2ª parcela)", sal / 2, 20);
+        if (v.feriasMes !== null && v.feriasMes !== undefined && v.feriasMes !== "" && Number(v.feriasMes) === m) extraClt("ferias", "1/3 de férias", sal / 3, v.diaRecebimento || 5);
+      }
     });
     extraRecurringIncomes.forEach((e) => {
       const d = Number(e.prazoMeses || 0);
       const ck = shiftMonthKey(mk, -d);
       if (e.startMonth > ck) return;
-      items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, forma: formaDe(e), nome: e.description, cor: SLATE, tipo: "extra", dateIso: dateStr(y, m, clampDay(y, m, e.diaRecebimento || 5)),
-        dateLabel: d > 0 ? `dia ${e.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${e.diaRecebimento || 5} · recorrente`, gross: Number(e.amount || 0), net: netOf(e.amount, e.taxOverride),
+      items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, forma: e.tipoReceita === "dividendos" ? "div" : e.tipoReceita === "prolabore" ? "clt" : e.tipoReceita === "aluguel" ? "aluguel" : e.tipoReceita ? "outro" : formaDe(e), nome: e.description, cor: SLATE, tipo: "extra", dateIso: dateStr(y, m, clampDay(y, m, e.diaRecebimento || 5)),
+        dateLabel: d > 0 ? `dia ${e.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${e.diaRecebimento || 5} · recorrente`, gross: Number(e.amount || 0), net: e.tipoReceita ? liquidoReceita(e, e.amount, netOf) : netOf(e.amount, e.taxOverride), tipoReceita: e.tipoReceita,
         recebido: !!(e.recebidoMonths && e.recebidoMonths[ck]), toggle: () => toggleExtraIncomeRecebido(e.id, ck), removable: true, remove: () => removeExtraRecurringIncome(e.id), ref: { t: "extra", id: e.id } });
     });
     oneOffIncomes.filter((o) => inMonth(o.date, y, m)).forEach((o) => {
-      items.push({ key: "one-" + o.id, vinculoId: null, forma: o.forma || "pf", nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · receita extra",
-        gross: Number(o.amount || 0), net: o.taxOverride !== undefined && o.taxOverride !== null && String(o.taxOverride) !== "" ? netOf(o.amount, o.taxOverride) : Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
+      items.push({ key: "one-" + o.id, vinculoId: null, forma: o.tipoReceita === "13" ? "clt" : "outro", tipoReceita: o.tipoReceita, nome: o.description, cor: "#3B82C4", tipo: "avulsa", dateIso: o.date, dateLabel: fmtDatePt(o.date) + " · receita extra",
+        gross: Number(o.amount || 0), net: o.tipoReceita ? liquidoReceita(o, o.amount, netOf) : o.taxOverride !== undefined && o.taxOverride !== null && String(o.taxOverride) !== "" ? netOf(o.amount, o.taxOverride) : Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
         removable: true, removeOne: () => setOneOffIncomes((prev) => prev.filter((x) => x.id !== o.id)), ref: { t: "avulsa", id: o.id } });
     });
-    items.forEach((it) => { if (FORMA_CURTA[it.forma]) it.dateLabel += " · " + FORMA_CURTA[it.forma]; });
+    const suf = { ...FORMA_CURTA, div: "isento", aluguel: "aluguel" };
+    items.forEach((it) => { if (suf[it.forma] && !it.key.startsWith("clt-")) it.dateLabel += " · " + suf[it.forma]; });
     return items;
   };
 
@@ -2000,7 +2009,7 @@ function App() {
   };
 
   const addVinculo = (data) => {
-    const v = { id: uid(), nome: data.nome, cor: data.cor, tipo: data.tipo, forma: data.forma || "pj", taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride) };
+    const v = { id: uid(), nome: data.nome, cor: data.cor, tipo: data.tipo, forma: data.forma || "pj", clt13: !!data.clt13, feriasMes: data.feriasMes === undefined ? null : data.feriasMes, taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride) };
     if (data.tipo === "plantao") v.prazoPadrao = Number(data.prazoPadrao) || 0;
     if (data.tipo === "mensal") {
       v.prazoMeses = Number(data.prazoMeses) || 0;
@@ -2021,15 +2030,15 @@ function App() {
   const updateVinculoPrazo = (id, val) => setVinculos((prev) => prev.map((v) => v.id === id ? (v.tipo === "mensal" ? { ...v, prazoMeses: Number(val) || 0 } : { ...v, prazoPadrao: Number(val) || 0 }) : v));
   const updateVinculo = (id, data) => setVinculos((prev) => prev.map((v) => {
     if (v.id !== id) return v;
-    const n = { ...v, nome: data.nome, cor: data.cor, forma: data.forma || v.forma || "pj", taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) };
+    const n = { ...v, nome: data.nome, cor: data.cor, forma: data.forma || v.forma || "pj", clt13: !!data.clt13, feriasMes: data.feriasMes === undefined ? v.feriasMes : data.feriasMes, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) };
     if (v.tipo === "plantao") n.prazoPadrao = Number(data.prazoPadrao) || 0;
     else { n.prazoMeses = Number(data.prazoMeses) || 0; n.valorMensal = Number(data.valorMensal) || 0; n.diaRecebimento = Number(data.diaRecebimento) || 5; if (Array.isArray(data.escala) && data.escala.length) n.escala = data.escala; else delete n.escala; }
     return n;
   }));
-  const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, forma: data.forma || e.forma || "pj", description: data.description, amount: Number(data.amount) || 0, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) } : e));
+  const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, forma: data.forma || e.forma || "pj", tipoReceita: data.tipoReceita || e.tipoReceita, description: data.description, amount: Number(data.amount) || 0, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) } : e));
   const updateShift = (id, data) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, gross: Number(data.gross) || 0, hours: Number(data.hours) || 0, date: data.date, prazoDias: Number(data.prazoDias) || 0, payDate: addDaysIso(data.date, Number(data.prazoDias) || 0) } : s));
-  const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || o.forma || "pf" } : o));
-  const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || "pf", source: "manual" }]);
+  const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || o.forma || "pf", tipoReceita: data.tipoReceita || o.tipoReceita } : o));
+  const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || "pf", tipoReceita: data.tipoReceita || "outro", source: "manual" }]);
   const updateExpense = (id, d) => setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, description: d.description, amount: Number(d.amount) || 0, dueDate: d.dueDate || e.dueDate, category: d.category || e.category, ...(d.dedutivel !== undefined ? { dedutivel: !!d.dedutivel } : {}) } : e));
   // conta que se repete: "só este mês" guarda um ajuste no mês; "daqui em diante" encerra a antiga no mês anterior e cria outra a partir deste
   const updateRecurringExpense = (id, d, mk, modo) => setRecurringExpenses((prev) => {
@@ -2063,20 +2072,40 @@ function App() {
   };
   const removeShift = (id) => setShifts((prev) => prev.filter((s) => s.id !== id));
   // Plantão lançado direto pelo nome do local: o local é criado na hora se ainda não existir. Várias datas = plantão que se repete (uma série)
-  const addPlantao = ({ local, gross, hours, prazoDias, datas, taxa }) => {
+  const addPlantao = ({ local, gross, hours, prazoDias, datas, taxa, forma, fixo }) => {
     const tx = taxa === undefined || taxa === null || String(taxa).trim() === "" ? undefined : Number(taxa);
     const nome = String(local || "").replace(/\s+/g, " ").trim().slice(0, 60);
     if (!nome || !datas || !datas.length) return null;
     const prazo = Math.max(0, Number(prazoDias) || 0), chave = stripAcc(nome);
     const ja = vinculos.find((v) => v.tipo === "plantao" && stripAcc(v.nome).replace(/\s+/g, " ").trim() === chave);
     const vid = ja ? ja.id : uid();
-    if (ja) setVinculos((prev) => prev.map((v) => (v.id === vid ? { ...v, prazoPadrao: prazo, ...(tx !== undefined ? { taxOverride: tx } : {}) } : v)));
-    else setVinculos((prev) => [...prev, { id: vid, nome, cor: PALETTE[prev.length % PALETTE.length], tipo: "plantao", taxOverride: tx !== undefined ? tx : null, prazoPadrao: prazo }]);
-    const serie = datas.length > 1 ? uid() : null, base = uid();
+    const extra = { ...(forma ? { forma } : {}) };
+    if (ja) setVinculos((prev) => prev.map((v) => (v.id === vid ? { ...v, ...extra, prazoPadrao: prazo, ...(tx !== undefined ? { taxOverride: tx } : {}), ...(fixo ? { fixos: [...(v.fixos || []), fixo] } : {}) } : v)));
+    else setVinculos((prev) => [...prev, { id: vid, nome, cor: PALETTE[prev.length % PALETTE.length], tipo: "plantao", ...extra, taxOverride: tx !== undefined ? tx : null, prazoPadrao: prazo, ...(fixo ? { fixos: [fixo] } : {}) }]);
+    const serie = fixo ? fixo.id : datas.length > 1 ? uid() : null, base = uid();
     setShifts((prev) => [...prev, ...datas.map((date, n) => ({ id: base + "-" + n, date, vinculoId: vid, gross: Number(gross) || 0, hours: Number(hours) || 0, recebido: false, prazoDias: prazo, payDate: addDaysIso(date, prazo), ...(serie ? { serie } : {}) }))]);
     return vid;
   };
-  const removeShiftSerie = (serie, desde) => setShifts((prev) => prev.filter((s) => !(s.serie && s.serie === serie && s.date >= desde)));
+  const removeShiftSerie = (serie, desde) => {
+    setShifts((prev) => prev.filter((s) => !(s.serie && s.serie === serie && s.date >= desde)));
+    setVinculos((prev) => prev.map((v) => (v.fixos || []).some((f) => f.id === serie) ? { ...v, fixos: v.fixos.map((f) => f.id === serie ? { ...f, fim: desde } : f) } : v));
+  };
+  // plantão fixo: mantém os próximos 6 meses criados no Calendário
+  useEffect(() => {
+    if (!vinculos.some((v) => (v.fixos || []).length)) return;
+    const hoje = todayStr(), alvo = isoDe(new Date(Date.now() + 180 * 864e5)), limite = isoDe(new Date(Date.now() + 120 * 864e5));
+    const novos = [], ates = {};
+    vinculos.forEach((v) => (v.fixos || []).forEach((f) => {
+      if (f.fim || !f.ate || f.ate >= limite) return;
+      const desde = isoDe(new Date(new Date(f.ate + "T12:00:00").getTime() + 864e5));
+      const ds = fixoDatas(f, desde > hoje ? desde : hoje, alvo);
+      ds.forEach((date, n) => novos.push({ id: f.id + "-" + date, date, vinculoId: v.id, gross: Number(f.gross) || 0, hours: Number(f.hours) || 0, recebido: false, prazoDias: Number(f.prazo) || 0, payDate: addDaysIso(date, Number(f.prazo) || 0), serie: f.id }));
+      ates[f.id] = alvo;
+    }));
+    if (!Object.keys(ates).length) return;
+    setShifts((prev) => { const ja = new Set(prev.map((s) => s.serie + "|" + s.date)); return [...prev, ...novos.filter((s) => !ja.has(s.serie + "|" + s.date))]; });
+    setVinculos((prev) => prev.map((v) => (v.fixos || []).some((f) => ates[f.id]) ? { ...v, fixos: v.fixos.map((f) => ates[f.id] ? { ...f, ate: ates[f.id] } : f) } : v));
+  }, [vinculos.length, loaded]);
   const toggleShiftReceived = (id) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, recebido: !s.recebido } : s));
   const addPresenca = (day, vinculoId, hours) => {
     setPresencas((prev) => [...prev, { id: uid(), date: dateStr(viewYear, viewMonth, day), vinculoId, hours: Number(hours) || 0 }]);
@@ -2084,7 +2113,7 @@ function App() {
   const removePresenca = (id) => setPresencas((prev) => prev.filter((p) => p.id !== id));
 
   const addExtraRecurringIncome = (data) => {
-    setExtraRecurringIncomes((prev) => [...prev, { id: uid(), forma: data.forma || "pj", description: data.description, amount: Number(data.amount) || 0,
+    setExtraRecurringIncomes((prev) => [...prev, { id: uid(), forma: data.forma || "pj", tipoReceita: data.tipoReceita || "outro", description: data.description, amount: Number(data.amount) || 0,
       diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, startMonth: data.startMonth || monthKey, taxOverride: data.taxOverride === "" ? null : Number(data.taxOverride), recebidoMonths: {} }]);
   };
   const removeExtraRecurringIncome = (id) => setExtraRecurringIncomes((prev) => prev.filter((e) => e.id !== id));
@@ -3757,6 +3786,42 @@ function App() {
         .tb-gear:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         @media (max-width: 720px) { .tb-gear { width: 34px; height: 34px; } .tb-right { gap: 6px; } }
 
+        /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
+        .fm-ops { display: flex; flex-direction: column; gap: 8px; }
+        .fm-op { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 14px; padding: 11px 12px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
+        .fm-op.on { border-color: var(--teal); background: #F0FDF4; }
+        .fm-op i { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-style: normal; font-size: 19px; }
+        .fm-op b { display: block; font-size: 14.5px; } .fm-op small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35; }
+        .fm-op em { display: inline-block; font-style: normal; font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 2px 7px; margin-top: 6px; }
+        .fm-op em.warn { background: #FEF3C7; color: #92400E; } .fm-op em.ok { background: #DCFCE7; color: #15803D; }
+        .fm-rad { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #CBD5E1; } .fm-op.on .fm-rad { border: 6px solid var(--teal); }
+        .fm-op:focus-visible, .add-op:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        .rc-info { background: #F1F5F9; color: #334155; border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.45; margin: 4px 0 12px; }
+        .rc-info.warn { background: #FEF3C7; color: #92400E; } .rc-info.ok { background: #ECFDF5; color: #166534; margin-top: 12px; }
+        .rc-res { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin-top: 10px; font-size: 13.5px; }
+        .rc-res > div { display: flex; justify-content: space-between; padding: 3px 0; } .rc-res .t { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 7px; font-weight: 800; } .rc-res .t b { color: #15803D; }
+        .add-sheet { max-height: 92vh; overflow-y: auto; }
+        .add-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .add-op { display: grid; grid-template-columns: 44px minmax(0, 1fr) 18px; gap: 12px; align-items: center; width: 100%; text-align: left; border: 1.5px solid var(--border); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; }
+        .add-op:hover { border-color: var(--teal); }
+        .add-op i { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; font-style: normal; font-size: 21px; }
+        .add-op b { display: block; font-size: 15px; } .add-op small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35; }
+        .add-op > svg { color: var(--text-dim); }
+        .add-mais { display: flex; gap: 18px; justify-content: center; margin-top: 6px; }
+        .seg2 { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface-3); border-radius: 11px; padding: 3px; }
+        .seg2 button { border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-dim); padding: 9px 6px; border-radius: 9px; cursor: pointer; }
+        .seg2 button.on { background: var(--surface, #fff); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+        .pl-add .field { margin-bottom: 12px; } .pl-add .esc-grid { margin-bottom: 14px; }
+        .pl-add .esc-grid select, .pl-add .esc-grid input, .pl-add input[type=date] { width: 100%; height: 44px; border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; font: inherit; font-size: 15px; background: var(--surface, #fff); color: var(--text); }
+        .pl-add .esc-grid input:focus, .pl-add .esc-grid select:focus { outline: 2px solid var(--teal); outline-offset: 0; border-color: var(--teal); }
+        .fz-add-main { font-weight: 700; }
+        .ct-fm { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--border); }
+        .ct-fm:first-of-type { border-top: none; }
+        .ct-fm i { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-style: normal; font-size: 17px; }
+        .ct-fm-o { grid-column: 2 / -1; font-size: 12.5px; color: var(--text); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; }
+        :root[data-theme="dark"] .fm-op.on { background: rgba(52,211,153,.10); }
+        :root[data-theme="dark"] .rc-info { background: var(--surface-3); color: var(--text); } :root[data-theme="dark"] .rc-info.warn { background: rgba(245,158,11,.14); color: #FCD34D; } :root[data-theme="dark"] .rc-info.ok { background: rgba(52,211,153,.12); color: #6EE7B7; }
+
         /* ================= v45: escala fixa mais simples ================= */
         .esc { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
         .esc-sum { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; align-items: center; border: 1px solid var(--border); border-radius: 12px; padding: 6px 6px 6px 12px; background: var(--surface, #fff); }
@@ -4248,7 +4313,7 @@ function App() {
           />
         )}
         {activeTab === "faturamento" && (
-          <FaturamentoTab
+          <FaturamentoTab onAdd={() => setQuickOpen(true)} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0}
             expanded={expanded} toggleSection={toggleSection} viewMonth={viewMonth} monthKey={monthKey}
             monthIncomeItems={monthIncomeItems}
             totalGross={totalGross} totalNet={totalNet}
@@ -4320,15 +4385,9 @@ function App() {
           onPick={(y, m) => { setPickerYear(null); goMonth(y, m); }} onClose={() => setPickerYear(null)} />
       )}
       {quickOpen && (
-        <div className="sheet-backdrop" onClick={() => setQuickOpen(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="sheet-title">O que você quer lançar?</div>
-            {[["plantao", "Plantão", "no calendário", IconCalendar, TEAL], ["cargo", "Cargo fixo", "diarismo, coordenação, preceptoria", IconCalendar, "#7C5CBF"], ["despesa", "Despesa", "conta fixa ou pontual", IconWallet, BRICK], ["aporte", "Investimento", "aporte, compra ou venda", IconTrending, "#2563EB"], ["importar", "Importar extrato", "OFX, CSV ou PDF do banco", IconUpload, SLATE]].map(([k, l, sub, Ic, c]) => (
-              <button key={k} className="sheet-item" onClick={() => quickGo(k)}><span className="sheet-ico" style={{ background: c + "1a", color: c }}><Ic size={18} /></span><span><b>{l}</b><small>{sub}</small></span></button>
-            ))}
-          </div>
-        </div>
+        <AddSheet inicial={typeof quickOpen === "string" ? quickOpen : null} onClose={() => setQuickOpen(false)} onDespesa={() => quickGo("despesa")} onOutro={(k) => quickGo(k)}
+          vinculos={vinculos} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0} monthKey={monthKey}
+          addPlantao={addPlantao} addVinculo={addVinculo} addExtra={addExtraRecurringIncome} addOneOff={addOneOff} />
       )}
 
       {cargoOpen && (
@@ -4341,6 +4400,145 @@ function App() {
         {session ? `Conectado como ${session.user.email}. Seus dados ficam salvos na nuvem e neste aparelho.` : "Os dados ficam salvos neste aparelho. Para usar em mais de um aparelho, conecte a nuvem em Configurações."}
       </div>
       </div>
+    </div>
+  );
+}
+
+// ================= adicionar: uma só porta de entrada (plantão, cargo, receitas, despesa) =================
+const isoDe = (d) => dateStr(d.getFullYear(), d.getMonth(), d.getDate());
+const segundaDe = (iso) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; };
+// datas de um plantão fixo entre "desde" e "ate"
+function fixoDatas(f, desde, ate) {
+  const out = []; if (!f || !(f.dias || []).length) return out;
+  const d = new Date((desde > f.inicio ? desde : f.inicio) + "T12:00:00"), fim = new Date(ate + "T12:00:00"), m0 = segundaDe(f.inicio);
+  for (let n = 0; d <= fim && n < 800; n++, d.setDate(d.getDate() + 1)) {
+    if (!f.dias.includes(d.getDay())) continue;
+    const iso = isoDe(d);
+    if (f.fim && iso >= f.fim) break;
+    if (f.cada === "mes") {
+      const ult = d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      const occ = Math.floor((d.getDate() - 1) / 7) + 1;
+      if (!(Number(f.ordem) === 5 ? ult : occ === (Number(f.ordem) || 1))) continue;
+    } else if (Number(f.cada) > 1) {
+      const w = Math.round((segundaDe(iso) - m0) / (7 * 864e5));
+      if (w < 0 || w % Number(f.cada) !== 0) continue;
+    }
+    out.push(iso);
+  }
+  return out;
+}
+const ADD_OPCOES = [
+  ["plantao", "Plantão", "12 ou 24 horas. Um dia só ou fixo, repetindo toda semana.", "🩺", "#FEF3C7"],
+  ["cargo", "Cargo fixo", "Diarismo, coordenação, supervisão, preceptoria. Recebe todo mês.", "🏥", "#DBEAFE"],
+  ["recorrente", "Receita que se repete", "Aluguel, dividendos, pró-labore. Entra todo mês.", "🔁", "#EDE9FE"],
+  ["unica", "Receita única", "Processo, 13º, um Pix de quem te devia, restituição.", "💰", "#DCFCE7"],
+  ["despesa", "Despesa", "Conta fixa ou gasto do mês.", "💳", "#FEE2E2"],
+];
+function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, monthKey, addPlantao, addVinculo, addExtra, addOneOff }) {
+  const [kind, setKind] = useState(inicial || null);
+  const [funcao, setFuncao] = useState("Diarismo");
+  const titulo = kind ? (ADD_OPCOES.find((o) => o[0] === kind) || [])[1] : "O que você quer adicionar?";
+  useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet add-sheet" role="dialog" aria-label={titulo} onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="add-top">{kind && !inicial && <button type="button" className="link-btn" onClick={() => setKind(null)}>‹ Voltar</button>}<div className="sheet-title" style={{ margin: 0 }}>{titulo}</div></div>
+        {!kind && (
+          <>
+            {ADD_OPCOES.map(([k, l, d, ic, bg]) => (
+              <button key={k} type="button" className="add-op" data-add={k} onClick={() => (k === "despesa" ? onDespesa() : setKind(k))}>
+                <i style={{ background: bg }} aria-hidden="true">{ic}</i><span><b>{l}</b><small>{d}</small></span><IconChevronRight size={18} />
+              </button>
+            ))}
+            <div className="add-mais">
+              <button type="button" className="link-btn" onClick={() => onOutro("aporte")}>Investimento</button>
+              <button type="button" className="link-btn" onClick={() => onOutro("importar")}>Importar extrato</button>
+            </div>
+          </>
+        )}
+        {kind === "plantao" && <PlantaoAddForm vinculos={vinculos} taxaPadrao={taxaPadrao} onSave={(d) => { addPlantao(d); onClose(); }} />}
+        {kind === "cargo" && (
+          <>
+            <div className="field"><label>Função</label>
+              <div className="chip-row">{["Diarismo", "Coordenação", "Supervisão", "Preceptoria", "Outra"].map((p) => <button key={p} type="button" className={`chip sm ${funcao === p ? "active" : ""}`} aria-pressed={funcao === p} onClick={() => setFuncao(p)}>{p}</button>)}</div>
+            </div>
+            <VinculoForm key={funcao} fixo taxaPadrao={taxaPadrao} defaultNome={funcao === "Outra" ? "" : funcao} defaultStartMonth={monthKey} onSubmit={(d) => { addVinculo(d); onClose(); }} />
+          </>
+        )}
+        {kind === "recorrente" && <ExtraIncomeForm onSubmit={(d) => { addExtra({ ...d, startMonth: monthKey }); onClose(); }} onCancel={onClose} />}
+        {kind === "unica" && <OneOffEditForm novo defaultDate={todayStr()} onSubmit={(d) => { addOneOff(d); onClose(); }} onCancel={onClose} />}
+      </div>
+    </div>
+  );
+}
+function PlantaoAddForm({ vinculos = [], taxaPadrao, onSave }) {
+  const locais = vinculos.filter((v) => v.tipo === "plantao");
+  const [local, setLocal] = useState("");
+  const [modo, setModo] = useState("um");
+  const [data, setData] = useState(todayStr());
+  const [dias, setDias] = useState([new Date().getDay()]);
+  const [cada, setCada] = useState("1");
+  const [ordem, setOrdem] = useState(1);
+  const [inicio, setInicio] = useState(todayStr());
+  const [dur, setDur] = useState(12);
+  const [durOutra, setDurOutra] = useState("");
+  const [valor, setValor] = useState("");
+  const [forma, setForma] = useState("pj");
+  const [taxa, setTaxa] = useState(taxaPadrao ? String(taxaPadrao).replace(".", ",") : "");
+  const [prazo, setPrazo] = useState(0);
+  const [erro, setErro] = useState("");
+  const escolherLocal = (v) => { setLocal(v.nome); setForma(formaDe(v)); if (v.taxOverride !== null && v.taxOverride !== undefined && formaDe(v) === "pj") setTaxa(String(v.taxOverride).replace(".", ",")); setPrazo(Number(v.prazoPadrao) || 0); setErro(""); };
+  const horas = dur === "outra" ? Number(String(durOutra).replace(",", ".")) || 0 : dur;
+  const tx = forma === "pj" ? Number(String(taxa).replace(",", ".")) || 0 : 0;
+  const liq = (Number(valor) || 0) * (1 - tx / 100);
+  const cfg = { dias, cada: cada === "mes" ? "mes" : Number(cada), ordem, inicio };
+  const datas = modo === "um" ? [data] : fixoDatas(cfg, inicio, isoDe(new Date(new Date(inicio + "T12:00:00").getTime() + 180 * 864e5)));
+  const porMes = modo === "fixo" ? (cada === "mes" ? 1 : (dias.length * 4.33) / (Number(cada) || 1)) : 0;
+  const prox = modo === "fixo" ? datas.slice(0, 3).map((d) => fmtDatePt(d).slice(0, 5)) : [];
+  const salvar = () => {
+    if (!local.trim()) { setErro("Diga onde é o plantão."); return; }
+    if (!(Number(valor) > 0)) { setErro("Informe o valor do plantão."); return; }
+    if (!(horas > 0)) { setErro("Informe a duração do plantão."); return; }
+    if (forma === "pj" && String(taxa).trim() === "") { setErro("Informe o imposto da sua empresa."); return; }
+    if (!datas.length) { setErro(modo === "um" ? "Escolha a data." : "Escolha os dias da semana."); return; }
+    onSave({ local, gross: Number(valor), hours: horas, prazoDias: prazo, datas, taxa: tx, forma, fixo: modo === "fixo" ? { ...cfg, id: uid(), gross: Number(valor), hours: horas, prazo, ate: datas[datas.length - 1] } : null });
+  };
+  return (
+    <div className="mini-form pl-add">
+      <div className="field"><label htmlFor="pa-local">Onde</label><input id="pa-local" value={local} onChange={(e) => { setLocal(e.target.value); setErro(""); }} placeholder="Ex.: Hospital São Lucas" />
+        {locais.length > 0 && <div className="chip-row" style={{ marginTop: 6 }}>{locais.slice(0, 6).map((v) => <button key={v.id} type="button" className={`chip sm ${local === v.nome ? "active" : ""}`} onClick={() => escolherLocal(v)}>{v.nome}</button>)}</div>}</div>
+      <div className="field"><label>Esse plantão é</label>
+        <div className="seg2" role="group"><button type="button" className={modo === "um" ? "on" : ""} aria-pressed={modo === "um"} onClick={() => setModo("um")}>Só um dia</button><button type="button" className={modo === "fixo" ? "on" : ""} aria-pressed={modo === "fixo"} onClick={() => setModo("fixo")}>Fixo, se repete</button></div></div>
+      {modo === "um" ? (
+        <div className="field"><label htmlFor="pa-data">Data</label><input id="pa-data" type="date" value={data} onChange={(e) => setData(e.target.value)} /></div>
+      ) : (
+        <>
+          <div className="field"><label>Dias</label>
+            <div className="esc-dias" role="group" aria-label="Dias da semana">{ORDEM_SEM.map((d) => { const on = dias.includes(d); return <button key={d} type="button" className={`esc-dia ${on ? "on" : ""}`} aria-pressed={on} onClick={() => setDias(on ? dias.filter((x) => x !== d) : [...dias, d])}>{DIAS_SEM[d].slice(0, 1)}<span>{DIAS_SEM[d]}</span></button>; })}</div></div>
+          <div className="esc-grid">
+            <label><span className="esc-l">Frequência</span><select value={cada} onChange={(e) => setCada(e.target.value)}><option value="1">Semanal</option><option value="2">Quinzenal</option><option value="3">A cada 3 semanas</option><option value="mes">Mensal</option></select></label>
+            <label><span className="esc-l">A partir de</span><input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} /></label>
+            {cada === "mes" && <label><span className="esc-l">Semana do mês</span><select value={ordem} onChange={(e) => setOrdem(Number(e.target.value))}>{[1, 2, 3, 4, 5].map((o) => <option key={o} value={o}>{o === 5 ? "Última" : o + "ª"} semana</option>)}</select></label>}
+          </div>
+        </>
+      )}
+      <div className="esc-grid" style={{ marginTop: 10 }}>
+        <div><span className="esc-l">Duração</span><div className="seg2">{[12, 24, "outra"].map((d) => <button key={d} type="button" className={dur === d ? "on" : ""} aria-pressed={dur === d} onClick={() => setDur(d)}>{d === "outra" ? "Outra" : d + "h"}</button>)}</div>
+          {dur === "outra" && <input style={{ marginTop: 6 }} type="text" inputMode="decimal" placeholder="Horas, ex.: 6" value={durOutra} onChange={(e) => setDurOutra(e.target.value.replace(/[^0-9,.]/g, ""))} />}</div>
+        <label><span className="esc-l">Valor do plantão</span><MoneyInput value={valor} onChange={(v) => { setValor(v); setErro(""); }} /></label>
+      </div>
+      <FormaPicker value={forma} onChange={setForma} />
+      {forma === "pj" && <div className="field"><label>Imposto da sua empresa (%)</label><input type="text" inputMode="decimal" value={taxa} onChange={(e) => setTaxa(e.target.value.replace(/[^0-9,.]/g, ""))} placeholder="Ex.: 15,5" />{taxaPadrao ? <div className="field-hint">Sugerido pela Contabilidade: {String(taxaPadrao).replace(".", ",")}%.</div> : null}</div>}
+      <div className="field"><label>Quando paga</label><PrazoPicker unit="dias" value={prazo} onChange={setPrazo} /></div>
+      {Number(valor) > 0 && (
+        <div className="rc-info ok" data-resumo>
+          {modo === "um" ? <>Plantão de {fmtHoras(horas)} em {fmtDatePt(data)}: {fmtBRL(Number(valor))}{forma === "pj" ? <>, fica com você {fmtBRL(liq)}</> : null}.</>
+            : <>{dias.length ? ORDEM_SEM.filter((d) => dias.includes(d)).map((d) => DIAS_SEM[d]).join(", ") : "Escolha os dias"} · {fmtHoras(horas)} · {fmtBRL(Number(valor))}. Cerca de <b>{fmtBRL(liq * porMes)}</b> por mês{forma === "pj" ? ", já sem o imposto" : ""}. Próximos: {prox.join(", ")}. Os plantões entram no Calendário e dá para tirar um dia específico.</>}
+        </div>
+      )}
+      {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
+      <button type="button" className="btn btn-primary" style={{ width: "100%", marginTop: 12 }} onClick={salvar}>{modo === "fixo" ? "Salvar plantão fixo" : "Salvar plantão"}</button>
     </div>
   );
 }
@@ -4396,56 +4594,96 @@ function FormBtns({ label, onSubmit, onCancel, onDelete }) {
   );
 }
 
-// como o trabalho é pago: empresa com nota, pessoa física sem nota ou carteira assinada
+// como o dinheiro do trabalho chega: nota da própria empresa, Pix como sócio de outra empresa ou carteira assinada
 const FORMAS = [
-  ["pj", "Empresa (com nota)", "Você emite nota fiscal pela sua empresa. Entra na agenda de impostos e no controle de notas da Contabilidade."],
-  ["pf", "Pessoa física (sem nota)", "Recebe no seu CPF, por recibo ou RPA. Não tem nota. O imposto pode vir retido na fonte ou ser pago por você no carnê-leão."],
-  ["clt", "Carteira assinada (CLT)", "Salário com holerite. INSS e imposto de renda já vêm descontados. Não tem nota nem guia para pagar."],
+  ["pj", "Nota da minha empresa", "Você emite a nota, paga os impostos e fica com o resto.", "o app calcula o imposto", "#DBEAFE", "🧾"],
+  ["socio", "Pix de empresa em que sou sócio", "Outra empresa paga sua parte direto no seu CPF.", "imposto já pago pela empresa", "#EDE9FE", "🤝"],
+  ["clt", "Carteira assinada", "Salário que já cai líquido na conta. Inclui 13º e férias.", "imposto já descontado", "#DCFCE7", "📄"],
 ];
-const formaDe = (x) => (x && FORMAS.some((f) => f[0] === x.forma) ? x.forma : "pj");
-const FORMA_CURTA = { pj: "", pf: "pessoa física", clt: "carteira assinada" };
+const formaDe = (x) => { const f = x && x.forma === "pf" ? "socio" : x && x.forma; return FORMAS.some((y) => y[0] === f) ? f : "pj"; };
+const FORMA_CURTA = { pj: "", socio: "Pix como sócio", clt: "carteira assinada" };
 function FormaPicker({ value = "pj", onChange }) {
-  const f = FORMAS.find((x) => x[0] === value) || FORMAS[0];
   return (
     <div className="field" style={{ gridColumn: "1 / -1" }}>
-      <label>Como você recebe?</label>
-      <div className="chip-row" role="group" aria-label="Como você recebe">
-        {FORMAS.map(([k, l]) => <button key={k} type="button" className={`chip sm ${value === k ? "active" : ""}`} aria-pressed={value === k} onClick={() => onChange(k)}>{l}</button>)}
+      <label>Como esse dinheiro chega até você?</label>
+      <div className="fm-ops" role="radiogroup" aria-label="Como esse dinheiro chega até você">
+        {FORMAS.map(([k, l, d, selo, bg, ic]) => (
+          <button key={k} type="button" role="radio" aria-checked={value === k} className={`fm-op ${value === k ? "on" : ""}`} data-forma={k} onClick={() => onChange(k)}>
+            <i style={{ background: bg }} aria-hidden="true">{ic}</i>
+            <span><b>{l}</b><small>{d}</small><em className={k === "pj" ? "warn" : "ok"}>{selo}</em></span>
+            <span className="fm-rad" aria-hidden="true" />
+          </button>
+        ))}
       </div>
-      <div className="field-hint">{f[2]}</div>
+      {value === "socio" && <div className="field-hint">Isento para você. Acima de R$ 50 mil por mês da mesma empresa, ela retém 10% na fonte.</div>}
     </div>
   );
 }
-const taxLabel = (forma) => (forma === "clt" ? "Desconto no holerite, INSS + IR (%) *" : forma === "pf" ? "Imposto retido ou do carnê-leão (%) *" : "Tributação (%) *");
+// imposto mensal de pessoa física (carnê-leão), tabela de 2026 com a redução até R$ 7.350
+function irMensal(base) {
+  const fx = [[2428.80, 0, 0], [2826.65, 7.5, 182.16], [3751.05, 15, 394.16], [4664.68, 22.5, 675.49], [Infinity, 27.5, 908.73]].find((f) => base <= f[0]);
+  const bruto = Math.max(0, base * fx[1] / 100 - fx[2]);
+  const red = base <= 5000 ? bruto : base <= 7350 ? Math.max(0, 978.62 - 0.133145 * base) : 0;
+  return Math.max(0, bruto - Math.min(bruto, red));
+}
+// tipos de receita: o app já sabe como fica o imposto de cada um
+const REC_REPETE = [
+  ["aluguel", "Aluguel", "Aluguel recebido no seu CPF paga imposto pelo carnê-leão. O app calcula e lembra todo mês na Contabilidade."],
+  ["dividendos", "Dividendos", "Dividendos são isentos de imposto de renda."],
+  ["prolabore", "Pró-labore", "Informe o valor que cai na conta. INSS e imposto já vêm descontados."],
+  ["outro", "Outra", "Se tiver imposto a descontar, informe a porcentagem."],
+];
+const REC_UNICA = [
+  ["processo", "Processo", "Informe o valor que caiu na conta. O imposto, se houver, já vem descontado pelo tribunal."],
+  ["13", "13º salário", "O imposto já vem descontado pela empresa. Informe o valor que caiu."],
+  ["pix", "Pix de quem me devia", "Dinheiro que te devolveram não é renda e não tem imposto."],
+  ["restituicao", "Restituição do IR", "A restituição não é renda e não tem imposto."],
+  ["outro", "Outro", "Se tiver imposto a descontar, informe a porcentagem."],
+];
+const recInfo = (lista, k) => lista.find((x) => x[0] === k) || lista[lista.length - 1];
+// líquido de uma receita conforme o tipo
+const liquidoReceita = (o, amount, netOf) => {
+  const a = Number(amount) || 0;
+  if (o.tipoReceita === "aluguel") return a - irMensal(a);
+  if (o.tipoReceita && o.tipoReceita !== "outro") return a;
+  if (o.taxOverride === undefined || o.taxOverride === null || String(o.taxOverride) === "") return a;
+  return netOf(a, o.taxOverride);
+};
 
 function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
-  const [description, setDescription] = useState(inicial ? inicial.description || "" : "");
-  const [amount, setAmount] = useState(inicial ? Number(inicial.amount) || 0 : "");
-  const [diaRecebimento, setDia] = useState(inicial ? inicial.diaRecebimento || 5 : 5);
-  const [taxOverride, setTax] = useState(inicial && inicial.taxOverride !== null && inicial.taxOverride !== undefined ? String(inicial.taxOverride) : "");
-  const [prazoMeses, setPrazo] = useState(inicial ? Number(inicial.prazoMeses) || 0 : 0);
-  const [forma, setForma] = useState(formaDe(inicial));
+  const ini = inicial || {};
+  const [tipoReceita, setTipo] = useState(ini.tipoReceita || (inicial ? "outro" : "aluguel"));
+  const [description, setDescription] = useState(ini.description || (inicial ? "" : "Aluguel"));
+  const [amount, setAmount] = useState(inicial ? Number(ini.amount) || 0 : "");
+  const [diaRecebimento, setDia] = useState(ini.diaRecebimento || 5);
+  const [taxOverride, setTax] = useState(ini.taxOverride !== null && ini.taxOverride !== undefined ? String(ini.taxOverride) : "");
+  const [prazoMeses, setPrazo] = useState(Number(ini.prazoMeses) || 0);
   const [erro, setErro] = useState("");
+  const info = recInfo(REC_REPETE, tipoReceita);
+  const escolher = (k) => { const ant = recInfo(REC_REPETE, tipoReceita)[1]; if (!description.trim() || description === ant) setDescription(k === "outro" ? "" : recInfo(REC_REPETE, k)[1]); setTipo(k); setErro(""); };
   const submit = () => {
     if (!description.trim()) { setErro("Dê um nome para a receita."); return; }
     if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
-    if (String(taxOverride).trim() === "" || !(Number(taxOverride) >= 0)) { setErro("Informe a tributação. Use 0 se não tiver imposto."); return; }
-    onSubmit({ description: description.trim(), amount: Number(amount), diaRecebimento, taxOverride, prazoMeses, forma });
+    onSubmit({ description: description.trim(), amount: Number(amount), diaRecebimento, taxOverride: tipoReceita === "outro" ? (String(taxOverride).trim() === "" ? 0 : Number(String(taxOverride).replace(",", "."))) : 0, prazoMeses, tipoReceita, forma: tipoReceita === "dividendos" ? "div" : tipoReceita === "prolabore" ? "clt" : "pf" });
     if (!inicial) { setDescription(""); setAmount(""); setTax(""); setPrazo(0); }
     setErro("");
   };
+  const v = Number(amount) || 0, leao = tipoReceita === "aluguel" ? irMensal(v) : 0;
   return (
     <div className="mini-form">
-      <div className="form-grid">
-        <div className="field"><label>Descrição</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Dividendos, aluguel de consultório" /></div>
-        <div className="field"><label>Valor (R$) *</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
-        <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDia(e.target.value)} /></div>
-        <FormaPicker value={forma} onChange={setForma} />
-        <div className="field"><label>{taxLabel(forma)}</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0 para dividendos" /></div>
-        <div className="field" style={{ gridColumn: "1 / -1" }}><label>Quando esse valor é pago?</label><PrazoPicker unit="meses" value={prazoMeses} onChange={setPrazo} /></div>
+      <div className="field"><label>O que é</label>
+        <div className="chip-row" role="group" aria-label="Tipo de receita">{REC_REPETE.map(([k, l]) => <button key={k} type="button" className={`chip sm ${tipoReceita === k ? "active" : ""}`} aria-pressed={tipoReceita === k} onClick={() => escolher(k)}>{l}</button>)}</div>
       </div>
+      <div className={`rc-info ${tipoReceita === "aluguel" ? "warn" : ""}`}>{info[2]}</div>
+      <div className="form-grid">
+        <div className="field"><label>Nome</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Aluguel da sala" /></div>
+        <div className="field"><label>{tipoReceita === "prolabore" ? "Quanto cai na conta por mês" : "Valor por mês"}</label><MoneyInput value={amount} onChange={(x) => { setAmount(x); setErro(""); }} /></div>
+        <div className="field"><label>Cai todo dia</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDia(e.target.value)} /></div>
+        {tipoReceita === "outro" && <div className="field"><label>Imposto (%), se tiver</label><input type="number" inputMode="decimal" min="0" value={taxOverride} placeholder="0" onChange={(e) => setTax(e.target.value)} /></div>}
+      </div>
+      {tipoReceita === "aluguel" && v > 0 && <div className="rc-res"><div><span>Aluguel</span><b className="mono">{fmtBRL(v)}</b></div><div><span>Carnê-leão estimado</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(leao)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(v - leao)}</b></div></div>}
       {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
-      <FormBtns label={inicial ? "Salvar alterações" : "Salvar receita recorrente"} onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+      <FormBtns label={inicial ? "Salvar alterações" : "Salvar receita"} onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
     </div>
   );
 }
@@ -4471,64 +4709,66 @@ function ShiftEditForm({ shift, onSubmit, onCancel, onDelete }) {
 
 function OneOffEditForm({ item, onSubmit, onCancel, onDelete, novo, defaultDate }) {
   const it = item || {};
-  const TIPOS = ["Processo", "13º salário", "Pix", "Férias", "Restituição do IR", "Outro"];
-  const [description, setDescription] = useState(it.description || "");
+  const tipoIni = it.tipoReceita || (novo ? "processo" : "outro");
+  const [tipoReceita, setTipo] = useState(tipoIni);
+  const [description, setDescription] = useState(it.description || (novo ? "Processo" : ""));
   const [amount, setAmount] = useState(novo ? "" : Number(it.amount) || 0);
   const [date, setDate] = useState(it.date || defaultDate || todayStr());
-  const [tax, setTax] = useState(it.taxOverride !== undefined && it.taxOverride !== null ? String(it.taxOverride) : novo ? "" : "0");
+  const [tax, setTax] = useState(it.taxOverride !== undefined && it.taxOverride !== null ? String(it.taxOverride) : "");
   const [recebido, setRecebido] = useState(novo ? (it.date || defaultDate || todayStr()) <= todayStr() : !!it.recebido);
-  const [forma, setForma] = useState(it.forma || "pf");
   const [erro, setErro] = useState("");
+  const info = recInfo(REC_UNICA, tipoReceita);
+  const escolher = (k) => { const ant = recInfo(REC_UNICA, tipoReceita)[1]; if (!description.trim() || description === ant) setDescription(k === "outro" ? "" : recInfo(REC_UNICA, k)[1]); setTipo(k); setErro(""); };
   const submit = () => {
     if (!description.trim()) { setErro("Diga o que é essa receita."); return; }
     if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
-    if (String(tax).trim() === "" || !(Number(tax) >= 0)) { setErro("Informe a tributação. Use 0 se não tiver imposto."); return; }
     if (!date) { setErro("Informe a data."); return; }
-    onSubmit({ description: description.trim(), amount: Number(amount) || 0, date, taxOverride: Number(String(tax).replace(",", ".")) || 0, recebido, forma });
+    onSubmit({ description: description.trim(), amount: Number(amount) || 0, date, taxOverride: tipoReceita === "outro" ? (Number(String(tax).replace(",", ".")) || 0) : 0, recebido, tipoReceita, forma: tipoReceita === "13" ? "clt" : "pf" });
   };
-  const liquido = (Number(amount) || 0) * (1 - (Number(String(tax).replace(",", ".")) || 0) / 100);
+  const liq = (Number(amount) || 0) * (1 - (tipoReceita === "outro" ? (Number(String(tax).replace(",", ".")) || 0) : 0) / 100);
   return (
     <div className="mini-form">
-      {novo && (
-        <div className="chip-row" style={{ marginBottom: 10 }} role="group" aria-label="Tipo de receita">
-          {TIPOS.map((t) => <button key={t} type="button" className={`chip sm ${description === t ? "active" : ""}`} aria-pressed={description === t} onClick={() => { setDescription(t === "Outro" ? "" : t); if (t === "Pix" && tax === "") setTax("0"); if (t === "13º salário" || t === "Férias") setForma("clt"); if (t === "Processo" || t === "Pix") setForma("pf"); setErro(""); }}>{t}</button>)}
-        </div>
-      )}
+      <div className="field"><label>O que é</label>
+        <div className="chip-row" role="group" aria-label="Tipo de receita">{REC_UNICA.map(([k, l]) => <button key={k} type="button" className={`chip sm ${tipoReceita === k ? "active" : ""}`} aria-pressed={tipoReceita === k} onClick={() => escolher(k)}>{l}</button>)}</div>
+      </div>
+      <div className="rc-info">{info[2]}</div>
       <div className="form-grid">
-        <div className="field"><label>Descrição *</label><input value={description} onChange={(e) => { setDescription(e.target.value); setErro(""); }} placeholder="Ex.: Processo trabalhista" /></div>
-        <div className="field"><label>Valor bruto (R$) *</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
-        <FormaPicker value={forma} onChange={setForma} />
-        <div className="field"><label>{taxLabel(forma)}</label><input type="number" inputMode="decimal" min="0" value={tax} onChange={(e) => { setTax(e.target.value); setErro(""); }} placeholder="Ex.: 0" /></div>
-        <div className="field"><label>Data em que cai *</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+        <div className="field"><label>Nome</label><input value={description} onChange={(e) => { setDescription(e.target.value); setErro(""); }} placeholder="Ex.: Processo trabalhista" /></div>
+        <div className="field"><label>{tipoReceita === "outro" ? "Valor" : "Valor que caiu"}</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
+        <div className="field"><label>Data</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+        {tipoReceita === "outro" && <div className="field"><label>Imposto (%), se tiver</label><input type="number" inputMode="decimal" min="0" value={tax} placeholder="0" onChange={(e) => setTax(e.target.value)} /></div>}
       </div>
       <label className="chk-line" style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 14 }}><input type="checkbox" checked={recebido} onChange={(e) => setRecebido(e.target.checked)} /> Já recebi</label>
-      {Number(amount) > 0 && String(tax).trim() !== "" && <div className="field-hint" style={{ marginTop: 6 }}>Líquido: <b>{fmtBRL(liquido)}</b></div>}
+      {tipoReceita === "outro" && Number(tax) > 0 && Number(amount) > 0 && <div className="field-hint" style={{ marginTop: 6 }}>Fica com você: <b>{fmtBRL(liq)}</b></div>}
       {erro && <div className="note-bad" style={{ marginTop: 8 }}>{erro}</div>}
-      <FormBtns label={novo ? "Adicionar receita" : "Salvar alterações"} onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
+      <FormBtns label={novo ? "Salvar receita" : "Salvar alterações"} onSubmit={submit} onCancel={onCancel} onDelete={onDelete} />
     </div>
   );
 }
 
-function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, onCancel, onDelete }) {
+function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, onCancel, onDelete, taxaPadrao }) {
   const ini = inicial || {};
   const [nome, setNome] = useState(inicial ? ini.nome || "" : defaultNome || "");
   const [cor, setCor] = useState(ini.cor || PALETTE[0]);
   const [tipo, setTipo] = useState(inicial ? ini.tipo : fixo ? "mensal" : "plantao");
-  const [taxOverride, setTaxOverride] = useState(ini.taxOverride !== null && ini.taxOverride !== undefined ? String(ini.taxOverride) : "");
+  const [taxOverride, setTaxOverride] = useState(ini.taxOverride !== null && ini.taxOverride !== undefined && formaDe(ini) === "pj" ? String(ini.taxOverride) : (taxaPadrao ? String(taxaPadrao).replace(".", ",") : ""));
   const [valorMensal, setValorMensal] = useState(inicial && ini.tipo === "mensal" ? Number(ini.valorMensal) || 0 : "");
   const [diaRecebimento, setDiaRecebimento] = useState(ini.diaRecebimento || 5);
   const [prazoPadrao, setPrazoPadrao] = useState(Number(ini.prazoPadrao) || 0);
   const [prazoMeses, setPrazoMeses] = useState(Number(ini.prazoMeses) || 0);
   const [escala, setEscala] = useState(Array.isArray(ini.escala) ? ini.escala : []);
   const [forma, setForma] = useState(formaDe(ini));
+  const [clt13, setClt13] = useState(inicial ? !!ini.clt13 : true);
+  const [feriasMes, setFeriasMes] = useState(ini.feriasMes === undefined || ini.feriasMes === null ? "" : String(ini.feriasMes));
 
   const [erroV, setErroV] = useState("");
   const submit = () => {
     if (!String(nome).trim()) { setErroV("Dê um nome para o vínculo."); return; }
     if (tipo === "mensal" && !(Number(valorMensal) > 0)) { setErroV("Informe o valor que você recebe por mês."); return; }
-    if (String(taxOverride).trim() === "" || !(Number(taxOverride) >= 0)) { setErroV("Informe a tributação. Use 0 se não tiver imposto."); return; }
+    const tx = Number(String(taxOverride).replace(",", "."));
+    if (forma === "pj" && (String(taxOverride).trim() === "" || !(tx >= 0))) { setErroV("Informe o imposto da sua empresa. Se não souber, use o valor sugerido."); return; }
     setErroV("");
-    onSubmit({ nome, cor, tipo, taxOverride, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, forma, startMonth: defaultStartMonth });
+    onSubmit({ nome, cor, tipo, taxOverride: forma === "pj" ? tx : 0, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, forma, clt13: forma === "clt" && tipo === "mensal" ? clt13 : false, feriasMes: forma === "clt" && tipo === "mensal" && feriasMes !== "" ? Number(feriasMes) : null, startMonth: defaultStartMonth });
     if (!inicial) { setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0); setEscala([]); }
   };
 
@@ -4543,12 +4783,19 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
             <option value="mensal">Cargo fixo com salário mensal (diarista, contrato...)</option>
           </select>
         </div>}
-        <FormaPicker value={forma} onChange={setForma} />
-        <div className="field"><label>{taxLabel(forma)}</label><input type="number" inputMode="decimal" min="0" value={taxOverride} onChange={(e) => { setTaxOverride(e.target.value); setErroV(""); }} placeholder="Ex.: 15" /></div>
+        <FormaPicker value={forma} onChange={(f) => { setForma(f); setErroV(""); }} />
+        {forma === "pj" && <div className="field"><label>Imposto da sua empresa (%)</label><input type="text" inputMode="decimal" value={taxOverride} onChange={(e) => { setTaxOverride(e.target.value.replace(/[^0-9,.]/g, "")); setErroV(""); }} placeholder="Ex.: 15,5" />{taxaPadrao ? <div className="field-hint">Sugerido pela Contabilidade: {String(taxaPadrao).replace(".", ",")}%. Se o contador passou outro número, troque.</div> : null}</div>}
         {tipo === "mensal" && (
           <>
-            <div className="field"><label>Valor mensal bruto (R$) *</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
-            <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
+            <div className="field"><label>{forma === "clt" ? "Quanto cai na sua conta por mês" : forma === "socio" ? "Quanto cai no Pix por mês" : "Valor por mês (bruto, da nota)"}</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
+            <div className="field"><label>Cai todo dia</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
+            {forma === "pj" && Number(valorMensal) > 0 && String(taxOverride).trim() !== "" && <div className="rc-res" style={{ gridColumn: "1 / -1" }}><div><span>Valor da nota</span><b className="mono">{fmtBRL(Number(valorMensal))}</b></div><div><span>Imposto</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(Number(valorMensal) * (Number(String(taxOverride).replace(",", ".")) || 0) / 100)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(Number(valorMensal) * (1 - (Number(String(taxOverride).replace(",", ".")) || 0) / 100))}</b></div></div>}
+            {forma === "clt" && (
+              <>
+                <label className="ct-check" style={{ gridColumn: "1 / -1", marginTop: 0 }}><input type="checkbox" checked={clt13} onChange={(e) => setClt13(e.target.checked)} /><span>Recebo 13º salário<small>Entra metade em novembro e metade em dezembro.</small></span></label>
+                <div className="field"><label>Mês das férias (recebe +1/3)</label><select value={feriasMes} onChange={(e) => setFeriasMes(e.target.value)}><option value="">Não informar</option>{MONTHS_PT.map((m, i) => <option key={i} value={i}>{m}</option>)}</select></div>
+              </>
+            )}
             <div className="field" style={{ gridColumn: "1 / -1" }}><label>Escala fixa (opcional)</label><EscalaEditor value={escala} onChange={setEscala} /></div>
           </>
         )}
@@ -4658,7 +4905,7 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
 function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
-  shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff, addOneOff,
+  shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff, addOneOff, onAdd, taxaPadrao,
   netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk
 }) {
   const gv = useGv();
@@ -4667,7 +4914,7 @@ function FaturamentoTab({
   const fechar = () => setEditKey(null);
   const confirmaVinculo = (v) => { if (window.confirm(`Excluir o vínculo "${v.nome}"? Os plantões e presenças dele também serão apagados.`)) { removeVinculo(v.id); fechar(); } };
   const confirmaExtra = (e) => { if (window.confirm(`Excluir a receita "${e.description}"? Ela some de todos os meses.`)) { removeExtraRecurringIncome(e.id); fechar(); } };
-  const editorVinculo = (v) => <VinculoForm key={"v" + v.id} inicial={v} onSubmit={(d) => { updateVinculo(v.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaVinculo(v)} />;
+  const editorVinculo = (v) => <VinculoForm key={"v" + v.id} inicial={v} taxaPadrao={taxaPadrao} onSubmit={(d) => { updateVinculo(v.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaVinculo(v)} />;
   const editorExtra = (e) => <ExtraIncomeForm key={"e" + e.id} inicial={e} onSubmit={(d) => { updateExtra(e.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaExtra(e)} />;
   const editor = (it) => {
     const r = it.ref || {};
@@ -4681,7 +4928,7 @@ function FaturamentoTab({
   const extraNoMes = new Set(monthIncomeItems.filter((i) => i.ref && i.ref.t === "extra").map((i) => i.ref.id));
   const outros = [...vinculos.filter((v) => !vincNoMes.has(v.id)).map((v) => ({ k: "v-" + v.id, nome: v.nome, cor: v.cor, sub: v.tipo === "mensal" ? "cargo fixo" : "local de plantão", ed: () => editorVinculo(v) })),
     ...extraRecurringIncomes.filter((e) => !extraNoMes.has(e.id)).map((e) => ({ k: "e-" + e.id, nome: e.description, cor: SLATE, sub: "receita recorrente", ed: () => editorExtra(e) }))];
-  const gavetas = [["vinculo", "Adicionar vínculo"], ["extra", "Adicionar receita recorrente"], ["avulsa", "Adicionar receita extra (processo, 13º, Pix)"]].concat(outros.length ? [["outros", `Outros vínculos e receitas (${outros.length})`]] : []);
+  const gavetas = outros.length ? [["outros", `Outros vínculos e receitas (${outros.length})`]] : [];
   const sorted = [...monthIncomeItems].sort((a, b) => a.tipo === b.tipo ? 0 : (a.tipo === "plantao" ? -1 : 1));
   const received = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0);
   const donutData = netByVinculo.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }));
@@ -4742,6 +4989,7 @@ function FaturamentoTab({
           </div>
         )}
         <div className="fz-add-wrap">
+          {onAdd && <button type="button" className="fz-add fz-add-main" id="fz-adicionar" onClick={onAdd}><i aria-hidden="true">+</i><span>Adicionar plantão, cargo ou receita</span></button>}
           {gavetas.map(([k, l]) => (
             <React.Fragment key={k}>
               <button type="button" className="fz-add" aria-expanded={addOpen === k} onClick={() => setAddOpen(addOpen === k ? null : k)}><i aria-hidden="true">{k === "outros" ? "≡" : addOpen === k ? "−" : "+"}</i><span>{l}</span><em aria-hidden="true">›</em></button>
@@ -5325,14 +5573,14 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const prevPJ = prevIncomeItems.filter((i) => i.forma === "pj");
   const prevGross = prevPJ.reduce((a, i) => a + (Number(i.gross) || 0), 0);
   const prevTax = prevPJ.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
-  const prevPFtax = prevIncomeItems.filter((i) => i.forma === "pf").reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
+  const prevPFtax = prevIncomeItems.filter((i) => i.forma === "aluguel").reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
   const guias = contabGuias(contab, viewYear, viewMonth, prevGross, prevTax);
-  if (prevPFtax > 0.004) { const dUlt = new Date(viewYear, viewMonth + 1, 0).getDate(); guias.push({ id: "carneleao", nome: "Carnê-leão (pessoa física)", dia: dUlt, data: dateStr(viewYear, viewMonth, dUlt), valor: prevPFtax, sub: "estimativa dos recebimentos no CPF. Se o imposto já veio retido, desconsidere.", estimado: true }); }
+  if (prevPFtax > 0.004) { const dUlt = new Date(viewYear, viewMonth + 1, 0).getDate(); guias.push({ id: "carneleao", nome: "Carnê-leão do aluguel", dia: dUlt, data: dateStr(viewYear, viewMonth, dUlt), valor: prevPFtax, sub: "imposto do aluguel recebido no mês anterior, pago no site da Receita", estimado: true }); }
   const pagos = (contab.pagos && contab.pagos[mk]) || {};
   const totGuias = guias.reduce((a, g) => a + g.valor, 0);
   const totPago = guias.filter((g) => pagos[g.id]).reduce((a, g) => a + g.valor, 0);
   // caixinha: a parte de imposto de cada recebimento
-  const recebidos = monthIncomeItems.filter((i) => i.forma !== "clt" && i.recebido && (Number(i.gross) || 0) - (Number(i.net) || 0) > 0.004);
+  const recebidos = monthIncomeItems.filter((i) => (i.forma === "pj" || i.forma === "aluguel") && i.recebido && (Number(i.gross) || 0) - (Number(i.net) || 0) > 0.004);
   const sep = contab.separado || {};
   const alvo = recebidos.reduce((a, i) => a + (i.gross - i.net), 0);
   const guardado = recebidos.filter((i) => sep[i.key]).reduce((a, i) => a + (i.gross - i.net), 0);
@@ -5342,7 +5590,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const toggleGrupo = (g) => { const v = !grupoSep(g); setContab((p) => { const n = { ...(p.separado || {}) }; g.keys.forEach((k) => { n[k] = v; }); return { ...p, separado: n }; }); };
   // notas por tomador
   const notasMap = contab.notas || {};
-  const semNotaPorForma = monthIncomeItems.filter((i) => i.forma !== "pj");
+  const semNotaPorForma = monthIncomeItems.filter((i) => i.forma === "socio" || i.forma === "clt");
   const tomadores = Object.values(monthIncomeItems.filter((i) => i.forma === "pj").reduce((acc, i) => {
     const k = i.nome || "Outros"; const t = acc[k] || (acc[k] = { nome: k, cor: i.cor, bruto: 0, n: 0, pend: 0, atras: false, data: null });
     t.bruto += Number(i.gross) || 0; t.n += 1;
@@ -5359,7 +5607,8 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const pl = numOf(contab.proLabore);
   const calcPl = contab.modo === "contab" && pl > 0 ? (contab.regime === "presumido" ? calcPresumido(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0)) : calcSimples(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0))) : null;
   const vItem = (id) => (calcPl ? (calcPl.itens.find((i) => i.id === id) || { valor: 0 }).valor : 0);
-  const anoNaoPJ = yearIncomeItems.filter((i) => i.forma !== "pj");
+  const anoNaoPJ = yearIncomeItems.filter((i) => i.forma === "clt" || i.forma === "aluguel");
+  const anoIsento = yearIncomeItems.filter((i) => i.forma === "socio" || i.forma === "div");
   const anoClt = yearIncomeItems.filter((i) => i.forma === "clt");
   const somaG = (l) => l.reduce((a, i) => a + (Number(i.gross) || 0), 0), somaT = (l) => l.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
   const sug = { rend: pl * 12 + somaG(anoNaoPJ), inss: vItem("inss") * 12, retido: vItem("irrf") * 12 + somaT(anoClt) };
@@ -5396,6 +5645,33 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
       <DKpi label="Caixinha do imposto" value={fmtBRL(guardado)} sub={alvo - guardado > 0.004 ? "falta separar " + fmtBRL(alvo - guardado) : "tudo separado"} subTone={alvo - guardado > 0.004 ? "#B45309" : "#15803D"} />
       <DKpi label="Notas sem pagamento" value={String(semPag.length)} sub={semPag.length ? fmtBRL(semPag.reduce((a, t) => a + t.bruto, 0)) + " a receber" : semNota.length ? semNota.length + " sem nota marcada" : "tudo em dia"} subTone={semPag.some((t) => t.atras) ? "#B91C1C" : "#64748B"} />
       <DKpi label={"IR de " + viewYear + " (estimativa)"} value={rend > 0 ? (saldoIr >= 0 ? "+ " : "− ") + fmtBRL(Math.abs(saldoIr)) : "—"} tone={rend > 0 ? (saldoIr >= 0 ? "#15803D" : "#B91C1C") : null} sub={rend > 0 ? (saldoIr >= 0 ? "a restituir" : "a pagar") : "informe seus rendimentos"} />
+    </div>
+  );
+  const GRUPOS = [
+    ["pj", "Nota da minha empresa", "🧾", "#DBEAFE", (v) => "Imposto estimado: " + fmtBRL(v.imp) + ". As guias estão na agenda abaixo."],
+    ["socio", "Pix de empresa em que sou sócio", "🤝", "#EDE9FE", () => "Nada a pagar. Entra como rendimento isento na declaração."],
+    ["clt", "Carteira assinada", "📄", "#DCFCE7", () => "Nada a pagar. O imposto já vem descontado no holerite."],
+    ["div", "Dividendos", "📈", "#FEF3C7", () => "Isentos. Não entram na conta de impostos."],
+    ["aluguel", "Aluguel", "🏠", "#FCE7F3", (v) => "Carnê-leão estimado: " + fmtBRL(v.imp) + ", pago até o fim do mês seguinte."],
+    ["outro", "Outras receitas", "💰", "#F1F5F9", () => "Processo, Pix devolvido e restituição não têm imposto a pagar."],
+  ];
+  const resumoFormas = GRUPOS.map(([k, nome, ic, bg, oque]) => {
+    const l = monthIncomeItems.filter((i) => i.forma === k);
+    if (!l.length) return null;
+    const v = { tot: l.reduce((a, i) => a + (Number(i.gross) || 0), 0), imp: l.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0) };
+    return { k, nome, ic, bg, v, oque: oque(v), quem: [...new Set(l.map((i) => i.nome.split(" · ")[0]))].slice(0, 3).join(", ") };
+  }).filter(Boolean);
+  const quadro = (
+    <div className="card" id="ct-formas">
+      <div className="card-head"><h3 className="card-title">Seus recebimentos e os impostos</h3><span className="card-note">{mes}</span></div>
+      {resumoFormas.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Nenhuma receita em {mes}.</div> : resumoFormas.map((g) => (
+        <div key={g.k} className="ct-fm" data-forma={g.k}>
+          <i style={{ background: g.bg }} aria-hidden="true">{g.ic}</i>
+          <span className="ct-l"><b>{g.nome}</b><small>{g.quem}</small></span>
+          <b className="mono ct-v">{fmtBRL(g.v.tot)}</b>
+          <div className="ct-fm-o">{g.oque}</div>
+        </div>
+      ))}
     </div>
   );
   const agenda = (
@@ -5449,7 +5725,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const notas = (
     <div className="card" id="ct-notas">
       <div className="card-head"><h3 className="card-title">Nota × recebimento</h3><span className="card-note">{mes}</span></div>
-      {semNotaPorForma.length > 0 && <div className="field-hint" style={{ marginTop: 0, marginBottom: 6 }}>Não precisam de nota: {[...new Set(semNotaPorForma.map((i) => i.nome + " (" + FORMA_CURTA[i.forma] + ")"))].join(", ")}.</div>}
+      {semNotaPorForma.length > 0 && <div className="field-hint" style={{ marginTop: 0, marginBottom: 6 }}>Não precisam de nota: {[...new Set(semNotaPorForma.map((i) => i.nome.split(" · ")[0] + " (" + FORMA_CURTA[i.forma] + ")"))].join(", ")}.</div>}
       {tomadores.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>{semNotaPorForma.length ? "Nenhuma receita com nota em " + mes + "." : "Nenhuma receita em " + mes + "."}</div> : (
         <div className="ct-list">
           {tomadores.map((t) => { const emit = !!notasMap[notaKey(t.nome)]; return (
@@ -5467,7 +5743,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   const irBody = (
     <div className="ct-ir">
       <div className="form-grid">
-        <div className="field"><label>Rendimentos tributáveis no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Pró-labore, salário CLT, trabalhos como pessoa física, aluguel. {sug.rend > 0 ? "Em branco usa o pró-labore × 12 mais o que está lançado como CLT e pessoa física." : ""} Lucros da empresa são isentos e não entram.</div></div>
+        <div className="field"><label>Rendimentos tributáveis no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Pró-labore, salário CLT e aluguel. {sug.rend > 0 ? "Em branco usa o que está lançado no app." : ""} Pix como sócio e dividendos são isentos e não entram aqui.</div></div>
         <div className="field"><label>Imposto já retido no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Está no informe de rendimentos. Em branco usa o desconto dos vínculos CLT.</div></div>
         <div className="field"><label>INSS pago no ano (R$)</label><MoneyInput value={ir.inss === undefined || ir.inss === "" ? "" : ir.inss} placeholder={sug.inss ? Math.round(sug.inss).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("inss", v)} /></div>
         <div className="field"><label>Previdência privada PGBL no ano (R$)</label><MoneyInput value={ir.pgbl === undefined ? "" : ir.pgbl} onChange={(v) => setIr("pgbl", v)} /></div>
@@ -5478,6 +5754,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
         <div className="kv-line"><span>Educação (até o limite)</span><b className="mono">{fmtBRL(educ)}</b></div>
         <div className="kv-line"><span>{irr.usaSimp ? "Desconto simplificado (melhor para você)" : "Deduções (declaração completa, melhor para você)"}</span><b className="mono">− {fmtBRL(irr.usaSimp ? irr.simp : irr.deducoes)}</b></div>
         <div className="kv-line"><span>Imposto devido no ano</span><b className="mono">{fmtBRL(irr.devido)}</b></div>
+        {anoIsento.length > 0 && <div className="kv-line"><span>Rendimentos isentos (Pix como sócio e dividendos)</span><b className="mono">{fmtBRL(somaG(anoIsento))}</b></div>}
         <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Informe seus rendimentos" : (saldoIr >= 0 ? "A restituir " : "A pagar ") + fmtBRL(Math.abs(saldoIr))}</b></div>
       </div>
       <div className="field-hint">Estimativa simplificada com a tabela de {viewYear >= 2026 ? 2026 : viewYear} e a redução para rendas até R$ 88.200 por ano. Não substitui a declaração nem o contador.</div>
@@ -5515,6 +5792,7 @@ function ContabTab({ contab, setContab, app, taxRateGeral, setTaxRateGeral, desk
   return (
     <div className={`ct ${desk ? "desk" : ""}`}>
       {kpis}
+      {quadro}
       {desk ? (
         <>
           <div className="dgrid" style={{ gridTemplateColumns: "1.4fr 1fr", alignItems: "start" }}>{agenda}{caixinha}</div>
