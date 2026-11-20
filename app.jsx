@@ -4077,7 +4077,8 @@ function App() {
         .fg-v small { font-size: 12px; font-weight: 600; } .fg-v small.pend { color: #B45309; } .fg-v small.ok { color: #15803D; }
         .fg-body { background: var(--surface-2); border-top: 1px solid var(--border); padding-bottom: 4px; }
         .fg-body .tbl { background: transparent; } .fg-body .tbl th { background: transparent; }
-        .fg-todos { margin: 10px 18px 2px; font-size: 13px; } .fat-bruto { font-size: 11.5px; color: var(--text-dim); font-weight: 400; font-family: inherit; }
+        .fg-todos { margin: 10px 18px 2px; font-size: 13px; } .tbl .fz-ed, .tbl .fz-ed * { white-space: normal; } .tbl .fz-ed .fm-op b, .tbl .fz-ed .fm-op small { overflow-wrap: anywhere; } .tbl .fz-ed label { overflow-wrap: break-word; }
+        .fat-bruto { font-size: 11.5px; color: var(--text-dim); font-weight: 400; font-family: inherit; }
         .fg-body .tbl thead th:nth-child(2), .fg-body .tbl tbody tr:not(.fz-row) > td:nth-child(2) { display: none; }
         .fg-item { display: flex; flex-direction: column; } .fg-item small { font-size: 12px; color: var(--text-dim); }
         @media (max-width: 480px) {
@@ -5138,7 +5139,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
         {forma === "socio" && <SocioImposto value={taxSocio} onChange={(v) => { setTaxSocio(v); setErroV(""); }} />}
         {tipo === "mensal" && (
           <>
-            <div className="field"><label>{forma === "clt" ? "Quanto cai na sua conta por mês" : forma === "socio" ? (Number(String(taxSocio).replace(",", ".")) > 0 ? "Valor bruto por mês (antes do imposto da empresa)" : "Quanto cai no Pix por mês") : "Valor por mês (bruto, da nota)"}</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
+            <div className="field"><label>{forma === "clt" ? "Quanto cai na sua conta por mês" : forma === "socio" ? (Number(String(taxSocio).replace(",", ".")) > 0 ? "Valor bruto por mês" : "Quanto cai no Pix por mês") : "Valor por mês (bruto, da nota)"}</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
             <div className="field"><label>Cai todo dia</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
             {forma === "pj" && Number(valorMensal) > 0 && String(taxOverride).trim() !== "" && <div className="rc-res" style={{ gridColumn: "1 / -1" }}><div><span>Valor da nota</span><b className="mono">{fmtBRL(Number(valorMensal))}</b></div><div><span>Imposto</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(Number(valorMensal) * (Number(String(taxOverride).replace(",", ".")) || 0) / 100)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(Number(valorMensal) * (1 - (Number(String(taxOverride).replace(",", ".")) || 0) / 100))}</b></div></div>}
             {forma === "socio" && Number(valorMensal) > 0 && <BrutoLiquido bruto={Number(valorMensal)} pct={taxSocio} />}
