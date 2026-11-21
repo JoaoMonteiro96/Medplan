@@ -4668,6 +4668,16 @@ function App() {
         .oa-res-v { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; color: #15803D; margin: 2px 0 4px; }
         .oa-res-sub { font-size: 13.5px; line-height: 1.45; color: #166534; }
         .oa-res.neg { background: #FEF2F2; border-color: #FCA5A5; } .oa-res.neg .oa-res-lb, .oa-res.neg .oa-res-sub { color: #991B1B; } .oa-res.neg .oa-res-v { color: #B91C1C; }
+        .oa-sug { border: 1.5px solid color-mix(in srgb, #16A34A 35%, var(--border)); }
+        .oa-sug-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 4px; }
+        .oa-sug-top .oa-h { margin: 0; color: var(--text); font-size: 16px; font-weight: 700; }
+        .oa-sug-cx { display: block; font-size: 13px; color: var(--text-dim); margin-top: 3px; } .oa-sug-cx b { color: #15803D; font-weight: 700; }
+        .oa-sug-tot { font-family: "Manrope", "Inter", sans-serif; font-size: 20px; font-weight: 800; white-space: nowrap; }
+        .oa-sug-sobra { display: flex; justify-content: space-between; gap: 10px; padding: 11px 0 2px; border-top: 1px solid var(--border); font-size: 13.5px; color: var(--text-dim); } .oa-sug-sobra b { color: #15803D; font-size: 14.5px; }
+        @media (max-width: 400px) { .oa-sug-top { flex-direction: column; gap: 4px; } .oa-sug-tot { font-size: 22px; order: 2; } }
+        .oa-sug-sub { margin: 16px 0 2px; font-size: 13px; font-weight: 600; color: var(--text-dim); }
+        .oa-li.espera { opacity: 0.8; } .oa-li.espera small { white-space: normal; }
+        :root[data-theme="dark"] .oa-sug-cx b, :root[data-theme="dark"] .oa-sug-sobra b { color: #4ADE80; }
         .oa-li { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; }
         .oa-li + .oa-li { border-top: 1px solid var(--border); }
         .oa-li time { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 44px; border-radius: 11px; background: var(--surface-3); font-size: 11px; color: var(--text-dim); line-height: 1.1; }
@@ -6247,6 +6257,23 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
   };
   const vaiCair = incomeItems.filter((i) => !i.recebido).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso)));
   const vaiSair = expenseItems.filter((e) => !e.paid).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso)));
+  // Sugestão de pagamento: usa o que já caiu (menos o que já foi pago e investido) e paga primeiro o que vence antes
+  const sugestao = (() => {
+    if (rel !== 0 || vaiSair.length === 0) return null;
+    const caixa = Math.max(0, recebido - pagas - Math.max(0, investido));
+    let resta = caixa; const agora = [], depois = [];
+    vaiSair.forEach((e) => { const v = Number(e.amount) || 0; if (v <= resta + 0.005) { agora.push(e); resta -= v; } else depois.push(e); });
+    // quando dá para pagar o resto: segue o dinheiro que ainda vai cair, em ordem de data
+    let saldo = resta, k = 0;
+    const quando = depois.map((e) => {
+      const v = Number(e.amount) || 0;
+      while (saldo + 0.005 < v && k < vaiCair.length) { saldo += Number(vaiCair[k].net) || 0; k++; }
+      if (saldo + 0.005 >= v) { saldo -= v; return { e, data: k > 0 ? vaiCair[k - 1].dateIso : null, de: k > 0 ? vaiCair[k - 1].nome : null }; }
+      return { e, data: null, falta: v - saldo };
+    });
+    return { caixa, agora, resta, quando, totAgora: soma(agora, (e) => e.amount) };
+  })();
+  const dm = (iso) => String(iso || "").slice(8, 10) + "/" + String(iso || "").slice(5, 7);
   const lista = (id, itens, render, vazio, aba, txtAba) => {
     const max = verTudo[id] ? itens.length : 5;
     return (
@@ -6295,6 +6322,36 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
           </div>
         </div>
       </div>
+
+      {sugestao && (
+        <div className="card oa-list oa-sug" id="oa-sugestao">
+          <div className="oa-sug-top">
+            <div><h3 className="oa-h">O que pagar agora</h3><span className="oa-sug-cx">Você tem <b className="mono">{fmtBRL(sugestao.caixa)}</b> do que já caiu</span></div>
+            {sugestao.agora.length > 0 && <b className="oa-sug-tot mono">{fmtBRL(sugestao.totAgora)}</b>}
+          </div>
+          {sugestao.agora.length === 0 && <div className="oa-vazio">Ainda não dá para pagar nenhuma conta com o que já caiu.</div>}
+          {sugestao.agora.map((it) => { const s = subPag(it.dateIso); return (
+            <div key={it.key} className="oa-li">
+              {diaBox(it.dateIso)}
+              <span className="oa-li-n"><b>{it.description}</b><small className={s.late ? "late" : ""}>{s.t}</small></span>
+              <span className="oa-li-r"><b className="mono">{fmtBRL(it.amount)}</b>{typeof it.toggle === "function" && <button type="button" onClick={it.toggle}>Paguei</button>}</span>
+            </div>
+          ); })}
+          {sugestao.agora.length > 0 && <div className="oa-sug-sobra"><span>Sobra depois de pagar</span><b className="mono">{fmtBRL(sugestao.resta)}</b></div>}
+          {sugestao.quando.length > 0 && (
+            <>
+              <div className="oa-sug-sub">Esperar cair mais dinheiro</div>
+              {sugestao.quando.map(({ e: it, data, de, falta }) => (
+                <div key={it.key} className="oa-li espera">
+                  {diaBox(it.dateIso)}
+                  <span className="oa-li-n"><b>{it.description}</b><small>{data ? `pague a partir de ${dm(data)}, quando cair ${de}` : `faltam ${fmtBRL(falta)} neste mês`}</small></span>
+                  <span className="oa-li-r"><b className="mono">{fmtBRL(it.amount)}</b></span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="card oa-list">
         <h3 className="oa-h">Ainda vai cair</h3>
