@@ -2259,7 +2259,7 @@ function App() {
       document.documentElement.setAttribute("data-theme", escuro ? "dark" : "light");
       document.documentElement.style.colorScheme = escuro ? "dark" : "light";
       const m = document.querySelector('meta[name="theme-color"]');
-      if (m) { if (!m.dataset.claro) m.dataset.claro = m.getAttribute("content") || "#ffffff"; m.setAttribute("content", escuro ? "#0B1220" : m.dataset.claro); }
+      if (m) { if (!m.dataset.claro) m.dataset.claro = m.getAttribute("content") || "#ffffff"; const cor = escuro ? "#0B1220" : m.dataset.claro; if (document.getElementById("splash")) m.dataset.depois = cor; else m.setAttribute("content", cor); }
     };
     aplicar();
     if (tema !== "auto" || !mq) return;
@@ -10255,9 +10255,13 @@ function OverviewTab({ chartScope, setChartScope, expensesByDesc, investByCatego
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);
-// abertura: some com suavidade quando o app já desenhou a primeira tela (fica no mínimo ~0,8 s para a animação terminar)
+// abertura: some com suavidade quando o app já desenhou a primeira tela (fica no mínimo ~1,3 s para a animação terminar)
 (function fecharAbertura() {
   const el = document.getElementById("splash"); if (!el) return;
-  const espera = Math.max(0, 800 - (performance.now ? performance.now() : 0));
-  setTimeout(() => requestAnimationFrame(() => { el.classList.add("sair"); setTimeout(() => el.remove(), 600); }), espera);
+  const espera = Math.max(0, 1350 - (performance.now ? performance.now() : 0));
+  setTimeout(() => requestAnimationFrame(() => {
+    el.classList.add("sair");
+    const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", m.dataset.depois || m.dataset.claro || "#FFFFFF");
+    setTimeout(() => el.remove(), 600);
+  }), espera);
 })();
