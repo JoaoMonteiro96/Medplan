@@ -2381,6 +2381,12 @@ function App() {
     if (off[date]) delete off[date]; else off[date] = true;
     return { ...v, escalaOff: off };
   }));
+  const toggleEscalaFeito = (id, date) => { vibrar(); setVinculos((prev) => prev.map((v) => {
+    if (v.id !== id) return v;
+    const f = { ...(v.escalaFeito || {}) };
+    if (f[date]) delete f[date]; else f[date] = true;
+    return { ...v, escalaFeito: f };
+  })); };
   const updateVinculoTax = (id, val) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, taxOverride: val === "" ? null : Number(val) } : v));
   const toggleVinculoMensalRecebido = (id, mk) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, recebidoMonths: { ...v.recebidoMonths, [mk]: !(v.recebidoMonths && v.recebidoMonths[mk]) } } : v));
 
@@ -4958,6 +4964,11 @@ function App() {
         .dia-n small { display: block; font-size: 12.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .dia-v { font-size: 14.5px; font-weight: 700; white-space: nowrap; } .dia-v.in { color: #15803D; }
         .dia-st { white-space: nowrap; }
+        .dia-chk { display: inline-flex; align-items: center; gap: 5px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 6px 12px 6px 10px; cursor: pointer; white-space: nowrap; transition: background .18s ease, border-color .18s ease, color .18s ease, transform .12s ease; }
+        .dia-chk svg { color: var(--text-dim); }
+        .dia-chk:active { transform: scale(0.94); }
+        .dia-chk.on { background: #16A34A; border-color: #16A34A; color: #fff; } .dia-chk.on svg { color: #fff; }
+        .dia-chk:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         .dia-mini { border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
         .dia-it.off .dia-n b { color: var(--text-dim); text-decoration: line-through; }
         .dia-det { grid-column: 1 / -1; background: var(--surface-2); border-radius: 12px; padding: 6px 12px; margin-top: 4px; animation: riseIn2 .3s var(--ease) backwards; }
@@ -5115,7 +5126,7 @@ function App() {
             cells={cells} entriesByDay={entriesByDay} selectedDay={selectedDay} setSelectedDay={setSelectedDay}
             viewYear={viewYear} viewMonth={viewMonth} vinculos={vinculos} addVinculo={addVinculo}
             addShift={addShift} addPlantao={addPlantao} removeShiftSerie={removeShiftSerie} shifts={shifts} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
-            addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff}
+            addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff} toggleEscalaFeito={toggleEscalaFeito}
             vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab} fluxoDia={fluxoDia} desk={desk}
           />
         )}
@@ -7037,10 +7048,10 @@ function escalaSemanas(s, n) {
 function escalaDoMes(v, y, m) {
   if (!v || v.tipo !== "mensal" || !Array.isArray(v.escala) || v.escala.length === 0) return [];
   if (v.startMonth && v.startMonth > monthKeyOf(y, m)) return [];
-  const out = [], n = new Date(y, m + 1, 0).getDate(), off = v.escalaOff || {};
+  const out = [], n = new Date(y, m + 1, 0).getDate(), off = v.escalaOff || {}, feito = v.escalaFeito || {};
   for (let d = 1; d <= n; d++) {
     const wd = new Date(y, m, d).getDay(), date = dateStr(y, m, d);
-    v.escala.forEach((s) => { if ((s.dias || []).includes(wd) && Number(s.horas) > 0 && slotNaSemana(s, date)) out.push({ id: "esc-" + v.id + "-" + s.id + "-" + date, slotId: s.id, vinculoId: v.id, date, day: d, turno: s.turno, hours: Number(s.horas), off: !!off[date] }); });
+    v.escala.forEach((s) => { if ((s.dias || []).includes(wd) && Number(s.horas) > 0 && slotNaSemana(s, date)) out.push({ id: "esc-" + v.id + "-" + s.id + "-" + date, slotId: s.id, vinculoId: v.id, date, day: d, turno: s.turno, hours: Number(s.horas), off: !!off[date], feito: !!feito[date] }); });
   }
   return out;
 }
@@ -8050,7 +8061,7 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, set
 }
 
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
-  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, fluxoDia = {}, desk }) {
+  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, toggleEscalaFeito, fluxoDia = {}, desk }) {
   const [modo, setModo] = useState("plantao");
   const [diaAberto, setDiaAberto] = useState(null); // lançamento com detalhes abertos
   const [addAberto, setAddAberto] = useState(false);
@@ -8173,7 +8184,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                         <i className="dia-dot" style={{ background: cor }} />
                         <span className="dia-n"><b>{nome}</b><small>{fmtHoras(e.hours || 0)} · cai {fmtDatePt(payDateOf(e)).slice(0, 5)}</small></span>
                       </button>
-                      <span className="dia-dir"><b className="dia-v mono">{fmtBRL(liq)}</b><button type="button" className={`badge dia-st ${e.recebido ? "badge-paid" : "badge-pending"}`} onClick={() => toggleShiftReceived(e.id)}>{e.recebido ? "Recebido" : "A receber"}</button></span>
+                      <span className="dia-dir"><b className="dia-v mono">{fmtBRL(liq)}</b><button type="button" className={`dia-chk ${e.recebido ? "on" : ""}`} aria-pressed={!!e.recebido} title={e.recebido ? "Desmarcar recebido" : "Marcar como recebido"} onClick={() => toggleShiftReceived(e.id)}><IconCheck size={14} />{e.recebido ? "Recebido" : "Recebi"}</button></span>
                       {aberto && (
                         <div className="dia-det">
                           <div className="stub-row"><span className="k">Valor bruto</span><span className="v mono">{fmtBRL(e.gross)}</span></div>
@@ -8194,7 +8205,8 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                     <div key={e.id} className={`dia-it ${e.off ? "off" : ""}`} data-escala-dia={nome}>
                       <i className="dia-dot" style={{ background: cor }} />
                       <span className="dia-n"><b>{nome}</b><small>{(TURNOS[e.turno] || "Escala")} · {e.off ? "não trabalhado" : fmtHoras(e.previsto)}</small></span>
-                      <button type="button" className="dia-mini" onClick={() => toggleEscalaOff(e.vinculoId, e.date)}>{e.off ? "Voltar a contar" : "Não trabalhei"}</button>
+                      {e.off ? <button type="button" className="dia-mini" onClick={() => toggleEscalaOff(e.vinculoId, e.date)}>Voltar a contar</button>
+                        : <button type="button" className={`dia-chk ${e.feito ? "on" : ""}`} aria-pressed={e.feito} title={e.feito ? "Desmarcar" : "Marcar como feito"} onClick={() => toggleEscalaFeito && toggleEscalaFeito(e.vinculoId, e.date)}><IconCheck size={14} />{e.feito ? "Feito" : "Fiz"}</button>}
                     </div>
                   );
                 }
