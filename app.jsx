@@ -2765,6 +2765,12 @@ function App() {
   const setGoalFonte = (id, fonte) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, fonte } : g)));
   const setGoalPatch = (id, patch) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
   // média do que você investiu por mês nos últimos 6 meses fechados (ou desde o primeiro aporte, se faz menos tempo)
+  const valoresPlantao = useMemo(() => vinculos.filter((v) => v.tipo === "plantao").map((v) => {
+    const ult = shifts.filter((s) => s.vinculoId === v.id && Number(s.gross) > 0).sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 6).map((s) => Number(s.gross)).sort((a, b) => a - b);
+    if (!ult.length) return null;
+    const bruto = ult.length % 2 ? ult[(ult.length - 1) / 2] : (ult[ult.length / 2 - 1] + ult[ult.length / 2]) / 2;
+    return { id: v.id, nome: v.nome, cor: v.cor, liq: liquidoDeVinc(v, bruto, netOf), n: shifts.filter((s) => s.vinculoId === v.id).length };
+  }).filter((x) => x && x.liq > 0).sort((a, b) => b.n - a.n).slice(0, 4), [vinculos, shifts, netOf]);
   const aporteMedio = useMemo(() => {
     const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth();
     const lanc = investments.filter((i) => !i.posicaoInicial && i.tipo !== "ajuste" && i.date);
@@ -4643,6 +4649,20 @@ function App() {
         .gp-grid { stroke: var(--border); } .gp-alvo { stroke: #3B82F6; stroke-width: 1.6; stroke-dasharray: 5 5; }
         .gp-lbl { fill: var(--text-dim); font-size: 11px; font-family: inherit; }
         
+        .gp-chart { position: relative; margin: 6px 0 2px; }
+        .gp-alvo-t { font-size: 15px; font-weight: 700; fill: #2563EB; font-family: "Manrope", "Inter", sans-serif; }
+        .gp-x { font-size: 15px; fill: #94A3A0; font-family: "Inter", sans-serif; }
+        .gp-leg { display: flex; gap: 14px; font-size: 12.5px; color: var(--text-dim); margin: 2px 0 4px; } .gp-leg span { display: inline-flex; align-items: center; gap: 6px; } .gp-leg i { width: 10px; height: 10px; border-radius: 3px; }
+        .gpl { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+        .gpl-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+        .gpl-falta { font-size: 13px; color: var(--text-dim); } .gpl-falta b { color: var(--text); font-weight: 700; }
+        .gpl-it { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; }
+        .gpl-it + .gpl-it { border-top: 1px solid var(--hair, var(--border)); }
+        .gpl-it > i { width: 10px; height: 10px; border-radius: 50%; }
+        .gpl-n { min-width: 0; } .gpl-n b { display: block; font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .gpl-n small { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+        .gpl-v { text-align: right; font-size: 13px; color: var(--text-dim); white-space: nowrap; } .gpl-v > b { font-family: "Manrope", "Inter", sans-serif; font-size: 20px; font-weight: 800; color: var(--text); }
+        .gpl-v small { display: block; font-size: 12px; margin-top: 1px; } .gpl-v small b { color: #15803D; font-weight: 700; }
+        :root[data-theme="dark"] .gpl-v small b { color: #4ADE80; } :root[data-theme="dark"] .gp-alvo-t { fill: #60A5FA; }
         .gp-campos { display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 12px; }
         :root[data-theme="dark"] .gp-res b { color: #4ADE80; } :root[data-theme="dark"] .gp-alvo { stroke: #60A5FA; }
         :root[data-theme="dark"] .gp-prazo.ok { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .gp-prazo.falta { background: rgba(245,158,11,.12); color: #FCD34D; }
@@ -5155,7 +5175,7 @@ function App() {
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
         {activeTab === "metas" && (
-          <GoalsTab goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
+          <GoalsTab valoresPlantao={valoresPlantao} goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
         )}
         {activeTab === "visao" && (
           <OverviewTab chartScope={chartScope} setChartScope={setChartScope} expensesByDesc={expensesByDesc} investByCategory={investByCategory}
@@ -7929,7 +7949,23 @@ function PrintImport({ commitPrint, investments = [], goTab }) {
 
 // ---- projeção da meta: com o aporte mensal (e um rendimento opcional), em que mês a meta é alcançada ----
 const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
+// a meta contada em plantões: quantos plantões de cada hospital pagam o que falta
+function MetaEmPlantoes({ falta, porMes, porMesTxt, hospitais }) {
+  if (!hospitais.length || falta <= 0) return null;
+  return (
+    <div className="gpl">
+      <div className="gpl-h"><span className="gp-tit">Em plantões</span><span className="gpl-falta">faltam <b className="mono">{fmtBRL(falta)}</b></span></div>
+      {hospitais.map((h) => { const tot = Math.ceil(falta / h.liq - 1e-9), mes = porMes > 0 ? Math.ceil(porMes / h.liq - 1e-9) : 0; return (
+        <div key={h.id} className="gpl-it">
+          <i style={{ background: h.cor }} />
+          <span className="gpl-n"><b>{h.nome}</b><small><span className="mono">{fmtBRL(h.liq)}</span> cada</small></span>
+          <span className="gpl-v"><b className="mono">{tot}</b> {tot === 1 ? "plantão" : "plantões"}{mes > 0 && <small><b className="mono">{mes}</b> por mês {porMesTxt}</small>}</span>
+        </div>
+      ); })}
+    </div>
+  );
+}
+function GoalProjection({ g, atual, aporteSugerido, onPatch, hospitais = [] }) {
   const alvo = Number(g.valorAlvo) || 0;
   const manual = g.aporteMensal !== null && g.aporteMensal !== undefined && g.aporteMensal !== "";
   const aporte = manual ? Math.max(0, Number(g.aporteMensal) || 0) : Math.max(0, Math.round(aporteSugerido || 0));
@@ -7947,18 +7983,21 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
   const dataK = (k) => new Date(hoje.getFullYear(), hoje.getMonth() + k, 1);
   const horiz = n === null ? Math.min(serie.length - 1, 24) : Math.max(n, 6);
   while (serie.length <= horiz) serie.push(serie[serie.length - 1] * (1 + r) + aporte);
-  // curva suave (sem barras): um ponto por mês até a meta
-  const W = 340, H = 96, pt = 14, pb = 18, pl = 4, pr = 4, iw = W - pl - pr, ih = H - pt - pb;
-  const maxV = Math.max(alvo, serie[horiz], 1) * 1.06;
-  const minV = Math.max(0, serie[0] - (maxV - serie[0]) * 0.2);
-  const X = (k) => pl + (iw * k) / horiz, Y = (v) => pt + ih * (1 - (Math.max(minV, v) - minV) / Math.max(1, maxV - minV));
-  const pts = []; for (let k = 0; k <= horiz; k++) pts.push([X(k), Y(serie[k])]);
-  let curva = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
-    curva += ` C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-  }
-  const area = `${curva} L${X(horiz).toFixed(1)},${pt + ih} L${X(0).toFixed(1)},${pt + ih} Z`;
+  // gráfico: o que você guarda + o que rende, com a linha da meta; arrastar o dedo mostra cada mês
+  const W = 600, H = 230, pt = 26, pb = 30, pl = 74, pr = 14, iw = W - pl - pr, ih = H - pt - pb;
+  const guardado = (k) => Math.max(0, atual) + aporte * k;
+  const maxV = Math.max(alvo, serie[horiz], 1) * 1.08;
+  const X = (k) => pl + (iw * k) / horiz, Y = (v) => pt + ih * (1 - Math.max(0, v) / maxV);
+  const liso = (pts) => { let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`; for (let i = 0; i < pts.length - 1; i++) { const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)]; d += ` C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`; } return d; };
+  const ks = Array.from({ length: horiz + 1 }, (_, k) => k);
+  const ptsT = ks.map((k) => [X(k), Y(serie[k])]), ptsG = ks.map((k) => [X(k), Y(Math.min(serie[k], guardado(k)))]);
+  const curva = liso(ptsT), curvaG = liso(ptsG);
+  const base = `L${X(horiz).toFixed(1)},${pt + ih} L${X(0).toFixed(1)},${pt + ih} Z`;
+  const areaG = `${curvaG} ${base}`;
+  const areaR = `${curva} L${ptsG[horiz][0].toFixed(1)},${ptsG[horiz][1].toFixed(1)} ${ptsG.slice().reverse().map((q) => `L${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(" ")} Z`;
+  const [ativo, setAtivo] = useState(null);
+  const arr = useArrasto(horiz + 1, (x) => Math.max(0, Math.min(horiz, Math.round(((x - pl) / iw) * horiz))), setAtivo);
+  const marcas = Array.from(new Set([0, Math.round(horiz / 3), Math.round((2 * horiz) / 3), horiz]));
   const curto = (k) => { const d = dataK(k); return `${(MONTHS_ABBR_PT[d.getMonth()] || "").toLowerCase()}/${String(d.getFullYear()).slice(2)}`; };
   const gid = "gpg-" + g.id;
   const tempo = (m) => { const a = Math.floor(m / 12), mm = m % 12; return [a ? `${a} ${a === 1 ? "ano" : "anos"}` : "", mm ? `${mm} ${mm === 1 ? "mês" : "meses"}` : ""].filter(Boolean).join(" e "); };
@@ -7983,17 +8022,31 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
           {precisa <= aporte + 0.5 ? <>Dá para chegar até o prazo ({fmtDatePt(g.prazo)}).</> : <>Para chegar até {fmtDatePt(g.prazo)}, você precisaria de <b>{fmtBRL(precisa)} por mês</b>.</>}
         </div>
       )}
-      <svg className="gp-svg" viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Projeção da meta ${g.nome}`}>
-        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={g.cor} stopOpacity=".28" /><stop offset="1" stopColor={g.cor} stopOpacity="0" /></linearGradient></defs>
-        <line className="gp-alvo" x1={pl} x2={W - pr} y1={Y(alvo)} y2={Y(alvo)} />
-        <path d={area} fill={`url(#${gid})`} />
-        <path d={curva} fill="none" stroke={g.cor} strokeWidth="2.5" strokeLinecap="round" />
-        <circle cx={X(0)} cy={Y(serie[0])} r="3.5" fill={g.cor} />
-        {n !== null && n > 0 && <circle className="gp-fim" cx={X(n)} cy={Y(serie[n])} r="5" stroke={g.cor} />}
-        <text className="gp-lbl" x={pl} y={H - 4}>hoje</text>
-        <text className="gp-lbl" x={W - pr} y={H - 4} textAnchor="end">{n !== null && n > 0 ? curto(n) : curto(horiz)}</text>
-        <text className="gp-lbl" x={pl} y={Math.max(10, Y(alvo) - 4)}>meta {fmtBRL(alvo)}</text>
-      </svg>
+      <div className="chart-box gp-chart" onMouseLeave={() => setAtivo(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Projeção da meta ${g.nome}`} {...arr}>
+          <GradeEixo W={W} top={pt} h={ih} min={0} max={maxV} padX={pr} padL={pl} ticks={3} />
+          <path d={areaG} fill={g.cor} fillOpacity=".16" />
+          {r > 0 && <path d={areaR} fill={g.cor} fillOpacity=".38" />}
+          <line className="gp-alvo" x1={pl} x2={W - pr} y1={Y(alvo)} y2={Y(alvo)} />
+          <text className="gp-alvo-t" x={pl + 6} y={Y(alvo) - 7}>Meta {fmtEixo(alvo)}</text>
+          <path d={curva} fill="none" stroke={g.cor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          {n !== null && n > 0 && <circle className="gp-fim" cx={X(n)} cy={Y(serie[n])} r="7" stroke={g.cor} />}
+          <circle cx={X(0)} cy={Y(serie[0])} r="5" fill={g.cor} />
+          {marcas.map((k) => <text key={k} className="gp-x" x={X(k)} y={H - 8} textAnchor={k === 0 ? "start" : k === horiz ? "end" : "middle"}>{k === 0 ? "hoje" : curto(k)}</text>)}
+          {ativo !== null && <line x1={X(ativo)} x2={X(ativo)} y1={pt} y2={pt + ih} stroke={g.cor} strokeOpacity=".5" strokeWidth="1.5" />}
+          {ativo !== null && <circle cx={X(ativo)} cy={Y(serie[ativo])} r="7" fill="#fff" stroke={g.cor} strokeWidth="3" />}
+        </svg>
+        {ativo !== null && (
+          <ChartTip x={(X(ativo) / W) * 100}>
+            <b>{ativo === 0 ? "Hoje" : `${MES_LONGO[dataK(ativo).getMonth()]} de ${dataK(ativo).getFullYear()}`}</b>
+            <span className="mono">{fmtBRL(serie[ativo])}</span>
+            {r > 0 && ativo > 0 && <em>rendeu {fmtBRL(Math.max(0, serie[ativo] - guardado(ativo)))}</em>}
+          </ChartTip>
+        )}
+      </div>
+      {r > 0 && <div className="gp-leg"><span><i style={{ background: g.cor, opacity: 0.3 }} />Você guarda</span><span><i style={{ background: g.cor, opacity: 0.6 }} />Rendimento</span></div>}
+      <MetaEmPlantoes falta={Math.max(0, alvo - atual)} hospitais={hospitais}
+        porMes={precisa !== null ? precisa : aporte} porMesTxt={precisa !== null ? "até o prazo" : "no ritmo de hoje"} />
       <div className="gp-campos">
         <div className="field">
           <label htmlFor={"gp-ap-" + g.id}>Aporte por mês (R$)</label>
@@ -8016,12 +8069,11 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
           )}
         </div>
       </div>
-      
     </div>
   );
 }
 
-function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0, monthExpenseItems = [], limits = {}, setLimit, viewYear, viewMonth }) {
+function GoalsTab({ valoresPlantao = [], goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0, monthExpenseItems = [], limits = {}, setLimit, viewYear, viewMonth }) {
   const FONTES = [["manual", "Eu informo"], ["carteira", "Meus investimentos"], ["patrimonio", "Meu patrimônio"]];
   const [showForm, setShowForm] = useState(goals.length === 0);
   const [nome, setNome] = useState("");
@@ -8092,7 +8144,7 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, set
                 ) : (
                   <>
                     {g.prazo && <div className="mt-prazo">Prazo: {fmtDatePt(g.prazo)}</div>}
-                    <GoalProjection g={g} atual={atual} aporteSugerido={aporteMedio} onPatch={(p) => setGoalPatch(g.id, p)} />
+                    <GoalProjection g={g} atual={atual} aporteSugerido={aporteMedio} hospitais={valoresPlantao} onPatch={(p) => setGoalPatch(g.id, p)} />
                     <div className="field" style={{ marginTop: 12 }}>
                       <label>De onde vem o valor</label>
                       <div className="chip-row" role="group" aria-label={"Origem do valor de " + g.nome}>
