@@ -72,7 +72,7 @@ const REGRAS_COMPRA = [
   ["restaurante", ["ifood", "ifd", "uber eats", "ubereats", "rappi", "aiqfome", "ze delivery", "zedelivery", "james delivery", "delivery", "restaurante", "rest", "churrascaria", "churrasco", "pizzaria", "pizza*", "burger*", "burguer*", "hamburgueria", "mcdonalds", "mc donalds", "mcdonald*", "burger king", "bk brasil", "subway", "outback", "habibs", "habib s", "giraffas", "spoleto", "madero", "coco bambu", "starbucks", "cafe", "cafeteria", "coffee", "lanchonete", "lanche*", "bar", "boteco", "choperia", "chopp*", "cervejaria", "sorveteria", "sorvete*", "acai*", "doceria", "confeitaria", "sushi*", "temaki*", "japones*", "comida*", "espetinho", "pastelaria", "pastel*", "food*", "grill", "bistro", "cantina", "kfc", "popeyes", "dominos", "pizza hut", "bobs", "vivenda do camarao", "galeto*", "tapioca*", "cacau show", "kopenhagen", "creperia", "petiscaria", "cozinha", "gastronomia", "buffet", "self service", "marmita*", "quiosque", "beach", "barraca", "fast food", "jeronimo", "abbraccio", "paris 6", "fogo de chao", "china in box", "gendai", "nakombi", "frango*", "cachorro quente", "hot dog", "salgado*", "esfiha*", "kebab"]],
   ["mercado", ["supermercado*", "supermerc*", "mercado", "mercadinho", "minimercado", "atacadao", "atacado", "atacarejo", "atakarejo", "assai", "carrefour", "extra", "pao de acucar", "gbarbosa", "hiperideal", "redemix", "bompreco", "big bompreco", "walmart", "sams club", "makro", "hortifruti", "hortifrut*", "sacolao", "acougue", "frigorifico", "emporio", "mercearia", "padaria", "panificadora", "panificacao", "oxxo", "st marche", "mambo", "perini", "sonda", "zona sul", "mundial", "guanabara", "prezunic", "dia brasil", "comper", "condor", "angeloni", "nordestao", "cometa", "bretas", "epa", "verdemar", "savegnago", "tenda atacado", "fort atacadista", "max atacadista", "spani", "hippo", "hiper*", "feira", "quitanda", "distribuidora", "bebidas", "adega", "casa de carnes", "carnes", "laticinios"]],
   ["transporte", ["uber", "uber trip", "uberbr", "99app", "99 app", "99 pop", "99pop", "99taxi", "cabify", "indriver", "indrive", "taxi", "posto*", "auto posto", "combustive*", "shell", "ipiranga", "petrobras", "br mania", "ale combustiveis", "gasolina", "estacionamento", "estacion*", "estapar", "zona azul", "sem parar", "semparar", "conectcar", "veloe", "move mais", "pedagio", "autopista", "ccr", "ecovia", "arteris", "metro", "metro rio", "cptm", "onibus", "bilhete unico", "riocard", "localiza", "movida", "unidas", "oficina", "auto pecas", "autopecas", "pneu*", "lava jato", "lavajato", "lava rapido", "detran", "ipva", "moto*", "car wash", "mecanica", "auto center", "autocenter", "rodoviaria", "buser", "clickbus", "blablacar", "patinete", "bike itau", "tembici", "abastece*"]],
-  ["viagem", ["latam", "tam linhas", "gol linhas", "gol trans", "voegol", "azul linhas", "voeazul", "azul viagens", "decolar", "booking", "airbnb", "hotel*", "hoteis", "pousada*", "resort*", "hostel", "trivago", "expedia", "hotels com", "123milhas", "123 milhas", "maxmilhas", "smiles", "livelo", "cvc", "hurb", "aeroporto", "airlines", "airline", "american air", "tap air", "copa air", "aerolineas", "iberia", "air france", "klm", "emirates", "rentcars", "rent a car", "hertz", "avis", "viagem*", "turismo", "passagem aerea", "seguro viagem", "duty free", "dufry"]],
+  ["viagem", ["viagens", "tap web", "tap air", "latam", "tam linhas", "gol linhas", "gol trans", "voegol", "azul linhas", "voeazul", "azul viagens", "decolar", "booking", "airbnb", "hotel*", "hoteis", "pousada*", "resort*", "hostel", "trivago", "expedia", "hotels com", "123milhas", "123 milhas", "maxmilhas", "smiles", "livelo", "cvc", "hurb", "aeroporto", "airlines", "airline", "american air", "tap air", "copa air", "aerolineas", "iberia", "air france", "klm", "emirates", "rentcars", "rent a car", "hertz", "avis", "viagem*", "turismo", "passagem aerea", "seguro viagem", "duty free", "dufry"]],
   ["saude", ["farmacia*", "farmac*", "drogaria*", "droga*", "drogasil", "droga raia", "raia", "pague menos", "pacheco", "panvel", "sao joao farm*", "venancio", "ultrafarma", "nissei", "extrafarma", "drogal", "farma*", "laboratorio*", "lab", "clinica*", "hospital*", "medic*", "odonto*", "dentista", "dental", "otica*", "oticas", "psicolog*", "fisioterap*", "fisio", "exame*", "unimed", "hapvida", "amil", "bradesco saude", "sulamerica saude", "notredame", "consulta*", "vacina*", "nutri*", "dermato*", "diagnostic*", "fleury", "dasa", "sabin", "hermes pardini", "a+ medicina", "imagem", "radiolog*", "ortoped*", "pediatr*", "cardio*", "oftalmo*", "terapia", "saude"]],
   ["educacao", ["escola*", "colegio*", "faculdade*", "universidade*", "curso*", "udemy", "coursera", "alura", "hotmart", "eduzz", "kiwify", "livraria*", "saraiva", "leitura", "congresso*", "simposio*", "medcurso", "medgrupo", "estrategia med", "estrategia", "sanar", "afya", "whitebook", "unbound", "uptodate", "up to date", "medway", "medcel", "aristo", "residencia*", "papelaria*", "kalunga", "educa*", "ensino", "idiomas", "ingles", "wizard", "fisk", "ccaa", "cultura inglesa", "duolingo"]],
   ["assinaturas", ["apple com bill", "apple com", "itunes", "icloud", "google one", "google storage", "google play", "google youtube", "google *", "microsoft*", "office 365", "adobe*", "canva*", "openai", "chatgpt", "anthropic", "claude ai", "dropbox", "notion*", "linkedin*", "kindle unlimited", "audible", "zoom us", "evernote", "1password", "nordvpn", "github", "amazon prime", "prime br", "assinatura*", "mensalidade app"]],
@@ -106,6 +106,17 @@ const LOJAS_BR = {
   moradia: ["ortobom", "colchoes ortobom", "casa do construtor", "decor colors", "lavateria", "60 minutos", "lavo", "5asec", "5 a sec", "lavanderia", "telhanorte", "ferreira costa", "c&c", "sodimac", "obramax", "cassol", "tumelero", "balaroti", "le biscuit", "lebiscuit", "camicado", "mmartan", "trousseau", "zelo", "copel", "coelba", "neoenergia", "embasa", "condominio", "administradora", "imobiliaria", "aluguel", "quinto andar", "eletrica", "hidraulica", "vidracaria", "marcenaria", "serralheria", "dedetizacao", "faxina", "diarista", "jardinagem", "chaveiro", "mudanca", "moveis planejados", "tok&stok", "tok stok"],
   compras: ["hering", "lupo", "havaianas", "clube melissa", "chilli beans", "aramis", "colcci", "forum", "dudalina", "john john", "richards", "le lis", "shoulder", "cia maritima", "youcom", "torra", "leader", "besni", "lojas avenida", "insider", "piccadilly", "usaflex", "carmen steffens", "santa lolla", "vizzano", "moleca", "beira rio", "via mia", "constance", "polo wear", "pbkids", "ri happy", "multicoisas", "monte carlo", "life by vivara", "rommanel", "semijoias", "joias", "relojoaria", "eletro*", "informatica", "celulares", "acessorios", "pichau", "terabyte", "girafa", "carrefour online", "extra com", "ponto com", "magazine luiza", "magalu", "zattini", "dafiti", "amaro", "posthaus", "kanui", "netshoes", "studio z", "paqueta", "authentic feet", "artwalk", "maze", "vans", "converse", "new balance", "asics", "fila", "under armour", "oakley", "ray ban", "tommy", "calvin klein", "lacoste", "levis", "guess", "victoria secret", "hope", "loungerie", "intimissimi", "c&a", "renner", "riachuelo", "marisa", "pernambucanas", "shopping", "loja", "lojas", "store", "magazine", "bazar", "presentes", "brinquedos", "papelaria", "livraria"],
 };
+// marcas que decidem sozinhas, antes das palavras gerais (ex.: "Estok Distribuidora" é loja de casa, não mercado)
+const MARCAS_FIXAS = [
+  ["moradia", ["estok", "larshopping", "lar shopping"]],
+  ["compras", ["hstern", "h stern", "privalia", "varejo", "mercadolivre", "mercado livre", "mercadoli*", "mercadol"]],
+  ["seguro", ["yelum*", "yelumseg*"]],
+  ["educacao", ["amib", "abramede", "sociedade brasileira", "associacao de medicina", "associacao medica", "amb"]],
+  ["assinaturas", ["investidor10", "investidor 10", "status invest", "statusinvest"]],
+  ["transporte", ["nutag", "nu tag", "europcar", "uberrides", "uber rides", "pituba parque", "parque center", "parque cente", "shopping estacionamento"]],
+  ["mercado", ["rmix*", "almacen*", "almacenpepe*", "organico*", "organicos"]],
+  ["restaurante", ["vendi", "csc vendi"]],
+];
 REGRAS_COMPRA.forEach(([c, ks]) => { (LOJAS_BR[c] || []).forEach((k) => { const n = SEM_ACENTO(k); if (!ks.includes(n)) ks.push(n); }); });
 const regraBate = (txt, k) => {
   if (k.endsWith("*")) { const b = k.slice(0, -1); return txt.includes(" " + b); }
@@ -116,13 +127,18 @@ function catCompra(desc, aprendidas) {
   if (!bruto.trim()) return "outros";
   if (aprendidas) { const k = chaveLoja(desc); if (k && aprendidas[k]) return aprendidas[k]; }
   // intermediadores que já dizem o tipo
-  if (/^\s*(ifd|ifood)\b/.test(bruto) || /uber\s*\*?\s*eats/.test(bruto) || /\b(rappi|keeta|99\s*food)\b/.test(bruto)) return "restaurante";
+  if (/^\s*(ifd|ifood)\b/.test(bruto) && !/(cencosud|supermerc|hiper|atacad|mercado|hortifrut|emporio|gbarbosa|bompreco|assai|carrefour|pao de acucar|farmac|drogar)/.test(bruto) || /uber\s*\*?\s*eats/.test(bruto) || /\b(rappi|keeta|99\s*food)\b/.test(bruto)) return "restaurante";
   if (/^\s*htm\s*\*/.test(bruto) && !/(restaurante|pizza|lanche|food)/.test(bruto)) return "educacao";
+  if (/^\s*(iof|juros|multa|encargos|anuidade|tarifa)\b/.test(bruto)) return "impostos";
   if (/^\s*uber\b/.test(bruto) || /^\s*99\s*(\*|app|pop|taxi|tecnologia)/.test(bruto)) return "transporte";
-  if (/^\s*(amazon|amzn)/.test(bruto)) return /prime|kindle|audible|music/.test(bruto) ? "assinaturas" : "compras";
+  if (/^\s*(ifd|ifood)\b/.test(bruto) && /(cencosud|supermerc|hiper|atacad|mercado|hortifrut|emporio|gbarbosa|bompreco|assai|carrefour|pao de acucar|farmac|drogar)/.test(bruto)) return /(farmac|drogar)/.test(bruto) ? "saude" : "mercado";
+  if (/^\s*(amazon|amzn)/.test(bruto)) return /prime|kindle|audible|music|ad free/.test(bruto) ? "assinaturas" : "compras";
   if (/apple\.com\/bill|apple com bill|^\s*google\s*\*/.test(bruto)) return "assinaturas";
   if (/^\s*(dl|mp|mercadopago)\s*\*\s*(mercado\s*livre|mercadolivre|meli)/.test(bruto)) return "compras";
   const txt = " " + limpaLoja(desc) + " ";
+  if (/^ uber/.test(txt)) return "transporte";
+  for (const [cat, chaves] of MARCAS_FIXAS) if (chaves.some((k) => regraBate(txt, k))) return cat;
+  if (/(^|[^m])posto/.test(txt.replace(/ /g, ""))) return "transporte";
   if (/ (escola|faculdade|universidade|colegio|curso|cursos) /.test(txt) && !/ (auto escola|autoescola|escola de natacao) /.test(txt)) return "educacao";
   for (const [cat, chaves] of REGRAS_COMPRA) if (chaves.some((k) => regraBate(txt, k))) return cat;
   return "outros";
@@ -699,7 +715,8 @@ const INVEST_RE = /(aplica[cç][aã]o|resgate|tesouro direto|corretora|\bcdb\b|\
 // Agrupa as compras de uma fatura por categoria, da maior para a menor
 const catItemFatura = (it, aprendidas) => {
   const k = aprendidas && chaveLoja(it.d); if (k && aprendidas[k]) return aprendidas[k];
-  return it.c && it.c !== "outros" && it.c !== "cartao" && EXP_CAT_MAP[it.c] ? it.c : catCompra(it.d);
+  const nova = catCompra(it.d);
+  return nova !== "outros" ? nova : it.c && it.c !== "cartao" && EXP_CAT_MAP[it.c] ? it.c : "outros";
 };
 function faturaGrupos(itens, aprendidas) {
   const map = {};
