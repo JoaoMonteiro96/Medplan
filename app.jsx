@@ -4964,6 +4964,58 @@ function App() {
         .dia-acoes { display: flex; justify-content: flex-end; padding: 6px 0 2px; }
         .dia-add-btn { width: 100%; justify-content: center; margin-top: 4px; }
         :root[data-theme="dark"] .dia-tot.in, :root[data-theme="dark"] .dia-v.in { color: #4ADE80; }
+        /* calendário no visual novo */
+        .app .cal-res { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px 20px; border-radius: 22px; margin-bottom: 16px; color: #fff;
+          background: radial-gradient(80% 140% at 100% 0%, rgba(52,211,153,0.2) 0%, rgba(52,211,153,0) 50%), linear-gradient(150deg, #0E5640 0%, #0B3D2E 58%, #08291F 100%);
+          box-shadow: 0 18px 40px -20px rgba(8,41,31,0.55); animation: riseIn2 .5s var(--ease) backwards; }
+        .cal-res-s span { font-size: 13px; color: rgba(255,255,255,0.72); font-weight: 500; }
+        .cal-res-s b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; margin: 2px 0 2px; }
+        .cal-res-s small { font-size: 12px; color: rgba(255,255,255,0.6); }
+        .cal-res-n { display: flex; gap: 8px; }
+        .cal-res-n > div { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 9px 12px; min-width: 76px; text-align: center; }
+        .cal-res-n b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 19px; font-weight: 800; } .cal-res-n span { font-size: 11.5px; color: rgba(255,255,255,0.7); }
+        @media (max-width: 560px) { .app .cal-res { grid-template-columns: 1fr; gap: 12px; } .cal-res-n > div { flex: 1; min-width: 0; padding: 8px 6px; } }
+
+        .app .calendar-grid { gap: 6px; }
+        .app .weekday-label { font-size: 11.5px; font-weight: 600; color: var(--text-dim); padding-bottom: 6px; }
+        .app .cal-cell, .app .cal-cell[class*="fx-"] { position: relative; overflow: hidden; background: var(--surface); background-image: none; border: 1px solid var(--hair); border-radius: 14px; box-shadow: none; transition: transform .15s var(--ease), box-shadow .2s var(--ease); }
+        .app .cal-cell:active { transform: scale(0.96); }
+        .app .cal-cell.empty { background: transparent; border: none; }
+        .app .cal-cell .cal-day-num, .app .cal-cell[class*="fx-"] .cal-day-num { font-family: "Manrope", "Inter", sans-serif; font-size: 13px; font-weight: 700; color: var(--text); }
+        .app .cal-cell.fut .cal-day-num { color: var(--text-dim); }
+        .app .cal-cell.today .cal-day-num { background: #0B3D2E; color: #fff; border-radius: 999px; padding: 1px 7px; }
+        .app .cal-cell.selected, .app .cal-cell.selected[class*="fx-"] { box-shadow: 0 0 0 2px #0E5640; border-color: transparent; }
+        .app .cal-dot, .app .cal-dot.esc { width: 7px; height: 7px; border-radius: 50%; }
+        .app .cal-dot.esc { opacity: 0.55; }
+        .app .cal-hours, .app .cal-cell[class*="fx-"] .cal-hours { font-size: 10.5px; font-weight: 600; color: var(--text-dim); }
+        /* modelo A: barra fina no pé do dia */
+        .app .cal-m-a .cal-cell[class*="fx-"]::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 4px; height: 4px; border-radius: 999px; }
+        .app .cal-m-a .cal-cell.fx-in1::after { background: rgba(22,163,74,0.35); } .app .cal-m-a .cal-cell.fx-in2::after { background: rgba(22,163,74,0.65); } .app .cal-m-a .cal-cell.fx-in3::after { background: #16A34A; }
+        .app .cal-m-a .cal-cell.fx-out1::after { background: rgba(220,38,38,0.32); } .app .cal-m-a .cal-cell.fx-out2::after { background: rgba(220,38,38,0.6); } .app .cal-m-a .cal-cell.fx-out3::after { background: #DC2626; }
+        .app .cal-m-a .cal-cell.fut[class*="fx-"]::after { background: transparent; }
+        .app .cal-m-a .cal-cell.fut[class*="fx-in"]::after { box-shadow: inset 0 0 0 1.5px rgba(22,163,74,0.6); }
+        .app .cal-m-a .cal-cell.fut[class*="fx-out"]::after { box-shadow: inset 0 0 0 1.5px rgba(220,38,38,0.55); }
+        /* modelo B: o dia inteiro em tom suave */
+        .app .cal-m-b .cal-cell.fx-in1 { background: #F0FAF3; } .app .cal-m-b .cal-cell.fx-in2 { background: #DDF3E4; } .app .cal-m-b .cal-cell.fx-in3 { background: #C3EACF; }
+        .app .cal-m-b .cal-cell.fx-out1 { background: #FDF3F3; } .app .cal-m-b .cal-cell.fx-out2 { background: #FAE3E3; } .app .cal-m-b .cal-cell.fx-out3 { background: #F5CFCF; }
+        .app .cal-m-b .cal-cell.fut[class*="fx-"] { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.7) 0 3px, transparent 3px 7px); }
+        .app .cal-m-b .cal-cell[class*="fx-"] { border-color: transparent; }
+        /* modelo C: o valor do dia escrito, sem cor de fundo */
+        .app .cal-val { display: none; }
+        .app .cal-m-c .cal-val { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 10.5px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; margin-top: auto; }
+        .app .cal-m-c .cal-val.in { color: #15803D; } .app .cal-m-c .cal-val.out { color: #B91C1C; }
+        .app .cal-m-c .cal-cell.fut .cal-val { opacity: 0.55; }
+        .app .cal-m-c .cal-cell .cal-hours { margin-top: 0; }
+        .app .cal-cell .cal-hours { margin-bottom: 6px; }
+        .cal-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-dim); margin-top: 12px; }
+        .cal-leg i { display: inline-block; width: 16px; height: 4px; border-radius: 999px; margin-right: 6px; vertical-align: 3px; }
+        .cal-leg .lg-in { background: #16A34A; } .cal-leg .lg-out { background: #DC2626; } .cal-leg .lg-prev { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(22,163,74,0.6); }
+        @media (min-width: 1100px) {
+          .app .cal-desk .cal-cell { min-height: 108px; padding: 9px 10px 12px; }
+          .app .cal-desk .cal-lines span { font-size: 11.5px; }
+        }
+        :root[data-theme="dark"] .app .cal-cell.today .cal-day-num { background: #34D399; color: #062118; }
+        :root[data-theme="dark"] .app .cal-cell.selected { box-shadow: 0 0 0 2px #34D399; }
         /* aviso com desfazer */
         .aviso { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9500; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
           background: rgba(15,26,22,0.94); color: #fff; border-radius: 16px; padding: 10px 10px 10px 12px; box-shadow: 0 16px 36px -12px rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
@@ -8051,7 +8103,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
         <Kpi label="Dias trabalhados" value={Object.values(entriesByDay).filter((l) => l.some((e) => !e.off)).length} />
         {desk && <Kpi label="Saldo do mês" value={fmtBRL(Object.values(fluxoDia).reduce((a, f) => a + f.entra - f.sai, 0))} sub="entra menos sai" />}
       </div>
-      <div className={`calendar-grid ${desk ? "cal-desk" : ""}`}>
+      <div className={`calendar-grid cal-m-a ${desk ? "cal-desk" : ""}`}>
         {WEEKDAYS_PT.map((w, i) => <div key={i} className="weekday-label">{w}</div>)}
         {cells.map((day, idx) => {
           if (!day) return <div key={idx} className="cal-cell empty" />;
@@ -8061,6 +8113,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
           return (
             <div key={idx} className={`cal-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""} ${fxClasse(day)} ${iso > today ? "fut" : ""}`} onClick={() => setSelectedDay(day)}>
               <span className="cal-day-num mono">{day}</span>
+              {(() => { const f = fluxoDia[day]; const net = f ? f.entra - f.sai : 0; if (Math.abs(net) < 1) return null; const av = Math.abs(net); const t = av >= 1e3 ? (av / 1e3).toFixed(av >= 1e4 ? 0 : 1).replace(".", ",") + " mil" : String(Math.round(av)); return <span className={`cal-val ${net > 0 ? "in" : "out"}`}>{(net > 0 ? "+" : "−") + t}</span>; })()}
               {dEntries.length > 0 && (
                 <div className="cal-dots">{dEntries.slice(0, 4).map((e) => { const v = vinculoMap[e.vinculoId]; return <span key={e.id} className={`cal-dot ${e._kind === "escala" ? "esc" : ""} ${e.off ? "off" : ""}`} style={{ background: v ? v.cor : GOLD }} />; })}</div>
               )}
@@ -8077,9 +8130,8 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
         })}
       </div>
 
-      <div className="fx-legend">
-        <span>saiu mais <i className="fx-out3" /><i className="fx-out1" /><i className="fx-zero" /><i className="fx-in1" /><i className="fx-in3" /> entrou mais</span>
-        <span><i className="fx-in2 fut" /> listrado é previsão</span>
+      <div className="cal-leg">
+        <span><i className="lg-in" />entrou mais</span><span><i className="lg-out" />saiu mais</span><span><i className="lg-prev" />previsto</span>
       </div>
       {usedVinc.length > 0 && (
         <div className="legend inline" style={{ marginTop: 10 }}>{usedVinc.map((v) => <span key={v.id}><i style={{ background: v.cor }} />{v.nome}</span>)}</div>
