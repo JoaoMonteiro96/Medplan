@@ -1,0 +1,15 @@
+{
+  "name": "sallos",
+  "private": true,
+  "description": "Sallos: finanças do médico. O site é publicado pelo GitHub Pages a partir desta pasta.",
+  "scripts": {
+    "build": "node ferramentas/build.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
