@@ -1605,7 +1605,6 @@ function MonthPicker({ year, setYear, viewYear, viewMonth, statsOf, onPick, onCl
             );
           })}
         </div>
-        <div className="mp-foot">Valores líquidos, no mês em que entram e saem do caixa. A linha de horas mostra o ganho líquido por hora trabalhada. Toque num mês para abrir.</div>
       </div>
     </div>
   );
@@ -4923,6 +4922,27 @@ function App() {
           .dprox-ok.in:hover { background: #16A34A; border-color: #16A34A; color: #fff; } .dprox-ok.out:hover { background: #0F1A16; border-color: #0F1A16; color: #fff; }
         }
         @media (max-width: 1099px) { .dprox-ok { display: none; } }
+        /* rentabilidade do trabalho no visual novo */
+        .app .dgv-b > .work-card { border: none; box-shadow: none; background: transparent; padding: 4px 0 0; margin: 0; animation: none; }
+        .app .dgv-b > .work-card > .card-head { display: none; }
+        .app .wr-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; }
+        :root:not([data-theme="dark"]) .app .wr-main { background: linear-gradient(155deg, #0E5640 0%, #0B3D2E 60%, #08291F 100%); color: #fff; }
+        :root[data-theme="dark"] .app .wr-main { background: linear-gradient(155deg, #0F4A37 0%, #0B3226 60%, #08231B 100%); color: #fff; }
+        .app .wr-main { border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; justify-content: center; }
+        .app .wr-main > span { color: rgba(255,255,255,0.75) !important; font-size: 13px; font-weight: 500; }
+        .app .wr-main > b { color: #fff !important; font-family: "Manrope", "Inter", sans-serif; font-size: 36px; font-weight: 800; }
+        .app .wr-main small, .app .wr-main .wr-none { color: rgba(255,255,255,0.7) !important; }
+        .app .wr-main .delta.good { color: #6EE7B7; background: rgba(110,231,183,0.14); } .app .wr-main .delta.bad { color: #FCA5A5; background: rgba(252,165,165,0.14); }
+        .app .wr-side { grid-template-columns: 1fr; gap: 0; background: var(--surface-2); border: 1px solid var(--hair); border-radius: 18px; padding: 4px 16px; }
+        .app .wr-side > div { background: none; border-radius: 0; padding: 11px 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: baseline; border-top: 1px solid var(--hair); }
+        .app .wr-side > div:first-child { border-top: none; }
+        .app .wr-side > div > span { font-size: 13.5px; color: var(--text); font-weight: 500; }
+        .app .wr-side > div > b { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 17px; white-space: nowrap; }
+        .app .wr-side > div > small { grid-column: 1; font-size: 12.5px; color: var(--text-dim); }
+        .app .wr-sub { text-transform: none; letter-spacing: -0.01em; font-family: "Manrope", "Inter", sans-serif; font-size: 15px; font-weight: 700; color: var(--text); margin: 22px 0 8px; }
+        .app .wr-vin .progress-track.wr-vbar { height: 6px; border-radius: 999px; }
+        .app .wr-vin .progress-fill { border-radius: 999px; }
+        @media (max-width: 700px) { .app .wr-top { grid-template-columns: 1fr; } }
         /* aviso com desfazer */
         .aviso { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9500; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
           background: rgba(15,26,22,0.94); color: #fff; border-radius: 16px; padding: 10px 10px 10px 12px; box-shadow: 0 16px 36px -12px rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
@@ -5090,9 +5110,6 @@ function App() {
       <input ref={reanexarRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => reanexar(e.target.files && e.target.files[0])} />
       <button className="fab2" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
 
-      <div className="footnote">
-        {session ? `Conectado como ${session.user.email}. Seus dados ficam salvos na nuvem e neste aparelho.` : "Os dados ficam salvos neste aparelho. Para usar em mais de um aparelho, conecte a nuvem em Configurações."}
-      </div>
       </div>
     </div>
   );
@@ -6520,7 +6537,6 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
           ))}
         </div>
       )}
-      <div className="field-hint">Ao marcar como pago, a guia entra em Despesas, em Impostos. {guias.some((g) => g.estimado) ? "Valores estimados: confira com o contador." : ""}</div>
     </div>
   );
   const caixinha = (
@@ -6540,7 +6556,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
             </label>
           ); })}
         </div>
-        <div className="field-hint">Marque quando passar o valor para uma conta ou caixinha separada. O valor vem da tributação de cada vínculo.</div>
+        
       </>)}
     </div>
   );
@@ -6578,7 +6594,6 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
         {anoIsento.length > 0 && <div className="kv-line"><span>Recebido sem imposto (Pix como sócio e dividendos)</span><b className="mono">{fmtBRL(anoIsento.reduce((a, i) => a + (Number(i.forma === "socio" ? i.net : i.gross) || 0), 0))}</b></div>}
         <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Preencha quanto você recebeu" : (saldoIr >= 0 ? "Você recebe de volta " : "Você ainda paga ") + fmtBRL(Math.abs(saldoIr))}</b></div>
       </div>
-      <div className="field-hint">Valor aproximado, com a tabela de {viewYear >= 2026 ? 2026 : viewYear}. Quem confirma é o contador na declaração.</div>
     </div>
   );
   const dedAteHoje = [...dedAno].filter((e) => String(e.dateIso).slice(0, 7) <= todayStr().slice(0, 7)).sort((x, y) => String(y.dateIso).localeCompare(String(x.dateIso)));
@@ -6620,8 +6635,8 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
           ))}
         </div>
         {dedAteHoje.length > 6 && <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={() => setDedVerTodas(!dedVerTodas)}>{dedVerTodas ? "Ver menos" : `Ver todos (${dedAteHoje.length})`}</button>}
-        {dedSemNota > 0 && <div className="field-hint">Para pôr a nota numa conta do mês, toque no lápis dela em Despesas.</div>}
-        {outrosDed.length > 0 && <div className="field-hint">Cursos e congressos não diminuem o imposto de quem recebe pró-labore. Eles vão no relatório para o contador avaliar.</div>}
+        
+        
       </>)}
     </div>
   );
@@ -6872,20 +6887,10 @@ function WorkRateCard({ cur, prev, history, monthName, prevName, compact, onCale
                 </div>
               ))}
               <div className="wr-sub">Ganho por hora nos últimos {history.length} meses</div>
-              <div className="wr-hist">
-                {history.map((h) => (
-                  <button key={h.y + "-" + h.m} className={`wr-col ${h.cur ? "cur" : ""}`} onClick={() => goMonth(h.y, h.m)} aria-label={`${h.full}: ${h.hours > 0 ? fmtBRL(h.hourly) + " por hora, " + fmtHoras(h.hours) : "sem horas"}`}>
-                    <span className="wr-colv mono">{h.hours > 0 ? Math.round(h.hourly).toLocaleString("pt-BR") : "—"}</span>
-                    <span className="wr-bar"><i style={{ height: `${h.hours > 0 ? Math.max(4, (h.hourly / maxHist) * 100) : 0}%` }} /></span>
-                    <span className="wr-coll">{h.label}</span>
-                    <span className="wr-colh mono">{h.hours > 0 ? fmtHoras(h.hours) : ""}</span>
-                  </button>
-                ))}
-              </div>
+              <SvgBarChart data={history.map((h) => ({ label: h.label, full: h.full + (h.hours > 0 ? " · " + fmtHoras(h.hours) : " · sem horas"), value: h.hours > 0 ? h.hourly : 0, y: h.y, m: h.m }))} height={190} color="#16A34A" onOpen={(d) => goMonth && goMonth(d.y, d.m)} />
             </>
           )}
           {cur.semHoras > 0 && <div className="wr-note">{cur.semHoras} {cur.semHoras === 1 ? "plantão sem horas ficou" : "plantões sem horas ficaram"} fora da conta ({fmtBRL(cur.semHorasNet)}). Informe as horas no Calendário para incluir.</div>}
-          {!compact && <div className="field-hint">A conta divide o valor líquido dos plantões e dos vínculos com horas lançadas pelas horas trabalhadas no mês, mesmo que o pagamento caia depois.</div>}
         </>
       )}
     </div>
@@ -7286,7 +7291,6 @@ function ContabCalc({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
           </details>
         </>
       )}
-      <div className="footnote" style={{ margin: "4px 0 0", padding: 0, textAlign: "left" }}>Os valores são estimativas com as regras de 2026, para dar uma ideia do custo. Eles não substituem o seu contador.</div>
     </div>
   );
 }
@@ -7568,7 +7572,7 @@ function TetoGastos({ monthExpenseItems = [], limits = {}, setLimit, viewYear, v
           <div className="tt-sub">{Math.round(pct * 100)}% usado · {falta >= 0
             ? <>faltam <b>{fmtBRL(falta)}</b>{diasRest > 0 && falta > 0 ? <>, cerca de {fmtBRL(falta / diasRest)} por dia</> : null}</>
             : <>passou <b className="tt-neg">{fmtBRL(-falta)}</b> do teto</>}</div>
-          <div className="field-hint">O app avisa quando você passar de 80% e de 100% do teto.</div>
+          
         </div>
       )}
       <button type="button" className="fz-add tt-cat" aria-expanded={catAberta} onClick={() => setCatAberta(!catAberta)}>
@@ -7871,7 +7875,7 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch }) {
           )}
         </div>
       </div>
-      <div className="field-hint">É uma estimativa. Rendimento passado não garante rendimento futuro.</div>
+      
     </div>
   );
 }
@@ -8344,7 +8348,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
                       {linha}{ed}
                       <div className="xl-fat" data-fat={e.description}>
                         <div className="xl-fat-h">Gastos desta fatura por categoria</div>
-                        <div className="xl-fat-dica">Abra uma categoria e toque em "mudar" se alguma compra estiver no lugar errado. O app lembra da loja nas próximas faturas.</div>
+                        
                         {faturaGrupos(e.itens, catAprendida).map((g) => { const gk = e.key + "|" + g.id, ab = !!openGrp[gk]; return (
                           <div key={g.id} className="xl-grp">
                             <button type="button" className="xl-grp-h" data-grp={g.label} aria-expanded={ab} onClick={() => setOpenGrp((p) => ({ ...p, [gk]: !p[gk] }))}>
@@ -8369,7 +8373,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
             <div className="xl-total"><span>{filter === "todas" ? "Total do mês" : "Total deste filtro"} · {visible.length} {visible.length === 1 ? "conta" : "contas"}</span><b className="mono">{fmtBRL(visible.reduce((a, e) => a + e.amount, 0))}</b></div>
           </div>
         )}
-        <div className="field-hint" style={{ marginTop: 10 }}>Toque no círculo para marcar a conta como paga.</div>
+        
       </div>
       {desk && (() => {
         const m = {}; monthExpenseItems.forEach((e) => { const c = EXP_CAT_MAP[e.category] ? e.category : "outros"; m[c] = (m[c] || 0) + e.amount; });
@@ -8720,12 +8724,10 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
         <Kpi label="Patrimônio atual" num={totalValue} sub={positions.length + " posição(ões)"} />
         <Kpi label="Variação" num={profit} fmt={(n) => sgn(n) + " " + fmtBRL(Math.abs(n))} tone={profit >= 0 ? "var(--teal)" : "var(--brick)"} sub={signPct(profitPct) + " sobre o custo"} />
       </div>
-      {!desk && positions.length > 0 && <RentabilidadeCard hist={Array.isArray(cotacoes.__hist) ? cotacoes.__hist : []} investments={investments} totalValue={totalValue} totalBought={totalBought} totalSold={totalSold} />}
       {desk && positions.length > 0 && (
-        <div className="dgrid" style={{ gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1fr)", marginBottom: 14 }}>
+        <div className="dgrid" style={{ gridTemplateColumns: "minmax(0, 1fr)", marginBottom: 14 }}>
           <div className="card dinv-ev"><div className="card-head"><h3 className="card-title">Quanto você já investiu, mês a mês</h3><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
             <SvgAreaChart data={investmentsHistory12} height={170} color="#7C3AED" valueKey="acumulado" /></div>
-          <RentabilidadeCard hist={Array.isArray(cotacoes.__hist) ? cotacoes.__hist : []} investments={investments} totalValue={totalValue} totalBought={totalBought} totalSold={totalSold} />
         </div>
       )}
 
