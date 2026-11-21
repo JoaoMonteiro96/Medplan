@@ -10255,10 +10255,10 @@ function OverviewTab({ chartScope, setChartScope, expensesByDesc, investByCatego
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);
-// abertura: some com suavidade quando o app já desenhou a primeira tela (fica no mínimo ~1,3 s para a animação terminar)
+// abertura: some com suavidade quando o app já desenhou a primeira tela (fica no mínimo ~1,8 s para a animação terminar)
 (function fecharAbertura() {
   const el = document.getElementById("splash"); if (!el) return;
-  const espera = Math.max(0, 1350 - (performance.now ? performance.now() : 0));
+  const espera = Math.max(0, 1800 - (performance.now ? performance.now() : 0));
   setTimeout(() => requestAnimationFrame(() => {
     el.classList.add("sair");
     const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", m.dataset.depois || m.dataset.claro || "#FFFFFF");
