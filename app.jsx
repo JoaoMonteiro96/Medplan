@@ -4943,6 +4943,27 @@ function App() {
         .app .wr-vin .progress-track.wr-vbar { height: 6px; border-radius: 999px; }
         .app .wr-vin .progress-fill { border-radius: 999px; }
         @media (max-width: 700px) { .app .wr-top { grid-template-columns: 1fr; } }
+        /* painel do dia no calendário: lista curta, detalhes ao tocar */
+        .dia-tit { display: flex; align-items: center; gap: 10px; } .dia-tit > span { flex: 1; font-family: "Manrope", "Inter", sans-serif; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; }
+        .dia-tot { font-size: 16px; font-weight: 800; } .dia-tot.in { color: #15803D; } .dia-tot.out { color: #B91C1C; }
+        .dia-lista { background: var(--surface); border: 1px solid var(--hair); border-radius: 16px; padding: 4px 14px; margin-bottom: 12px; }
+        .dia-sec { font-size: 12.5px; font-weight: 600; color: var(--text-dim); padding: 10px 0 2px; }
+        .dia-it { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 0; border-top: 1px solid var(--hair); }
+        .dia-sec + .dia-it { border-top: none; }
+        .dia-it.pl { grid-template-columns: minmax(0, 1fr) auto; }
+        .dia-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+        .dia-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; background: none; border: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+        .dia-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-dim); } .dia-dot.in { background: #16A34A; } .dia-dot.out { background: #DC2626; }
+        .dia-n { min-width: 0; } .dia-n b { display: block; font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dia-n small { display: block; font-size: 12.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dia-v { font-size: 14.5px; font-weight: 700; white-space: nowrap; } .dia-v.in { color: #15803D; }
+        .dia-st { white-space: nowrap; }
+        .dia-mini { border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
+        .dia-it.off .dia-n b { color: var(--text-dim); text-decoration: line-through; }
+        .dia-det { grid-column: 1 / -1; background: var(--surface-2); border-radius: 12px; padding: 6px 12px; margin-top: 4px; animation: riseIn2 .3s var(--ease) backwards; }
+        .dia-acoes { display: flex; justify-content: flex-end; padding: 6px 0 2px; }
+        .dia-add-btn { width: 100%; justify-content: center; margin-top: 4px; }
+        :root[data-theme="dark"] .dia-tot.in, :root[data-theme="dark"] .dia-v.in { color: #4ADE80; }
         /* aviso com desfazer */
         .aviso { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9500; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
           background: rgba(15,26,22,0.94); color: #fff; border-radius: 16px; padding: 10px 10px 10px 12px; box-shadow: 0 16px 36px -12px rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
@@ -7979,6 +8000,9 @@ function GoalsTab({ goals, addGoal, removeGoal, contributeGoal, valorDaMeta, set
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
   addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, fluxoDia = {}, desk }) {
   const [modo, setModo] = useState("plantao");
+  const [diaAberto, setDiaAberto] = useState(null); // lançamento com detalhes abertos
+  const [addAberto, setAddAberto] = useState(false);
+  useEffect(() => { setDiaAberto(null); setAddAberto(false); }, [selectedDay]);
   const fxMax = Object.values(fluxoDia).reduce((a, f) => Math.max(a, Math.abs(f.entra - f.sai)), 0);
   const fxClasse = (day) => { const f = fluxoDia[day]; if (!f || !fxMax) return ""; const net = f.entra - f.sai; if (Math.abs(net) < 0.005) return ""; const r = Math.abs(net) / fxMax; return (net > 0 ? "fx-in" : "fx-out") + (r < 0.34 ? 1 : r < 0.67 ? 2 : 3); };
   const fxSel = selectedDay ? fluxoDia[selectedDay] : null;
@@ -8064,66 +8088,77 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
       {selectedDay && (
         <div className="sheet-backdrop" onClick={() => setSelectedDay(null)}><div className="sheet tall" onClick={(e) => e.stopPropagation()}><div className="sheet-handle" />
         <div className="day-panel flat">
-          <div className="day-panel-title"><span>Lançamentos em {pad(selectedDay)}/{pad(viewMonth + 1)}/{viewYear}</span><button className="btn-icon" onClick={() => setSelectedDay(null)}><IconX size={16} /></button></div>
-          {fxSel && (
-            <div className="fx-day">
-              <div className="fx-head"><b>Dinheiro neste dia</b><span className={`fx-net ${fxSel.entra - fxSel.sai >= 0 ? "in" : "out"}`}>{fxSel.entra - fxSel.sai >= 0 ? "+ " : "− "}{fmtBRL(Math.abs(fxSel.entra - fxSel.sai))}</span></div>
+          <div className="day-panel-title dia-tit"><span>{(() => { const dt = new Date(viewYear, viewMonth, selectedDay); const s2 = dt.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }); return s2.charAt(0).toUpperCase() + s2.slice(1); })()}</span>
+            {fxSel && <b className={`dia-tot mono ${fxSel.entra - fxSel.sai >= 0 ? "in" : "out"}`}>{fxSel.entra - fxSel.sai >= 0 ? "+ " : "− "}{fmtBRL(Math.abs(fxSel.entra - fxSel.sai))}</b>}
+            <button className="btn-icon" aria-label="Fechar" onClick={() => setSelectedDay(null)}><IconX size={16} /></button></div>
+
+          {!fxSel && dayEntries.length === 0 && <div className="empty-state">Nada neste dia.</div>}
+
+          {fxSel && fxSel.itens.length > 0 && (
+            <div className="dia-lista">
+              <div className="dia-sec">Dinheiro</div>
               {fxSel.itens.map((it) => (
-                <div key={it.k} className="fx-line">
-                  <i className={it.in ? "in" : "out"} />
-                  <span className="fx-nome">{it.nome}<small>{it.in ? (it.ok ? "recebido" : "a receber") : (it.ok ? "pago" : "a pagar")}</small></span>
-                  <b className={it.in ? "in" : ""}>{it.in ? "+ " : "− "}{fmtBRL(it.v)}</b>
+                <div key={it.k} className="dia-it">
+                  <i className={`dia-dot ${it.in ? "in" : "out"}`} />
+                  <span className="dia-n"><b>{it.nome}</b><small>{it.in ? (it.ok ? "recebido" : "a receber") : (it.ok ? "pago" : "a pagar")}</small></span>
+                  <b className={`dia-v mono ${it.in ? "in" : ""}`}>{it.in ? "+ " : "− "}{fmtBRL(it.v)}</b>
                 </div>
               ))}
             </div>
           )}
 
-          {dayEntries.length === 0 && <div className="empty-state">Nenhum lançamento neste dia ainda.</div>}
-
-          {dayEntries.map((e) => {
-            const v = vinculoMap[e.vinculoId];
-            if (e._kind === "plantao") {
-              return (
-                <div key={e.id} className="stub-card">
-                  <div className="stub-head"><span className="stub-hospital"><span className="color-dot" style={{ background: v ? v.cor : GOLD }} /><IconBuilding size={14} /> {v ? v.nome : "?"}{e.serie && <small className="serie-tag">repete</small>}</span><button className="btn-icon" aria-label="Apagar este plantão" onClick={() => removeShift(e.id)}><IconTrash size={15} /></button></div>
-                  <div className="stub-tear" />
-                  <div className="stub-row"><span className="k">Valor bruto</span><span className="v mono">{fmtBRL(e.gross)}</span></div>
-                  <div className="stub-row"><span className="k">Horas trabalhadas</span><span className="v mono">{e.hours || 0}h</span></div>
-                  <div className="stub-row"><span className="k">{formaDe(v) === "socio" ? "Imposto pago pela empresa" : "Tributação"}</span><span className="v mono" style={{ color: "var(--brick)" }}>- {fmtBRL(e.gross - liquidoDeVinc(v, e.gross, netOf))}</span></div>
-                  <div className="stub-row"><span className="k">Valor líquido</span><span className="v mono" style={{ color: "var(--gold)" }}>{fmtBRL(liquidoDeVinc(v, e.gross, netOf))}</span></div>
-                  <div className="stub-row"><span className="k">Prazo de pagamento</span>
+          {dayEntries.length > 0 && (
+            <div className="dia-lista">
+              <div className="dia-sec">Trabalho</div>
+              {dayEntries.map((e) => {
+                const v = vinculoMap[e.vinculoId];
+                const cor = v ? v.cor : SLATE, nome = v ? v.nome : "?";
+                if (e._kind === "plantao") {
+                  const liq = liquidoDeVinc(v, e.gross, netOf), aberto = diaAberto === e.id;
+                  return (
+                    <div key={e.id} className={`dia-it pl ${aberto ? "aberto" : ""}`}>
+                      <button type="button" className="dia-row" aria-expanded={aberto} onClick={() => setDiaAberto(aberto ? null : e.id)}>
+                        <i className="dia-dot" style={{ background: cor }} />
+                        <span className="dia-n"><b>{nome}</b><small>{fmtHoras(e.hours || 0)} · cai {fmtDatePt(payDateOf(e)).slice(0, 5)}</small></span>
+                      </button>
+                      <span className="dia-dir"><b className="dia-v mono">{fmtBRL(liq)}</b><button type="button" className={`badge dia-st ${e.recebido ? "badge-paid" : "badge-pending"}`} onClick={() => toggleShiftReceived(e.id)}>{e.recebido ? "Recebido" : "A receber"}</button></span>
+                      {aberto && (
+                        <div className="dia-det">
+                          <div className="stub-row"><span className="k">Valor bruto</span><span className="v mono">{fmtBRL(e.gross)}</span></div>
+                          <div className="stub-row"><span className="k">{formaDe(v) === "socio" ? "Imposto pago pela empresa" : "Imposto"}</span><span className="v mono" style={{ color: "var(--brick)" }}>− {fmtBRL(e.gross - liq)}</span></div>
+                          <div className="stub-row"><span className="k">Prazo de pagamento</span>
                     <select className="tax-mini wide" value={e.prazoDias || 0} onChange={(ev) => updateShiftPrazo(e.id, ev.target.value)}>
                       {prazoOptions("dias", e.prazoDias || 0).map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
                     </select></div>
-                  <div className="stub-row"><span className="k">Cai no caixa em</span><span className="v mono">{fmtDatePt(payDateOf(e))}</span></div>
-                  <div className="stub-row"><span className="k">Pagamento</span><button className={`badge ${e.recebido ? "badge-paid" : "badge-pending"}`} onClick={() => toggleShiftReceived(e.id)}>{e.recebido ? "Recebido" : "Não recebido"}</button></div>
-                  {e.serie && (() => { const n = (shifts || []).filter((x) => x.serie === e.serie && x.date > e.date).length; return n > 0 ? <div className="stub-row"><span className="k">Plantão que se repete</span><button type="button" className="link-btn" data-serie-del onClick={() => removeShiftSerie(e.serie, e.date)}>Apagar este e os {n} seguintes</button></div> : null; })()}
-                </div>
-              );
-            }
-            if (e._kind === "escala") {
-              return (
-                <div key={e.id} className={`stub-card ${e.off ? "off" : ""}`} data-escala-dia={v ? v.nome : ""}>
-                  <div className="stub-head"><span className="stub-hospital"><span className="color-dot" style={{ background: v ? v.cor : SLATE }} /><IconClock size={14} /> {v ? v.nome : "?"} ({(TURNOS[e.turno] || "").toLowerCase()}, escala fixa)</span></div>
-                  <div className="stub-tear" />
-                  <div className="stub-row"><span className="k">Horas previstas</span><span className="v mono">{e.off ? "não trabalhado" : fmtHoras(e.previsto)}</span></div>
-                  <div className="stub-row"><span className="k">Pagamento</span><span className="v" style={{ color: "var(--text-dim)" }}>via renda mensal fixa deste vínculo</span></div>
-                  <div className="stub-row"><span className="k">{e.off ? "Este dia não conta nas horas" : "Não trabalhou neste dia?"}</span><button className="btn btn-ghost sm" onClick={() => toggleEscalaOff(e.vinculoId, e.date)}>{e.off ? "Voltar a contar" : "Não trabalhei"}</button></div>
-                  {!e.off && <div className="field-hint">Trabalhou outro número de horas? Lance as horas deste vínculo abaixo: elas substituem a escala neste dia.</div>}
-                </div>
-              );
-            }
-            return (
-              <div key={e.id} className="stub-card">
-                <div className="stub-head"><span className="stub-hospital"><span className="color-dot" style={{ background: v ? v.cor : SLATE }} /><IconClock size={14} /> {v ? v.nome : "?"} (presença)</span><button className="btn-icon" onClick={() => removePresenca(e.id)}><IconTrash size={15} /></button></div>
-                <div className="stub-tear" />
-                <div className="stub-row"><span className="k">Horas trabalhadas</span><span className="v mono">{e.hours || 0}h</span></div>
-                <div className="stub-row"><span className="k">Pagamento</span><span className="v" style={{ color: "var(--text-dim)" }}>via renda mensal fixa deste vínculo</span></div>
-              </div>
-            );
-          })}
+                          {e.serie && (() => { const n = (shifts || []).filter((x) => x.serie === e.serie && x.date > e.date).length; return n > 0 ? <div className="stub-row"><span className="k">Plantão que se repete</span><button type="button" className="link-btn" data-serie-del onClick={() => removeShiftSerie(e.serie, e.date)}>Apagar este e os {n} seguintes</button></div> : null; })()}
+                          <div className="dia-acoes"><button className="btn-icon" aria-label="Apagar este plantão" onClick={() => removeShift(e.id)}><IconTrash size={15} /></button></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                if (e._kind === "escala") {
+                  return (
+                    <div key={e.id} className={`dia-it ${e.off ? "off" : ""}`} data-escala-dia={nome}>
+                      <i className="dia-dot" style={{ background: cor }} />
+                      <span className="dia-n"><b>{nome}</b><small>{(TURNOS[e.turno] || "Escala")} · {e.off ? "não trabalhado" : fmtHoras(e.previsto)}</small></span>
+                      <button type="button" className="dia-mini" onClick={() => toggleEscalaOff(e.vinculoId, e.date)}>{e.off ? "Voltar a contar" : "Não trabalhei"}</button>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={e.id} className="dia-it">
+                    <i className="dia-dot" style={{ background: cor }} />
+                    <span className="dia-n"><b>{nome}</b><small>Presença · {fmtHoras(e.hours || 0)}</small></span>
+                    <button className="btn-icon" onClick={() => removePresenca(e.id)}><IconTrash size={15} /></button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-          <div className="add-box" id="day-add">
+          {!addAberto && <button type="button" className="btn btn-ghost dia-add-btn" id="day-add-abrir" onClick={() => setAddAberto(true)}><IconPlus size={15} /> Adicionar neste dia</button>}
+          {addAberto && <div className="add-box" id="day-add">
             <div className="add-head"><b>Adicionar neste dia</b></div>
             <div className="segmented" id="day-modo" role="tablist">
               <button type="button" role="tab" aria-selected={modo === "plantao"} className={`seg-btn ${modo === "plantao" ? "active" : ""}`} data-modo="plantao" onClick={() => { setModo("plantao"); setErro(""); setShowNewVinculo(false); }}>Plantão</button>
@@ -8139,7 +8174,6 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                       {plLocais.map((v) => { const on = stripAcc(local).trim() === stripAcc(v.nome).trim(); return <button key={v.id} type="button" data-local={v.nome} className={`chip sm ${on ? "active" : ""}`} aria-pressed={on} onClick={() => { setLocal(v.nome); setPrazoDias(Number(v.prazoPadrao) || 0); setTaxa(formaDe(v) === "socio" ? (Number(v.taxSocio) > 0 ? String(v.taxSocio) : "0") : v.taxOverride !== null && v.taxOverride !== undefined ? String(v.taxOverride) : ""); setErro(""); }}><i style={{ background: v.cor }} />{v.nome}</button>; })}
                     </div>
                   )}
-                  <div className="field-hint">{plLocais.length ? "Toque em um local já usado ou digite um novo. Local novo fica guardado sozinho." : "É só digitar o nome. O local fica guardado para as próximas vezes."}</div>
                 </div>
                 <div className="form-grid" style={{ marginTop: 10 }}>
                   <div className="field"><label htmlFor="pl-valor">Valor do plantão (R$) *</label><MoneyInput id="pl-valor" value={gross} onChange={(v) => { setGross(v); setErro(""); }} /></div>
@@ -8207,7 +8241,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                 <div style={{ marginTop: 8 }}><button type="button" className="subtle-link" id="day-novo" onClick={() => { setShowNewVinculo(true); setErro(""); }}><IconPlus size={13} /> Cadastrar outro cargo fixo</button></div>
               </>
             )}
-          </div>
+          </div>}
         </div></div></div>
       )}
     </>
