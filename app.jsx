@@ -60,7 +60,7 @@ const EXP_CAT_MAP = Object.fromEntries(EXP_CATS.map((c) => [c.id, c]));
 // ---- reconhecimento das compras do cartão ----
 // nomes como vêm na fatura: "IFD*RESTAURANTE X", "MP *LOJA", "UBER* TRIP", "PAG*DROGARIA", "AMAZON BR 02/10"
 const SEM_ACENTO = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-const PROC_PREFIXO = /^\s*(ifd|ifood|pg|pag|pags|pagseguro|ps|mp|mpago|mercadopago|ec|ebn|htm|paypal|picpay|sumup|sum|stone|ton|cielo|getnet|shpp|dl|zp|iugu|ame|pp|cl|bo|ebw|nupay|rede|asaas|vindi|zoop|pagarme|pagar me)\s*\*\s*/;
+const PROC_PREFIXO = /^\s*(ifd|ifood|pg|pag|pags|pagseguro|ps|mp|mpago|mercadopago|ec|ebn|htm|paypal|picpay|sumup|sum|stone|ton|cielo|getnet|shpp|dl|zp|iugu|ame|pp|cl|bo|ebw|nupay|rede|asaas|vindi|zoop|pagarme|pagar me|br1|cappta|mag|stelo|safrapay|bin|pagbank|infinitepay|infpay)\s*\*\s*/;
 const limpaLoja = (desc) => {
   let d = SEM_ACENTO(desc).replace(PROC_PREFIXO, "").replace(PROC_PREFIXO, "");
   d = d.replace(/\bparc(ela)?\s*\d+\s*(\/|de)\s*\d+/g, " ").replace(/\b\d{1,2}\s*\/\s*\d{1,2}\b/g, " ");
@@ -114,7 +114,12 @@ const MARCAS_FIXAS = [
   ["educacao", ["amib", "abramede", "sociedade brasileira", "associacao de medicina", "associacao medica", "amb"]],
   ["assinaturas", ["investidor10", "investidor 10", "status invest", "statusinvest"]],
   ["transporte", ["nutag", "nu tag", "europcar", "uberrides", "uber rides", "pituba parque", "parque center", "parque cente", "shopping estacionamento"]],
-  ["mercado", ["rmix*", "almacen*", "almacenpepe*", "organico*", "organicos"]],
+  ["transporte", ["localiza*", "cresauto", "veiculos", "veiculo", "automoveis", "autos", "seminovos"]],
+  ["viagem", ["destino*", "iguassu", "iguacu", "foz do iguacu"]],
+  ["compras", ["brooksfield", "brooks field"]],
+  ["assinaturas", ["netlify", "vercel", "heroku", "digitalocean", "hostinger", "godaddy", "registro br", "supabase", "higgsfield", "runway", "elevenlabs", "suno", "capcut", "inc", "llc"]],
+  ["restaurante", ["porteira*", "a porteira", "boi e brasa", "brasa", "pollo", "bentocafe", "cappta"]],
+  ["mercado", ["frigorifico*", "sagrado pao", "pao", "paes", "alimentos", "rmix*", "almacen*", "almacenpepe*", "organico*", "organicos"]],
   ["restaurante", ["vendi", "csc vendi"]],
 ];
 REGRAS_COMPRA.forEach(([c, ks]) => { (LOJAS_BR[c] || []).forEach((k) => { const n = SEM_ACENTO(k); if (!ks.includes(n)) ks.push(n); }); });
@@ -139,6 +144,7 @@ function catCompra(desc, aprendidas) {
   if (/^ uber/.test(txt)) return "transporte";
   for (const [cat, chaves] of MARCAS_FIXAS) if (chaves.some((k) => regraBate(txt, k))) return cat;
   if (/(^|[^m])posto/.test(txt.replace(/ /g, ""))) return "transporte";
+  if (/[a-z]cafe /.test(txt)) return "restaurante";
   if (/ (escola|faculdade|universidade|colegio|curso|cursos) /.test(txt) && !/ (auto escola|autoescola|escola de natacao) /.test(txt)) return "educacao";
   for (const [cat, chaves] of REGRAS_COMPRA) if (chaves.some((k) => regraBate(txt, k))) return cat;
   return "outros";
