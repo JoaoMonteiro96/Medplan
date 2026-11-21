@@ -157,3 +157,35 @@ select cron.schedule('sallos-cotacoes', '0 14,16,18 * * 1-5',
   $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/cotacoes', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{"todos": true}'::jsonb) $$);
 select cron.schedule('sallos-cotacoes-fechamento', '30 21 * * 1-5',
   $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/cotacoes', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{"todos": true}'::jsonb) $$);
+
+-- ============================================================
+-- Uso anônimo do app: quais telas são abertas, por dia
+-- (só um código aleatório do aparelho; sem nome, e-mail ou valores)
+-- ============================================================
+create table if not exists public.uso_telas (
+  aparelho text not null check (char_length(aparelho) between 8 and 64),
+  dia      date not null,
+  tela     text not null check (char_length(tela) between 1 and 30),
+  vezes    int  not null check (vezes between 1 and 500),
+  primary key (aparelho, dia, tela)
+);
+-- ninguém lê nem grava direto pelo app: só pela função abaixo
+alter table public.uso_telas enable row level security;
+revoke all on public.uso_telas from anon, authenticated;
+
+create or replace function public.registrar_uso(p_aparelho text, p_linhas jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if jsonb_typeof(p_linhas) <> 'array' or jsonb_array_length(p_linhas) > 60 or char_length(p_aparelho) not between 8 and 64 then return; end if;
+  insert into public.uso_telas (aparelho, dia, tela, vezes)
+  select p_aparelho, (l->>'dia')::date, left(l->>'tela', 30), least(500, greatest(1, (l->>'vezes')::int))
+  from jsonb_array_elements(p_linhas) l
+  where (l->>'dia')::date between current_date - 30 and current_date + 1
+  on conflict on constraint uso_telas_pkey do update set vezes = greatest(public.uso_telas.vezes, excluded.vezes);
+end $$;
+revoke all on function public.registrar_uso(text, jsonb) from public;
+grant execute on function public.registrar_uso(text, jsonb) to anon, authenticated;
+
+-- Para ver o resumo (rode no SQL Editor do Supabase):
+-- select tela, count(distinct aparelho) as pessoas, sum(vezes) as aberturas
+-- from public.uso_telas where dia >= current_date - 30 group by tela order by pessoas desc, aberturas desc;

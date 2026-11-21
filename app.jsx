@@ -1642,6 +1642,39 @@ const CLOUD_SKIP_KEY = "mediplan-cloud-skip";
 const OWNER_KEY = "mediplan-owner";
 const SYNCED_KEY = "mediplan-synced";
 const COLLECTIONS = ["vinculos", "shifts", "presencas", "extraRecurringIncomes", "expenses", "recurringExpenses", "investments", "goals", "oneOffIncomes"];
+// Uso anônimo: conta só quais telas são abertas, por dia, com um código aleatório do aparelho (sem nome, e-mail ou valores).
+// Vai para a tabela uso_telas do Supabase do projeto pela função registrar_uso (o app só grava; ninguém lê por ele). Dá para desligar em Ajustes > Privacidade.
+const USO_FILA = "mediplan-uso-fila", USO_ID = "mediplan-uso-id", USO_OFF = "mediplan-uso-off";
+function usoLigado() { try { return localStorage.getItem(USO_OFF) !== "1"; } catch (e) { return false; } }
+function usoAparelho() {
+  try { let id = localStorage.getItem(USO_ID); if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem(USO_ID, id); } return id; } catch (e) { return null; }
+}
+function registrarUso(tela) {
+  if (!tela || !usoLigado()) return;
+  try {
+    const dia = new Date(); const d = `${dia.getFullYear()}-${String(dia.getMonth() + 1).padStart(2, "0")}-${String(dia.getDate()).padStart(2, "0")}`;
+    const f = JSON.parse(localStorage.getItem(USO_FILA) || "{}"); const k = d + "|" + String(tela).slice(0, 30);
+    f[k] = Math.min(500, (f[k] || 0) + 1); localStorage.setItem(USO_FILA, JSON.stringify(f));
+  } catch (e) {}
+}
+let usoEnviando = false, usoUltimo = "";
+async function enviarUso() {
+  if (usoEnviando || !usoLigado() || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+  let f; try { f = JSON.parse(localStorage.getItem(USO_FILA) || "{}"); } catch (e) { return; }
+  const ks = Object.keys(f); if (!ks.length) return;
+  const txt = JSON.stringify(f); if (txt === usoUltimo) return;
+  const aparelho = usoAparelho(); if (!aparelho) return;
+  const linhas = ks.map((k) => { const [dia, tela] = k.split("|"); return { dia, tela, vezes: f[k] }; });
+  usoEnviando = true;
+  try {
+    const r = await fetch(CLOUD_DEFAULT.url + "/rest/v1/rpc/registrar_uso", { method: "POST", headers: { apikey: CLOUD_DEFAULT.key, Authorization: "Bearer " + CLOUD_DEFAULT.key, "Content-Type": "application/json" }, body: JSON.stringify({ p_aparelho: aparelho, p_linhas: linhas }) });
+    if (r.ok) {
+      usoUltimo = txt;
+      // os dias que já passaram não mudam mais: saem da fila; o de hoje continua contando
+      try { const hoje = new Date(); const h = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`; const agora = JSON.parse(localStorage.getItem(USO_FILA) || "{}"); Object.keys(agora).forEach((k) => { if (k.split("|")[0] < h) delete agora[k]; }); localStorage.setItem(USO_FILA, JSON.stringify(agora)); } catch (e) {}
+    }
+  } catch (e) {} finally { usoEnviando = false; }
+}
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} };
 // gavetas: cartões que abrem e fecham tocando no título; a escolha fica guardada neste aparelho (começam fechados)
@@ -1860,6 +1893,13 @@ function App() {
   const [activeTab, setActiveTab] = useState("inicio");
   const [selectedDay, setSelectedDay] = useState(null);
   const [navDir, setNavDir] = useState("fwd");
+  useEffect(() => { registrarUso(activeTab); }, [activeTab]);
+  useEffect(() => {
+    const t0 = setTimeout(enviarUso, 8000), t = setInterval(enviarUso, 120000);
+    const sair = () => { if (document.visibilityState === "hidden") enviarUso(); };
+    document.addEventListener("visibilitychange", sair);
+    return () => { clearTimeout(t0); clearInterval(t); document.removeEventListener("visibilitychange", sair); };
+  }, []);
   const goTab = (id) => {
     const from = NAV_ALL.findIndex((x) => x.id === activeTab), to = NAV_ALL.findIndex((x) => x.id === id);
     setNavDir(to >= from ? "fwd" : "back");
@@ -4688,6 +4728,19 @@ function App() {
         .oa-res-v { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; color: #15803D; margin: 2px 0 4px; }
         .oa-res-sub { font-size: 13.5px; line-height: 1.45; color: #166534; }
         .oa-res.neg { background: #FEF2F2; border-color: #FCA5A5; } .oa-res.neg .oa-res-lb, .oa-res.neg .oa-res-sub { color: #991B1B; } .oa-res.neg .oa-res-v { color: #B91C1C; }
+        .guia { margin-bottom: 16px; border: 1.5px solid color-mix(in srgb, #16A34A 30%, var(--border)); }
+        .guia-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .guia-top h3 { margin: 0; font-family: "Manrope", "Inter", sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; } .guia-top span { font-size: 13px; color: var(--text-dim); }
+        .guia-x { border: none; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; padding: 4px 0; }
+        .guia-bar { height: 6px; border-radius: 99px; background: var(--surface-3); margin: 12px 0 6px; overflow: hidden; } .guia-bar i { display: block; height: 100%; border-radius: 99px; background: #16A34A; transition: width .4s var(--ease, ease); }
+        .guia-it { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 0; }
+        .guia-it + .guia-it { border-top: 1px solid var(--hair, var(--border)); }
+        .guia-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--surface-3); color: var(--text-dim); }
+        .guia-it.agora .guia-n { background: var(--text); color: var(--surface); } .guia-it.ok .guia-n { background: #16A34A; }
+        .guia-t { min-width: 0; } .guia-t b { display: block; font-size: 14.5px; font-weight: 600; } .guia-it.ok .guia-t b { color: var(--text-dim); text-decoration: line-through; text-decoration-color: rgba(100,116,139,.5); font-weight: 500; }
+        .guia-t small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }
+        .guia-go { white-space: nowrap; }
+        @media (max-width: 380px) { .guia-it.agora { grid-template-columns: 28px minmax(0, 1fr); } .guia-it.agora .guia-go { grid-column: 2; justify-self: start; } }
         .oa-sug { border: 1.5px solid color-mix(in srgb, #16A34A 35%, var(--border)); }
         .oa-sug-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 4px; }
         .oa-sug-top .oa-h { margin: 0; color: var(--text); font-size: 16px; font-weight: 700; }
@@ -6420,6 +6473,8 @@ function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioI
   const ativarBio = async () => {
     try { onSetBio(await bioCadastrar()); setErro(""); } catch (e) { setErro("Não consegui ativar a digital neste aparelho."); }
   };
+  const [usoOn, setUsoOn] = useState(() => lsGet(USO_OFF) !== "1");
+  const trocarUso = () => { const v = !usoOn; lsSet(USO_OFF, v ? null : "1"); if (!v) lsSet(USO_FILA, null); setUsoOn(v); };
   const ativar = async () => {
     if (!/^\d{4}$/.test(novo)) { setErro("Use 4 números."); return; }
     if (novo !== conf) { setErro("Os dois códigos não batem."); return; }
@@ -6430,6 +6485,8 @@ function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioI
       <div className="day-panel-title"><span>Privacidade</span></div>
       <p style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 0 }}>Modo discreto: esconde todos os valores em reais deste aparelho, para você mostrar a tela sem expor o saldo.</p>
       <button className="btn btn-ghost sm" onClick={() => setDiscreto(!discreto)}>{discreto ? "Desligar modo discreto" : "Ligar modo discreto"}</button>
+      <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "16px 0 8px" }}>Ajudar a melhorar o app: envia, sem identificar você, só quais telas são abertas. Nenhum valor, nome ou e-mail sai do aparelho.</p>
+      <button className="btn btn-ghost sm" id="cfg-uso" onClick={trocarUso}>{usoOn ? "Parar de enviar" : "Voltar a ajudar"}</button>
       <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "16px 0 8px" }}>Trava com código: pede os 4 números ao abrir o app e depois de ficar fora dele por mais de 1 minuto. É uma proteção de tela neste aparelho, não substitui o bloqueio do celular.</p>
       {pinOn ? (
         <>
@@ -7496,6 +7553,33 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
     { done: setup.investments > 0, label: "Registre seus investimentos", go: () => quickGo("aporte"), cta: "Adicionar" },
   ];
   const pending = steps.filter((x) => !x.done);
+  const [guiaOff, setGuiaOff] = useState(() => lsGet("mediplan-guia-off") === "1");
+  // só para quem começou agora: quem já chega com dados (ou recebe tudo da nuvem de uma vez) não vê
+  const totalDados = (setup.shifts || 0) + (setup.expenses || 0) + (setup.investments || 0) + (setup.vinculos || 0);
+  const [perfil, setPerfil] = useState(() => lsGet("mediplan-guia"));
+  useEffect(() => { if (!perfil && totalDados > 0) { const v = totalDados > 3 ? "antigo" : "novo"; lsSet("mediplan-guia", v); setPerfil(v); } }, [perfil, totalDados]);
+  const passos = [
+    { done: setup.shifts > 0, label: "Lance seu primeiro plantão", sub: "o hospital é cadastrado junto", go: () => quickGo("plantao"), cta: "Lançar plantão" },
+    { done: setup.expenses > 0, label: "Coloque uma conta do mês", sub: "aluguel, escola, cartão…", go: () => quickGo("despesa"), cta: "Adicionar conta" },
+    { done: setup.investments > 0, label: "Registre seus investimentos", sub: "ou importe da corretora", go: () => quickGo("aporte"), cta: "Adicionar" },
+  ];
+  const feitos = passos.filter((x) => x.done).length, prox = passos.findIndex((x) => !x.done);
+  const guia = !guiaOff && perfil !== "antigo" && !(totalDados > 3 && !perfil) && prox >= 0 ? (
+    <div className="card guia" id="primeiros-passos">
+      <div className="guia-top">
+        <div><h3>Primeiros passos</h3><span>{feitos} de {passos.length} feitos</span></div>
+        <button type="button" className="guia-x" onClick={() => { lsSet("mediplan-guia-off", "1"); setGuiaOff(true); }}>Agora não</button>
+      </div>
+      <div className="guia-bar"><i style={{ width: `${(feitos / passos.length) * 100}%` }} /></div>
+      {passos.map((x, i) => (
+        <div key={i} className={`guia-it ${x.done ? "ok" : ""} ${i === prox ? "agora" : ""}`}>
+          <span className="guia-n">{x.done ? <IconCheck size={14} color="#fff" /> : i + 1}</span>
+          <span className="guia-t"><b>{x.label}</b>{i === prox && <small>{x.sub}</small>}</span>
+          {i === prox && <button type="button" className="btn btn-primary sm guia-go" onClick={x.go}>{x.cta}</button>}
+        </div>
+      ))}
+    </div>
+  ) : null;
 
   const prevNome = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
   if (desk) {
@@ -7505,6 +7589,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
     return (
       <div className="desk">
         <div className="greet"><h2>{hello}!</h2><p>Este é o painel de {MONTHS_PT[viewMonth].toLowerCase()} de {viewYear}.</p></div>
+        {guia}
         {alerts.length > 0 && (
           <Avisos alerts={alerts} />
         )}
@@ -7557,6 +7642,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   return (
     <div>
       <div className="greet"><h2>{hello}!</h2><p>Este é o resumo de {MONTHS_PT[viewMonth].toLowerCase()} de {viewYear}.</p></div>
+      {guia}
 
       {alerts.length > 0 && (
         <Avisos alerts={alerts} />
