@@ -3633,6 +3633,11 @@ function App() {
 
         .greet h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; } .greet p { margin: 2px 0 16px; color: var(--text-dim); font-size: 14px; }
         .alert-strip { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        .avisos { margin-bottom: 16px; } .avisos .alert-strip { margin: 8px 0 0; }
+        .avisos-h { width: 100%; display: flex; align-items: center; gap: 10px; border: none; border-radius: 12px; padding: 11px 14px; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+        .avisos-h .al-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; } .avisos-h b { font-weight: 700; white-space: nowrap; }
+        .avisos-sub { flex: 1; min-width: 0; font-weight: 500; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .avisos-h svg { flex-shrink: 0; transition: transform .2s; } .avisos-h[aria-expanded="true"] svg { transform: rotate(180deg); }
         .alert-item { display: flex; align-items: center; gap: 10px; border-radius: 12px; padding: 11px 14px; font-size: 13.5px; font-weight: 500; margin: 0; }
         .alert-item .al-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
         .alert-danger { background: #FEF2F2; color: #B91C1C; } .alert-warning { background: #FFFBEB; color: #B45309; } .alert-info { background: #F0FDF4; color: #15803D; }
@@ -6996,6 +7001,23 @@ function ContabCalc({ contab, setContab, app, taxRateGeral, setTaxRateGeral }) {
   );
 }
 
+// avisos do mês recolhidos numa linha só; abre ao tocar
+function Avisos({ alerts = [] }) {
+  const [aberto, setAberto] = useState(false);
+  if (!alerts.length) return null;
+  const n = (l) => alerts.filter((a) => a.level === l).length;
+  const pior = n("danger") ? "danger" : n("warning") ? "warning" : "info";
+  const partes = [n("danger") && `${n("danger")} ${n("danger") === 1 ? "urgente" : "urgentes"}`, n("warning") && `${n("warning")} perto do prazo`, n("info") && `${n("info")} para conferir`].filter(Boolean);
+  return (
+    <div className="avisos">
+      <button type="button" className={`avisos-h alert-${pior}`} aria-expanded={aberto} onClick={() => setAberto(!aberto)}>
+        <span className="al-dot" /><b>{alerts.length} {alerts.length === 1 ? "aviso" : "avisos"}</b><span className="avisos-sub">{partes.join(" · ")}</span>
+        <IconChevronDown size={16} />
+      </button>
+      {aberto && <div className="alert-strip avisos-lista">{[...alerts].sort((x, y) => ["danger", "warning", "info"].indexOf(x.level) - ["danger", "warning", "info"].indexOf(y.level)).slice(0, 8).map((a) => <div key={a.id} className={`alert-item alert-${a.level}`}><span className="al-dot" />{a.text}</div>)}</div>}
+    </div>
+  );
+}
 function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [] }) {
   const gv = useGv();
   const todayIso = todayStr();
@@ -7029,9 +7051,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       <div className="desk">
         <div className="greet"><h2>{hello}!</h2><p>Este é o painel de {MONTHS_PT[viewMonth].toLowerCase()} de {viewYear}.</p></div>
         {alerts.length > 0 && (
-          <div className="alert-strip">
-            {alerts.slice(0, 3).map((a) => <div key={a.id} className={`alert-item alert-${a.level}`}><span className="al-dot" />{a.text}</div>)}
-          </div>
+          <Avisos alerts={alerts} />
         )}
         <div className="dkpis">
           <DKpi label="Receita líquida" value={fmtBRL(curStats.net)} sub={deltaTxt(curStats.net, prevStats.net, prevNome)} subTone={curStats.net >= prevStats.net ? "#15803D" : "#B91C1C"} spark={hs.map((h) => h.value)} sparkColor="#16A34A" />
@@ -7081,9 +7101,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       <div className="greet"><h2>{hello}!</h2><p>Este é o resumo de {MONTHS_PT[viewMonth].toLowerCase()} de {viewYear}.</p></div>
 
       {alerts.length > 0 && (
-        <div className="alert-strip">
-          {alerts.slice(0, 3).map((a) => <div key={a.id} className={`alert-item alert-${a.level}`}><span className="al-dot" />{a.text}</div>)}
-        </div>
+        <Avisos alerts={alerts} />
       )}
 
       <div className="balance-card">
