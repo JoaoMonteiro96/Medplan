@@ -4,11 +4,12 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useR
 import * as ReactDOM from "react-dom/client";
 
 const STORAGE_KEY = "mediplan-data-v2";
+(function fontePremium() { try { if (typeof document === "undefined" || document.querySelector("link[data-fonte]")) return; const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap"; l.setAttribute("data-fonte", "manrope"); document.head.appendChild(l); } catch (e) {} })();
 const GOLD = "#F59E0B";
 const TEAL = "#16A34A";
 const BRICK = "#DC2626";
 const SLATE = "#64748B";
-const PALETTE = [TEAL, "#2563EB", GOLD, BRICK, "#8B5CF6", "#0EA5E9", "#F97316", SLATE];
+const PALETTE = ["#1F8F5F", "#3D74C9", "#D6A033", "#CF5866", "#6B5CC4", "#2FA39A", "#DB7F45", "#6B7A86"];
 
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const MONTHS_ABBR_PT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -34,27 +35,27 @@ const PRAZO_OPTIONS = [["0", "No dia"], ["30", "30 dias"], ["60", "60 dias"], ["
 
 // ---- categorias de despesa (ícones ilustrativos) ----
 const EXP_CATS = [
-  { id: "moradia", label: "Moradia", color: "#8B5CF6", kw: ["aluguel", "condom", "iptu", "casa", "apto", "apartamento", "financiamento", "moradia", "reforma"] },
-  { id: "energia", label: "Energia", color: "#F59E0B", kw: ["energia", "luz", "enel", "cemig", "coelba", "neoenergia", "equatorial", "celpe", "eletric"] },
-  { id: "agua", label: "Água", color: "#0EA5E9", kw: ["agua", "água", "saneamento", "embasa", "sabesp", "copasa"] },
-  { id: "internet", label: "Internet", color: "#6366F1", kw: ["internet", "wifi", "wi-fi", "fibra", "claro", "vivo fibra", "tv a cabo"] },
-  { id: "telefone", label: "Celular", color: "#14B8A6", kw: ["celular", "telefone", "tim", "oi ", "plano movel", "plano móvel"] },
-  { id: "mercado", label: "Mercado", color: "#16A34A", kw: ["mercado", "supermercado", "feira", "padaria", "alimenta", "comida", "ifood", "restaurante"] },
-  { id: "saude", label: "Saúde", color: "#EF4444", kw: ["plano de saude", "plano de saúde", "unimed", "saude", "saúde", "farmacia", "farmácia", "remedio", "remédio", "dentista", "terapia", "psic", "drogasil", "droga", "raia", "pacheco", "pague menos", "hospital", "clinica", "laboratorio"] },
-  { id: "educacao", label: "Educação", color: "#3B82F6", kw: ["escola", "faculdade", "curso", "mensalidade", "educa", "residencia", "residência", "pos", "pós", "livro", "congresso"] },
-  { id: "transporte", label: "Transporte", color: "#F97316", kw: ["carro", "gasolina", "combust", "uber", "onibus", "ônibus", "transporte", "ipva", "seguro auto", "estacionamento", "moto"] },
-  { id: "cartao", label: "Cartão", color: "#EC4899", kw: ["cartao", "cartão", "fatura", "nubank", "inter", "visa", "master"] },
-  { id: "lazer", label: "Lazer", color: "#A855F7", kw: ["netflix", "spotify", "streaming", "cinema", "viagem", "lazer", "disney", "prime", "hbo", "youtube", "jogo"] },
-  { id: "academia", label: "Academia", color: "#10B981", kw: ["academia", "pilates", "crossfit", "personal", "esporte", "natação"] },
-  { id: "seguro", label: "Seguros", color: "#0891B2", kw: ["seguro", "previdencia", "previdência"] },
-  { id: "impostos", label: "Impostos", color: "#64748B", kw: ["imposto", "darf", "crm", "contador", "contabil", "contábil", "inss", "iss", "taxa", "anuidade", "sindicato", "cremeb"] },
-  { id: "pets", label: "Pets", color: "#D97706", kw: ["pet", "cachorro", "gato", "veterin", "ração", "racao"] },
-  { id: "restaurante", label: "Restaurantes", color: "#BE185D", kw: [] },
-  { id: "compras", label: "Compras", color: "#65A30D", kw: [] },
-  { id: "viagem", label: "Viagens", color: "#0F766E", kw: [] },
-  { id: "beleza", label: "Beleza", color: "#C026D3", kw: [] },
-  { id: "assinaturas", label: "Assinaturas", color: "#7C2D12", kw: [] },
-  { id: "outros", label: "Outros", color: "#94A3B8", kw: [] },
+  { id: "moradia", label: "Moradia", color: "#6B5CC4", kw: ["aluguel", "condom", "iptu", "casa", "apto", "apartamento", "financiamento", "moradia", "reforma"] },
+  { id: "energia", label: "Energia", color: "#D6A033", kw: ["energia", "luz", "enel", "cemig", "coelba", "neoenergia", "equatorial", "celpe", "eletric"] },
+  { id: "agua", label: "Água", color: "#4A9CC8", kw: ["agua", "água", "saneamento", "embasa", "sabesp", "copasa"] },
+  { id: "internet", label: "Internet", color: "#5568C9", kw: ["internet", "wifi", "wi-fi", "fibra", "claro", "vivo fibra", "tv a cabo"] },
+  { id: "telefone", label: "Celular", color: "#2FA39A", kw: ["celular", "telefone", "tim", "oi ", "plano movel", "plano móvel"] },
+  { id: "mercado", label: "Mercado", color: "#2F9B67", kw: ["mercado", "supermercado", "feira", "padaria", "alimenta", "comida", "ifood", "restaurante"] },
+  { id: "saude", label: "Saúde", color: "#CF5866", kw: ["plano de saude", "plano de saúde", "unimed", "saude", "saúde", "farmacia", "farmácia", "remedio", "remédio", "dentista", "terapia", "psic", "drogasil", "droga", "raia", "pacheco", "pague menos", "hospital", "clinica", "laboratorio"] },
+  { id: "educacao", label: "Educação", color: "#3D74C9", kw: ["escola", "faculdade", "curso", "mensalidade", "educa", "residencia", "residência", "pos", "pós", "livro", "congresso"] },
+  { id: "transporte", label: "Transporte", color: "#DB7F45", kw: ["carro", "gasolina", "combust", "uber", "onibus", "ônibus", "transporte", "ipva", "seguro auto", "estacionamento", "moto"] },
+  { id: "cartao", label: "Cartão", color: "#B05289", kw: ["cartao", "cartão", "fatura", "nubank", "inter", "visa", "master"] },
+  { id: "lazer", label: "Lazer", color: "#9A63C7", kw: ["netflix", "spotify", "streaming", "cinema", "viagem", "lazer", "disney", "prime", "hbo", "youtube", "jogo"] },
+  { id: "academia", label: "Academia", color: "#3BAE87", kw: ["academia", "pilates", "crossfit", "personal", "esporte", "natação"] },
+  { id: "seguro", label: "Seguros", color: "#3F8FA6", kw: ["seguro", "previdencia", "previdência"] },
+  { id: "impostos", label: "Impostos", color: "#6B7A86", kw: ["imposto", "darf", "crm", "contador", "contabil", "contábil", "inss", "iss", "taxa", "anuidade", "sindicato", "cremeb"] },
+  { id: "pets", label: "Pets", color: "#B5834F", kw: ["pet", "cachorro", "gato", "veterin", "ração", "racao"] },
+  { id: "restaurante", label: "Restaurantes", color: "#C7623F", kw: [] },
+  { id: "compras", label: "Compras", color: "#8FA03D", kw: [] },
+  { id: "viagem", label: "Viagens", color: "#1F7F78", kw: [] },
+  { id: "beleza", label: "Beleza", color: "#C2569E", kw: [] },
+  { id: "assinaturas", label: "Assinaturas", color: "#8C6A55", kw: [] },
+  { id: "outros", label: "Outros", color: "#A3ADB5", kw: [] },
 ];
 const EXP_CAT_MAP = Object.fromEntries(EXP_CATS.map((c) => [c.id, c]));
 // ---- reconhecimento das compras do cartão ----
@@ -798,6 +799,31 @@ function RangeTabs({ value, onChange, options = [3, 6, 12, 24] }) {
   );
 }
 
+// valor curto para eixos: R$ 12 mil, R$ 1,2 mi
+const fmtEixo = (v) => { const a = Math.abs(v), s = v < 0 ? "−" : ""; if (a >= 1e6) return s + "R$ " + (a / 1e6).toFixed(1).replace(".", ",").replace(",0", "") + " mi"; if (a >= 1e3) return s + "R$ " + Math.round(a / 1e3) + " mil"; return s + "R$ " + Math.round(a); };
+// arrastar o dedo (ou o mouse) pelo gráfico mostra cada ponto; vibra de leve no Android ao trocar
+function useArrasto(n, indice, setActive) {
+  const ultimo = useRef(null), arrastando = useRef(false);
+  const mover = (ev) => {
+    const svg = ev.currentTarget; const r = svg.getBoundingClientRect(); if (!r.width) return;
+    const i = indice(((ev.clientX - r.left) / r.width) * 600);
+    if (i === null || i < 0 || i >= n) return;
+    if (ultimo.current !== i) { ultimo.current = i; setActive(i); if (arrastando.current) { try { navigator.vibrate && navigator.vibrate(4); } catch (e) {} } }
+  };
+  return {
+    onPointerDown: (ev) => { arrastando.current = true; mover(ev); },
+    onPointerMove: (ev) => { if (ev.pointerType === "mouse" || arrastando.current) mover(ev); },
+    onPointerUp: () => { arrastando.current = false; },
+    onPointerCancel: () => { arrastando.current = false; },
+    style: { display: "block", touchAction: "pan-y" },
+  };
+}
+function GradeEixo({ W, top, h, min, max, padX, padL, ticks = 3, zero = true }) {
+  const x0 = padL !== undefined ? padL : padX;
+  const linhas = [];
+  for (let k = 0; k <= ticks; k++) { const v = min + ((max - min) * k) / ticks; linhas.push({ v, y: top + h - (h * k) / ticks }); }
+  return <g className="grade">{linhas.map((l, k) => (<g key={k}><line x1={x0} x2={W - padX} y1={l.y} y2={l.y} className={zero && Math.abs(l.v) < 1e-9 ? "grade-zero" : "grade-l"} />{(k > 0 || l.v < 0) && <text x={x0 - 8} y={l.y + 4} textAnchor="end" className="grade-t">{fmtEixo(l.v)}</text>}</g>))}</g>;
+}
 function ChartTip({ x, children }) {
   return <div className="chart-tip" style={{ left: `${Math.max(16, Math.min(84, x))}%` }}>{children}</div>;
 }
@@ -805,36 +831,37 @@ function ChartTip({ x, children }) {
 function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, signed = false, valueKey = "value", labelKey = "label", onOpen }) {
   const [active, setActive] = useState(null);
   const tapped = useRef(null);
-  const W = 600, padTop = 14, padBottom = 26, padX = 12;
+  const W = 600, padTop = 14, padBottom = 28, padX = 6, padL = 74;
   const plotH = height - padTop - padBottom;
   const values = data.map((d) => Number(d[valueKey]) || 0);
   const n = data.length;
   if (n === 0) return <div className="empty-state">Sem dados para exibir.</div>;
   const maxAbs = Math.max(1, ...values.map((v) => Math.abs(v)));
-  const slot = (W - padX * 2) / n, barW = Math.min(28, slot * 0.62);
+  const slot = (W - padL - padX) / n, barW = Math.min(28, slot * 0.62);
   const zeroY = signed ? padTop + plotH / 2 : padTop + plotH;
   const scale = signed ? (plotH / 2) / maxAbs : plotH / maxAbs;
   const click = (i) => { if (tapped.current === i && onOpen) { onOpen(data[i]); tapped.current = null; } else { tapped.current = i; setActive(i); } };
+  const arr = useArrasto(n, (x) => Math.floor((x - padL) / slot), setActive);
   return (
     <div className="chart-box" onMouseLeave={() => setActive(null)}>
-      <svg viewBox={`0 0 ${W} ${height}`} width="100%" style={{ display: "block" }}>
-        {signed && <line x1={padX} x2={W - padX} y1={zeroY} y2={zeroY} stroke="rgba(31,45,58,0.15)" strokeDasharray="3 3" />}
+      <svg viewBox={`0 0 ${W} ${height}`} width="100%" {...arr}>
+        <GradeEixo W={W} top={padTop} h={plotH} min={signed ? -maxAbs : 0} max={maxAbs} padX={padX} padL={padL} ticks={signed ? 2 : 3} />
         {data.map((d, i) => {
           const v = values[i];
-          const x = padX + slot * i + (slot - barW) / 2;
+          const x = padL + slot * i + (slot - barW) / 2;
           const h = Math.max(Math.abs(v) * scale, 1.5);
           const y = v >= 0 ? zeroY - h : zeroY;
           return (
             <g key={i}>
-              <rect className="bar-anim" x={x} y={y} width={barW} height={h} rx="3" fill={v >= 0 ? color : negativeColor} opacity={active !== null && active !== i ? 0.4 : 1} style={{ transformOrigin: v >= 0 ? "50% 100%" : "50% 0%" }} />
-              <text x={x + barW / 2} y={height - 8} textAnchor="middle" fontSize="10" fill={active === i ? "#1F2D3A" : "#8FA3A0"} fontWeight={active === i ? 700 : 400} fontFamily="Inter, sans-serif">{d[labelKey]}</text>
-              <rect x={padX + slot * i} y="0" width={slot} height={height} fill="transparent" style={{ cursor: "pointer" }} onMouseEnter={() => setActive(i)} onClick={() => click(i)} />
+              <rect className="bar-anim" x={x} y={y} width={barW} height={h} rx="4" fill={v >= 0 ? color : negativeColor} opacity={active !== null && active !== i ? 0.32 : 1} style={{ transformOrigin: v >= 0 ? "50% 100%" : "50% 0%", animationDelay: `${i * 0.03}s` }} />
+              <text x={x + barW / 2} y={height - 8} textAnchor="middle" fontSize="10" fill={active === i ? "#1F2D3A" : "#8FA3A0"} fontWeight={active === i ? 700 : 400} className="eixo-x">{d[labelKey]}</text>
+              <rect x={padL + slot * i} y="0" width={slot} height={height} fill="transparent" style={{ cursor: "pointer" }} onMouseEnter={() => setActive(i)} onClick={() => click(i)} />
             </g>
           );
         })}
       </svg>
       {active !== null && (
-        <ChartTip x={((padX + slot * active + slot / 2) / W) * 100}>
+        <ChartTip x={((padL + slot * active + slot / 2) / W) * 100}>
           <b>{data[active].full || data[active][labelKey]}</b><span className="mono">{fmtBRL(values[active])}</span>
           {onOpen && <em>toque de novo para abrir o mês</em>}
         </ChartTip>
@@ -847,29 +874,32 @@ function SvgAreaChart({ data, height = 200, color = TEAL, valueKey = "value", la
   const [active, setActive] = useState(null);
   const gradId = useMemo(() => "grad-" + Math.random().toString(36).slice(2, 9), []);
   const tapped = useRef(null);
-  const W = 600, padTop = bare ? 6 : 16, padBottom = bare ? 4 : 26, padX = bare ? 0 : 12;
+  const W = 600, padTop = bare ? 6 : 16, padBottom = bare ? 4 : 28, padX = bare ? 0 : 14, padL = bare ? 0 : 74;
   const plotH = height - padTop - padBottom;
   const values = data.map((d) => Number(d[valueKey]) || 0);
   const n = data.length;
   if (n === 0) return <div className="empty-state">Sem dados para exibir.</div>;
   const maxV = Math.max(1, ...values), minV = Math.min(0, ...values), range = Math.max(1, maxV - minV);
-  const stepX = n > 1 ? (W - padX * 2) / (n - 1) : 0;
-  const points = values.map((v, i) => [padX + stepX * i, padTop + plotH - ((v - minV) / range) * plotH]);
+  const stepX = n > 1 ? (W - padL - padX) / (n - 1) : 0;
+  const points = values.map((v, i) => [padL + stepX * i, padTop + plotH - ((v - minV) / range) * plotH]);
   const linePath = points.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
   const areaPath = `${linePath} L${points[n - 1][0].toFixed(1)},${(padTop + plotH).toFixed(1)} L${points[0][0].toFixed(1)},${(padTop + plotH).toFixed(1)} Z`;
   const hitW = n > 1 ? stepX : W;
   const click = (i) => { if (tapped.current === i && onOpen) { onOpen(data[i]); tapped.current = null; } else { tapped.current = i; setActive(i); } };
+  const arr = useArrasto(n, (x) => (n > 1 ? Math.max(0, Math.min(n - 1, Math.round((x - padL) / stepX))) : 0), setActive);
   return (
     <div className="chart-box" onMouseLeave={() => !bare && setActive(null)}>
-      <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={bare ? height : undefined} preserveAspectRatio={bare ? "none" : "xMidYMid meet"} style={{ display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={bare ? height : undefined} preserveAspectRatio={bare ? "none" : "xMidYMid meet"} {...(bare ? { style: { display: "block" } } : arr)}>
+        {!bare && <GradeEixo W={W} top={padTop} h={plotH} min={minV} max={maxV} padX={padX} padL={padL} />}
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.4" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient>
         </defs>
         <path d={areaPath} fill={`url(#${gradId})`} stroke="none" className="area-anim" />
-        <path d={linePath} fill="none" stroke={color} strokeWidth="2" />
-        {!bare && active !== null && <line x1={points[active][0]} x2={points[active][0]} y1={padTop} y2={padTop + plotH} stroke={color} strokeOpacity="0.35" strokeDasharray="3 3" />}
-        {!bare && points.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={active === i ? 5 : 2.5} fill={active === i ? "#fff" : color} stroke={color} strokeWidth={active === i ? 2.5 : 0} />)}
-        {!bare && data.map((d, i) => <text key={i} x={points[i][0]} y={height - 8} textAnchor="middle" fontSize="10" fill={active === i ? "#1F2D3A" : "#8FA3A0"} fontWeight={active === i ? 700 : 400} fontFamily="Inter, sans-serif">{d[labelKey]}</text>)}
+        <path d={linePath} fill="none" stroke={color} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" pathLength="1" className="linha-anim" />
+        {!bare && active !== null && <line x1={points[active][0]} x2={points[active][0]} y1={padTop} y2={padTop + plotH} stroke={color} strokeOpacity="0.45" strokeWidth="1.2" />}
+        {!bare && active !== null && <circle cx={points[active][0]} cy={points[active][1]} r="11" fill={color} opacity="0.16" />}
+        {!bare && points.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={active === i ? 5 : 0} fill="#fff" stroke={color} strokeWidth={active === i ? 2.5 : 0} />)}
+        {!bare && data.map((d, i) => <text key={i} x={points[i][0]} y={height - 8} textAnchor="middle" fontSize="10" fill={active === i ? "#1F2D3A" : "#8FA3A0"} fontWeight={active === i ? 700 : 400} className="eixo-x">{d[labelKey]}</text>)}
         {!bare && points.map((p, i) => <rect key={"h" + i} x={p[0] - hitW / 2} y="0" width={hitW} height={height} fill="transparent" style={{ cursor: "pointer" }} onMouseEnter={() => setActive(i)} onClick={() => click(i)} />)}
       </svg>
       {!bare && active !== null && (
@@ -886,7 +916,7 @@ function SvgDualBarChart({ data, height = 200, onOpen }) {
   const [active, setActive] = useState(null);
   const [hidden, setHidden] = useState({});
   const tapped = useRef(null);
-  const W = 600, padTop = 12, padBottom = 24, padX = 6;
+  const W = 600, padTop = 12, padBottom = 28, padX = 4, padL = 74;
   const plotH = height - padTop - padBottom;
   const n = data.length;
   if (n === 0) return <div className="empty-state">Sem dados para exibir.</div>;
@@ -896,30 +926,31 @@ function SvgDualBarChart({ data, height = 200, onOpen }) {
   const max = Math.max(1, ...all), min = Math.min(0, ...all), range = Math.max(1, max - min);
   const yOf = (v) => padTop + plotH * (1 - (v - min) / range);
   const y0 = yOf(0);
-  const slot = (W - padX * 2) / n, barW = Math.min(18, slot / 2 - 2);
-  const cx = (i) => padX + slot * i + slot / 2;
+  const slot = (W - padL - padX) / n, barW = Math.min(18, slot / 2 - 2);
+  const cx = (i) => padL + slot * i + slot / 2;
   const bar = (v, x, color, i, key) => {
     const y = yOf(v), top = Math.min(y, y0), h = Math.max(Math.abs(y - y0), 1.5);
-    return <rect className="bar-anim" x={x} y={top} width={barW} height={h} rx="3" fill={color} opacity={active !== null && active !== i ? 0.4 : 1} style={{ transformOrigin: v >= 0 ? "50% 100%" : "50% 0%" }} />;
+    return <rect className="bar-anim" x={x} y={top} width={barW} height={h} rx="3.5" fill={color} opacity={active !== null && active !== i ? 0.3 : 1} style={{ transformOrigin: v >= 0 ? "50% 100%" : "50% 0%", animationDelay: `${i * 0.03}s` }} />;
   };
   const line = data.map((d, i) => (i === 0 ? "M" : "L") + cx(i).toFixed(1) + "," + yOf(Number(d.leftover) || 0).toFixed(1)).join(" ");
   const click = (i) => { if (tapped.current === i && onOpen) { onOpen(data[i]); tapped.current = null; } else { tapped.current = i; setActive(i); } };
   const series = [["a", "Receita líquida", TEAL], ["b", "Despesas", BRICK], ["c", "Sobra", "#3B82C4"]];
+  const arr = useArrasto(n, (x) => Math.floor((x - padL) / slot), setActive);
   return (
     <div>
       <div className="chart-box" onMouseLeave={() => setActive(null)}>
-        <svg viewBox={`0 0 ${W} ${height}`} width="100%" style={{ display: "block" }}>
-          <line x1={padX} x2={W - padX} y1={y0} y2={y0} stroke="rgba(31,45,58,0.15)" />
+        <svg viewBox={`0 0 ${W} ${height}`} width="100%" {...arr}>
+          <GradeEixo W={W} top={padTop} h={plotH} min={min} max={max} padX={padX} padL={padL} />
           {data.map((d, i) => (
             <g key={i}>
               {vis("a") && bar(Number(d.value) || 0, cx(i) - barW - 1, TEAL, i)}
               {vis("b") && bar(Number(d.expenses) || 0, cx(i) + 1, BRICK, i)}
-              <text x={cx(i)} y={height - 7} textAnchor="middle" fontSize="10" fill={active === i ? "#1F2D3A" : "#8FA3A0"} fontWeight={active === i ? 700 : 400} fontFamily="Inter, sans-serif">{d.label}</text>
+              <text x={cx(i)} y={height - 7} textAnchor="middle" fontSize="10" fill={active === i ? "#1F2D3A" : "#8FA3A0"} fontWeight={active === i ? 700 : 400} className="eixo-x">{d.label}</text>
             </g>
           ))}
-          {vis("c") && <path d={line} fill="none" stroke="#3B82C4" strokeWidth="2" strokeLinejoin="round" />}
+          {vis("c") && <path d={line} fill="none" stroke="#3B82C4" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" pathLength="1" className="linha-anim" />}
           {vis("c") && data.map((d, i) => <circle key={i} cx={cx(i)} cy={yOf(Number(d.leftover) || 0)} r={active === i ? 4.5 : 2.5} fill="#3B82C4" />)}
-          {data.map((d, i) => <rect key={"h" + i} x={padX + slot * i} y="0" width={slot} height={height} fill="transparent" style={{ cursor: "pointer" }} onMouseEnter={() => setActive(i)} onClick={() => click(i)} />)}
+          {data.map((d, i) => <rect key={"h" + i} x={padL + slot * i} y="0" width={slot} height={height} fill="transparent" style={{ cursor: "pointer" }} onMouseEnter={() => setActive(i)} onClick={() => click(i)} />)}
         </svg>
         {active !== null && (
           <ChartTip x={(cx(active) / W) * 100}>
@@ -1128,6 +1159,41 @@ const fmtQty = (q) => Number(q || 0).toLocaleString("pt-BR", { maximumFractionDi
 const BRAPI_FREE = ["PETR4", "MGLU3", "VALE3", "ITUB4", "MXRF11", "HGLG11"];
 
 // Número que conta até o valor final ao aparecer ou mudar
+// aviso curto no rodapé, com "Desfazer"
+const avisar = (msg, desfazer) => { try { window.dispatchEvent(new CustomEvent("sallos-aviso", { detail: { msg, desfazer } })); } catch (e) {} };
+const vibrar = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+// marca/desmarca e avisa; com silencioso=true não mostra aviso (usado no "Recebi todos")
+function comAviso(fn, feito, tipo, nome) {
+  return (silencioso) => {
+    fn(); if (silencioso === true) return;
+    vibrar(feito ? 6 : [8, 40, 12]);
+    const curto = String(nome || "").split(" · ")[0];
+    const msg = tipo === "rec" ? (feito ? "Voltou para a receber" : "Recebido") : (feito ? "Voltou para a pagar" : "Conta paga");
+    avisar(curto ? `${msg}: ${curto}` : msg, fn);
+  };
+}
+function Aviso() {
+  const [a, setA] = useState(null);
+  const tm = useRef(null);
+  useEffect(() => {
+    const h = (ev) => { clearTimeout(tm.current); setA({ ...ev.detail, k: Date.now() }); tm.current = setTimeout(() => setA(null), 4200); };
+    window.addEventListener("sallos-aviso", h); return () => { window.removeEventListener("sallos-aviso", h); clearTimeout(tm.current); };
+  }, []);
+  if (!a) return null;
+  return (
+    <div className="aviso" role="status" key={a.k}>
+      <span className="aviso-ok" aria-hidden="true"><IconCheck size={14} color="#fff" /></span>
+      <span className="aviso-t">{a.msg}</span>
+      {a.desfazer && <button type="button" onClick={() => { a.desfazer(); vibrar(6); setA(null); }}>Desfazer</button>}
+    </div>
+  );
+}
+// "R$ 91.897,50" com os centavos menores e mais claros
+function comCentavos(txt) {
+  if (typeof txt !== "string") return txt;
+  const m = txt.match(/^(.*\d)(,\d{2})(\D*)$/);
+  return m ? <>{m[1]}<span className="cent">{m[2]}</span>{m[3]}</> : txt;
+}
 function CountUp({ value, format = fmtBRL, duration = 650 }) {
   const target = Number(value) || 0;
   const [shown, setShown] = useState(() => (prefersReducedMotion() ? target : 0));
@@ -1149,7 +1215,7 @@ function CountUp({ value, format = fmtBRL, duration = 650 }) {
     const guard = setTimeout(finish, duration + 500); // garante o valor final se a animação for pausada
     return () => { cancelAnimationFrame(raf); clearTimeout(guard); };
   }, [target]);
-  return format(shown);
+  return comCentavos(format(shown));
 }
 
 // Barra de páginas no topo, com rolagem lateral e indicador que desliza até a página ativa
@@ -1196,22 +1262,41 @@ async function sbComSessao() {
   const sb = await getSupabase(cfg); const { data } = await sb.auth.getSession();
   return data && data.session && data.session.user ? { sb, uid: data.session.user.id } : null;
 }
+// envia uma nota para a pasta privada "notas" da nuvem da pessoa (só ela vê)
+async function anexoParaNuvem(blob, meta) {
+  const c = await sbComSessao(); if (!c) return null;
+  const path = `${c.uid}/${meta.id}-${nomeSeguro(meta.nome)}`;
+  const { error } = await c.sb.storage.from(ANEXO_BUCKET).upload(path, blob, { contentType: meta.tipo || "application/octet-stream", upsert: true });
+  return error ? null : path;
+}
 async function salvarAnexo(file) {
   if (!file) throw new Error("Nenhum arquivo.");
   if (file.size > ANEXO_MAX) throw new Error("O arquivo passa de 10 MB. Tire uma foto menor ou salve o PDF reduzido.");
   const id = uid();
   const meta = { id, nome: file.name || "nota", tipo: file.type || "", tamanho: file.size, data: todayStr() };
-  // As notas ficam só neste aparelho (decisão do usuário). Pede ao navegador para não apagar.
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
-  await idbOp("readwrite", (st) => st.put(file, id));
-  return { ...meta, local: true };
+  // guarda uma cópia de verdade do arquivo (no Android, guardar o "File" pode virar só um atalho que some)
+  let blob;
+  try { blob = new Blob([await file.arrayBuffer()], { type: meta.tipo }); } catch (e) { throw new Error("Não foi possível ler o arquivo. Tente de novo."); }
+  let local = false;
+  try { await idbOp("readwrite", (st) => st.put(blob, id)); const volta = await idbOp("readonly", (st) => st.get(id)); local = !!(volta && volta.size === blob.size); } catch (e) {}
+  let path = null;
+  try { path = await anexoParaNuvem(blob, meta); } catch (e) {}
+  if (!local && !path) throw new Error("Não foi possível guardar a nota. Tente de novo.");
+  return { ...meta, local, ...(path ? { path } : {}) };
 }
 async function abrirAnexo(a) {
   const w = window.open("", "_blank");
   try {
-    let url;
-    if (a.path) { const c = await sbComSessao(); if (!c) throw new Error("Entre na sua conta para abrir este arquivo."); const { data, error } = await c.sb.storage.from(ANEXO_BUCKET).createSignedUrl(a.path, 600); if (error) throw error; url = data.signedUrl; }
-    else { const blob = await idbOp("readonly", (st) => st.get(a.id)); if (!blob) throw new Error("Este arquivo foi guardado em outro aparelho."); url = URL.createObjectURL(blob); }
+    let url = null;
+    // primeiro a cópia deste aparelho; se não houver, a da nuvem
+    try { const blob = await idbOp("readonly", (st) => st.get(a.id)); if (blob && blob.size) url = URL.createObjectURL(blob); } catch (e) {}
+    if (!url && a.path) { const c = await sbComSessao(); if (c) { const { data, error } = await c.sb.storage.from(ANEXO_BUCKET).createSignedUrl(a.path, 600); if (!error && data) url = data.signedUrl; } }
+    if (!url) {
+      if (w) w.close();
+      if (window.confirm("O arquivo desta nota não está neste aparelho nem na nuvem. Quer anexar a nota de novo agora?")) window.dispatchEvent(new CustomEvent("sallos-reanexar", { detail: a.id }));
+      return;
+    }
     if (w) w.location.href = url; else window.location.href = url;
   } catch (e) { if (w) w.close(); window.alert(e.message || "Não foi possível abrir o arquivo."); }
 }
@@ -1241,7 +1326,7 @@ function AnexosField({ value = [], onChange }) {
       <input ref={ref} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={(e) => enviar(e.target.files)} />
       <button type="button" className="btn btn-ghost sm anx-add" disabled={busy} onClick={() => ref.current && ref.current.click()}>{busy ? "Enviando…" : <><ProIc n="clipe" size={16} /> Anexar nota fiscal ou recibo</>}</button>
       {erro && <div className="note-bad" style={{ marginTop: 6 }}>{erro}</div>}
-      {(value || []).length > 0 && <div className="field-hint">Guardado neste aparelho.</div>}
+      {(value || []).length > 0 && <div className="field-hint">{(value || []).every((a) => a.path) ? "Guardado na sua nuvem e neste aparelho." : "Guardado neste aparelho. Com a nuvem ligada, vai também para a nuvem."}</div>}
     </div>
   );
 }
@@ -1286,7 +1371,7 @@ function DKpi({ label, value, sub, tone, subTone, spark, sparkColor }) {
   return (
     <div className="dkpi">
       <small>{label}</small>
-      <b className="mono" style={tone ? { color: tone } : null}>{value}</b>
+      <b className="mono" style={tone ? { color: tone } : null}>{comCentavos(value)}</b>
       {sub ? <em style={subTone ? { color: subTone } : null}>{sub}</em> : null}
       {spark ? <DSpark values={spark} color={sparkColor} /> : null}
     </div>
@@ -1320,14 +1405,15 @@ function DFluxo({ fluxoDia = {}, viewYear, viewMonth }) {
 }
 function DProximos({ incomeItems = [], expenseItems = [], max = 6, onVer }) {
   const hoje = todayStr();
-  const l = [...incomeItems.filter((i) => !i.recebido).map((i) => ({ k: i.key, nome: i.nome, d: i.dateIso, v: Number(i.net) || 0, in: true })),
-    ...expenseItems.filter((e) => !e.paid).map((e) => ({ k: e.key, nome: e.description, d: e.dateIso, v: Number(e.amount) || 0, in: false }))].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+  const l = [...incomeItems.filter((i) => !i.recebido).map((i) => ({ k: i.key, nome: i.nome, d: i.dateIso, v: Number(i.net) || 0, in: true, ok: i.toggle })),
+    ...expenseItems.filter((e) => !e.paid).map((e) => ({ k: e.key, nome: e.description, d: e.dateIso, v: Number(e.amount) || 0, in: false, ok: e.toggle }))].sort((a, b) => String(a.d).localeCompare(String(b.d)));
   if (!l.length) return <div className="empty-state" style={{ padding: "12px 0" }}>Nada pendente neste mês.</div>;
   return (
     <div className="dprox">
       {l.slice(0, max).map((x) => { const atras = x.d < hoje; return (
         <div key={x.k}><span><b>{x.nome}</b><small>{atras ? (x.in ? "atrasado desde " : "venceu em ") + fmtDatePt(x.d) : x.d === hoje ? "hoje" : fmtDatePt(x.d)}</small></span>
-          <b className="mono" style={{ color: x.in ? (atras ? "#B45309" : "#15803D") : "#B91C1C" }}>{x.in ? "+" : "−"} {fmtBRL(x.v)}</b></div>
+          <b className="mono" style={{ color: x.in ? (atras ? "#B45309" : "#15803D") : "#B91C1C" }}>{x.in ? "+" : "−"} {fmtBRL(x.v)}</b>
+          {x.ok && <button type="button" className={`dprox-ok ${x.in ? "in" : "out"}`} title={x.in ? "Marcar como recebido" : "Marcar como paga"} onClick={() => x.ok()}><IconCheck size={13} />{x.in ? "Recebi" : "Paguei"}</button>}</div>
       ); })}
       {l.length > max && onVer && <button type="button" className="link-btn" style={{ marginTop: 8 }} onClick={onVer}>Ver os outros {l.length - max}</button>}
     </div>
@@ -1390,7 +1476,7 @@ function Kpi({ label, value, sub, tone, num, fmt }) {
   return (
     <div className="kpi-box">
       <div className="kpi-label">{label}</div>
-      <div className="kpi-value mono" style={tone ? { color: tone } : null}>{num !== undefined ? <CountUp value={num} format={fmt} /> : value}</div>
+      <div className="kpi-value mono" style={tone ? { color: tone } : null}>{num !== undefined ? <CountUp value={num} format={fmt} /> : comCentavos(value)}</div>
       {sub ? <div className="kpi-sub">{sub}</div> : null}
     </div>
   );
@@ -1831,6 +1917,41 @@ function App() {
   const [cloudCfg, setCloudCfg] = useState(() => getCloudCfg());
   const [cloudSkip, setCloudSkip] = useState(() => lsGet(CLOUD_SKIP_KEY) === "1");
   const [session, setSession] = useState(null);
+  // notas fiscais: troca um anexo por outro em qualquer lugar onde ele estiver
+  const trocaAnexo = (fn) => {
+    const lista = (l) => (Array.isArray(l) ? l.map(fn) : l);
+    setExpenses((p) => p.map((e) => (e.anexos ? { ...e, anexos: lista(e.anexos) } : e)));
+    setRecurringExpenses((p) => p.map((r) => (r.anexosMes ? { ...r, anexosMes: Object.fromEntries(Object.entries(r.anexosMes).map(([k, v]) => [k, lista(v)])) } : r)));
+    setContab((p) => (p.dedAvulsas ? { ...p, dedAvulsas: p.dedAvulsas.map((x) => (x.anexos ? { ...x, anexos: lista(x.anexos) } : x)) } : p));
+  };
+  const reanexarRef = useRef(null), reanexarId = useRef(null);
+  useEffect(() => {
+    const h = (ev) => { reanexarId.current = ev.detail; if (reanexarRef.current) { reanexarRef.current.value = ""; reanexarRef.current.click(); } };
+    window.addEventListener("sallos-reanexar", h); return () => window.removeEventListener("sallos-reanexar", h);
+  }, []);
+  const tentadosNuvem = useRef(new Set());
+  useEffect(() => {
+    if (!session) return;
+    const todos = [];
+    expenses.forEach((e) => (e.anexos || []).forEach((a) => todos.push(a)));
+    recurringExpenses.forEach((r) => Object.values(r.anexosMes || {}).forEach((l) => (l || []).forEach((a) => todos.push(a))));
+    ((contab && contab.dedAvulsas) || []).forEach((x) => (x.anexos || []).forEach((a) => todos.push(a)));
+    const faltam = todos.filter((a) => a && a.id && !a.path && !tentadosNuvem.current.has(a.id));
+    if (!faltam.length) return;
+    faltam.forEach((a) => tentadosNuvem.current.add(a.id));
+    (async () => {
+      const feitos = {};
+      for (const a of faltam) {
+        try { const blob = await idbOp("readonly", (st) => st.get(a.id)); if (!blob || !blob.size) continue; const path = await anexoParaNuvem(blob, a); if (path) feitos[a.id] = path; } catch (e) {}
+      }
+      if (Object.keys(feitos).length) trocaAnexo((a) => (feitos[a.id] ? { ...a, path: feitos[a.id] } : a));
+    })();
+  }, [session, expenses, recurringExpenses, contab]);
+  const reanexar = async (file) => {
+    const velho = reanexarId.current; if (!file || !velho) return;
+    try { const novo = await salvarAnexo(file); trocaAnexo((a) => (a.id === velho ? novo : a)); window.alert("Nota anexada de novo."); }
+    catch (e) { window.alert(e.message || "Não foi possível anexar."); }
+  };
   const [authNeeded, setAuthNeeded] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [cloud, setCloud] = useState({ status: getCloudCfg() ? "loading" : "off", msg: "" });
@@ -2065,6 +2186,7 @@ function App() {
     });
     const suf = { ...FORMA_CURTA, div: "isento", aluguel: "aluguel" };
     items.forEach((it) => { if (suf[it.forma] && !it.key.startsWith("clt-")) it.dateLabel += " · " + suf[it.forma]; });
+    items.forEach((it) => { it.toggle = comAviso(it.toggle, it.recebido, "rec", it.nome); });
     return items;
   };
 
@@ -2083,6 +2205,7 @@ function App() {
       items.push({ key: "rec-" + r.id + "-" + mk, description: desc, category: aj.category || r.category || guessExpCat(desc), amount: Number(aj.amount !== undefined ? aj.amount : r.amount || 0), dateLabel: fmtDatePt(dateStr(y, m, day)), dateIso: dateStr(y, m, day),
         tipo: "recorrente", dedutivel: aj.dedutivel !== undefined ? aj.dedutivel : r.dedutivel, anexos: (r.anexosMes && r.anexosMes[mk]) || [], paid: !!(info && info.paid), toggle: () => toggleRecurringExpensePaid(r.id, mk), remove: () => removeRecurringExpense(r.id), ref: { t: "rec", id: r.id, mk } });
     });
+    items.forEach((it) => { it.toggle = comAviso(it.toggle, it.paid, "pag", it.description); });
     return items;
   };
 
@@ -4692,6 +4815,148 @@ function App() {
         :root[data-theme="dark"] .fx-net.in, :root[data-theme="dark"] .fx-line b.in { color: #4ADE80; } :root[data-theme="dark"] .fx-net.out { color: #FCA5A5; }
         :root[data-theme="dark"] .cal-cell.fx-in1 { background-color: rgba(34,197,94,.16); } :root[data-theme="dark"] .cal-cell.fx-in2 { background-color: rgba(34,197,94,.32); } :root[data-theme="dark"] .cal-cell.fx-in3 { background-color: rgba(34,197,94,.52); }
         :root[data-theme="dark"] .cal-cell.fx-out1 { background-color: rgba(239,68,68,.16); } :root[data-theme="dark"] .cal-cell.fx-out2 { background-color: rgba(239,68,68,.30); } :root[data-theme="dark"] .cal-cell.fx-out3 { background-color: rgba(239,68,68,.48); }
+
+        /* ================= v70: acabamento premium (tipografia, superfícies, gráficos e transições) ================= */
+        :root { --ink: #0F1A16; --deep: #0B3D2E; --deep-2: #0E5640; --hair: rgba(15,26,22,0.07);
+          --sombra: 0 1px 2px rgba(15,26,22,0.04), 0 10px 28px -16px rgba(15,26,22,0.16);
+          --ease: cubic-bezier(.22,1,.36,1); }
+        .app { font-family: "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+        .app .mono, .app .kpi-value, .app .bc-value, .app .flow b, .app .stat-value, .app .num, .app .conf-v, .app .fg-tot, .app .ag-v,
+        .app .card-title, .app .brand-title, .app .bm-title, .app .t2-title, .app .greet h1, .app .greet h2, .app h1, .app h2, .app h3 {
+          font-family: "Manrope", "Inter", system-ui, sans-serif; font-feature-settings: "tnum" 1, "lnum" 1; }
+        .app .mono, .app .kpi-value, .app .bc-value { font-variant-numeric: tabular-nums; letter-spacing: -0.015em; }
+        .app .kpi-value { font-weight: 700; letter-spacing: -0.025em; }
+        .app .cent { font-size: 0.6em; font-weight: 600; opacity: 0.55; letter-spacing: 0; margin-left: 1px; }
+        .app .bc-value .cent { opacity: 0.6; }
+        .app .card-title { font-weight: 700; letter-spacing: -0.02em; }
+        .app h1, .app h2 { letter-spacing: -0.03em; }
+        .app .kpi-label, .app .bc-top, .app .flow span { letter-spacing: 0; }
+
+        /* superfícies */
+        .app .card, .app .kpi-box, .app .balance-card { border: 1px solid var(--hair); box-shadow: var(--sombra); }
+        .app .card { border-radius: 20px; } .app .kpi-box { border-radius: 18px; }
+
+        /* cartão principal do Início: o único elemento escuro da tela */
+        :root:not([data-theme="dark"]) .app .balance-card {
+          background: radial-gradient(120% 140% at 100% 0%, rgba(52,211,153,0.22) 0%, rgba(52,211,153,0) 46%), linear-gradient(155deg, var(--deep-2) 0%, var(--deep) 58%, #08291F 100%);
+          border-color: transparent; color: #fff; box-shadow: 0 18px 40px -18px rgba(8,41,31,0.55), 0 2px 6px rgba(8,41,31,0.18); }
+        :root:not([data-theme="dark"]) .app .balance-card .bc-top { color: rgba(255,255,255,0.72); }
+        :root:not([data-theme="dark"]) .app .balance-card .bc-value { color: #fff; }
+        :root:not([data-theme="dark"]) .app .balance-card .bc-value[style] { color: #FCA5A5 !important; }
+        :root:not([data-theme="dark"]) .app .balance-card .bc-sub { color: rgba(255,255,255,0.66); }
+        :root:not([data-theme="dark"]) .app .balance-card .bc-sub b { color: #fff; }
+        :root:not([data-theme="dark"]) .app .balance-card .flow { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.08); }
+        :root:not([data-theme="dark"]) .app .balance-card .flow span { color: rgba(255,255,255,0.7); }
+        :root:not([data-theme="dark"]) .app .balance-card .flow b { color: #fff; }
+        :root:not([data-theme="dark"]) .app .balance-card .flow-ico { background: rgba(255,255,255,0.12); color: #fff; }
+        :root:not([data-theme="dark"]) .app .balance-card .flow-ico.in { color: #6EE7B7; } :root:not([data-theme="dark"]) .app .balance-card .flow-ico.out { color: #FCA5A5; } :root:not([data-theme="dark"]) .app .balance-card .flow-ico.inv { color: #93C5FD; }
+        :root:not([data-theme="dark"]) .app .balance-card .delta { background: rgba(255,255,255,0.1); }
+        :root:not([data-theme="dark"]) .app .balance-card .delta.good { color: #6EE7B7; } :root:not([data-theme="dark"]) .app .balance-card .delta.bad { color: #FCA5A5; }
+        .app .bc-value { font-size: 38px; font-weight: 800; letter-spacing: -0.035em; }
+        @media (max-width: 480px) { .app .bc-value { font-size: 34px; } }
+
+        /* menu de baixo: vidro fosco */
+        @media (max-width: 1099px) {
+          :root:not([data-theme="dark"]) .app .dock { background: rgba(255,255,255,0.78); -webkit-backdrop-filter: saturate(1.6) blur(18px); backdrop-filter: saturate(1.6) blur(18px); border: 1px solid rgba(15,26,22,0.06); box-shadow: 0 12px 32px -12px rgba(15,26,22,0.28); }
+          .app .dk-btn { transition: background .25s var(--ease), color .25s var(--ease), transform .2s var(--ease); }
+          .app .dk-btn:active { transform: scale(0.9); }
+          :root:not([data-theme="dark"]) .app .topbar2 { background: rgba(243,245,244,0.82); -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px); border-bottom: 1px solid var(--hair); }
+          .app .fab2 { box-shadow: 0 12px 26px -8px rgba(22,163,74,0.55); transition: transform .2s var(--ease); } .app .fab2:active { transform: scale(0.92); }
+        }
+
+        /* transição entre páginas: uma entrada só, curta e suave */
+        .app .pg-fwd { animation: pgFwd2 .42s var(--ease) backwards; }
+        .app .pg-back { animation: pgBack2 .42s var(--ease) backwards; }
+        @keyframes pgFwd2 { from { opacity: 0; transform: translate3d(14px, 0, 0); } }
+        @keyframes pgBack2 { from { opacity: 0; transform: translate3d(-14px, 0, 0); } }
+        .app .pg .card, .app .pg .kpi-box, .app .pg .day-panel, .app .pg .asset-card, .app .pg .ag-head, .app .pg .quick-row > button, .app .pg .balance-card { animation: riseIn2 .55s var(--ease) backwards; }
+        @keyframes riseIn2 { from { opacity: 0; transform: translate3d(0, 10px, 0); } }
+        .app .pg > div > :nth-child(1) { animation-delay: 0s; } .app .pg > div > :nth-child(2) { animation-delay: .04s; } .app .pg > div > :nth-child(3) { animation-delay: .08s; } .app .pg > div > :nth-child(4) { animation-delay: .12s; } .app .pg > div > :nth-child(n+5) { animation-delay: .16s; }
+        .app button, .app .clickable { -webkit-tap-highlight-color: transparent; }
+        .app .btn, .app .chip, .app .seg-btn { transition: background .2s var(--ease), color .2s var(--ease), transform .15s var(--ease), box-shadow .2s var(--ease); }
+        .app .btn:active, .app .chip:active { transform: scale(0.97); }
+
+        /* gráficos */
+        .app .chart-box { position: relative; user-select: none; -webkit-user-select: none; }
+        .app .chart-box svg { overflow: visible; cursor: crosshair; }
+        .app .grade-l { stroke: rgba(15,26,22,0.06); stroke-width: 1; } .app .grade-zero { stroke: rgba(15,26,22,0.16); stroke-width: 1; }
+        .app .grade-t { font-size: 15px; fill: #94A3A0; font-family: "Inter", sans-serif; font-feature-settings: "tnum" 1; }
+        .app .eixo-x { font-size: 15px; font-family: "Inter", sans-serif; }
+        .app .linha-anim { stroke-dasharray: 1; stroke-dashoffset: 1; animation: desenha 1.1s var(--ease) .1s forwards; }
+        @keyframes desenha { to { stroke-dashoffset: 0; } }
+        .app .bar-anim { animation: barGrow .7s var(--ease) both; transition: opacity .2s var(--ease); }
+        .app .chart-tip { background: rgba(15,26,22,0.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-radius: 12px; padding: 9px 12px; box-shadow: 0 10px 24px -8px rgba(15,26,22,0.45); pointer-events: none; transition: left .18s var(--ease); min-width: 120px; }
+        .app .chart-tip .mono, .app .chart-tip b { font-family: "Manrope", "Inter", sans-serif; }
+        .app .donut-seg { transition: stroke-width .25s var(--ease), opacity .25s var(--ease); }
+        :root[data-theme="dark"] .app .grade-l { stroke: rgba(255,255,255,0.07); } :root[data-theme="dark"] .app .grade-zero { stroke: rgba(255,255,255,0.18); }
+        /* patrimônio (Investimentos) */
+        .app .pat-card { padding: 20px 20px 14px; overflow: hidden; }
+        .pat-l { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+        .pat-v { font-family: "Manrope", "Inter", sans-serif; font-size: 34px; font-weight: 800; letter-spacing: -0.035em; margin: 2px 0 2px; font-variant-numeric: tabular-nums; }
+        .pat-d { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 13px; } .pat-d b { font-weight: 700; } .pat-d.up b { color: #15803D; } .pat-d.down b { color: #B91C1C; } .pat-d span { color: var(--text-dim); }
+        .pat-ch { margin: 10px -20px 4px; height: 170px; } .pat-ch svg { display: block; width: 100%; height: 170px; }
+        .revela { animation: revela 1.1s var(--ease) both; } @keyframes revela { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+        .pat-base { stroke: rgba(15,26,22,0.18); stroke-dasharray: 3 4; stroke-width: 1; }
+        .pat-pt { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.25); pointer-events: none; }
+        .pat-f { display: flex; gap: 6px; justify-content: space-between; padding-top: 6px; }
+        .pat-f button { flex: 1; border: none; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text-dim); padding: 8px 0; border-radius: 10px; cursor: pointer; transition: background .2s var(--ease), color .2s var(--ease); }
+        .pat-f button.on { background: var(--surface-3); color: var(--text); }
+        :root[data-theme="dark"] .pat-base { stroke: rgba(255,255,255,0.2); } :root[data-theme="dark"] .pat-d.up b { color: #4ADE80; } :root[data-theme="dark"] .pat-d.down b { color: #F87171; }
+        /* computador: painel escuro do Início */
+        @media (min-width: 1100px) {
+          .app .dhero { display: grid; grid-template-columns: minmax(250px, 0.9fr) 2.6fr; gap: 18px; align-items: stretch; padding: 22px; margin-bottom: 16px; border-radius: 24px; color: #fff;
+            background: radial-gradient(70% 140% at 100% 0%, rgba(52,211,153,0.20) 0%, rgba(52,211,153,0) 50%), linear-gradient(150deg, #0E5640 0%, #0B3D2E 55%, #08291F 100%);
+            box-shadow: 0 22px 46px -22px rgba(8,41,31,0.6), 0 2px 6px rgba(8,41,31,0.18); animation: riseIn2 .55s var(--ease) backwards; }
+          .dhero-s { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 4px 6px; }
+          .dhero-s > span { font-size: 14px; color: rgba(255,255,255,0.72); font-weight: 500; }
+          .dhero-s > b { font-family: "Manrope", "Inter", sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.1; margin: 2px 0 8px; font-variant-numeric: tabular-nums; }
+          .dhero-s small { font-size: 13px; color: rgba(255,255,255,0.66); } .dhero-s small strong { color: #fff; font-weight: 700; }
+          .app .dhero .dkpis { margin: 0; gap: 10px; }
+          .app .dhero .dkpi { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.08); box-shadow: none; color: #fff; }
+          .app .dhero .dkpi small { color: rgba(255,255,255,0.7); } .app .dhero .dkpi b { color: #fff; }
+          .app .dhero .dkpi b[style] { color: #FCA5A5 !important; }
+          .app .dhero .dkpi em { color: rgba(255,255,255,0.78) !important; font-style: normal; }
+          .app .grade-t, .app .eixo-x { font-size: 11px; }
+          .dprox > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+          .dprox-ok { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 5px 10px; cursor: pointer; opacity: 0; transition: opacity .2s var(--ease), background .2s var(--ease); }
+          .dprox > div:hover .dprox-ok, .dprox-ok:focus-visible { opacity: 1; }
+          .dprox-ok.in:hover { background: #16A34A; border-color: #16A34A; color: #fff; } .dprox-ok.out:hover { background: #0F1A16; border-color: #0F1A16; color: #fff; }
+        }
+        @media (max-width: 1099px) { .dprox-ok { display: none; } }
+        /* aviso com desfazer */
+        .aviso { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 9500; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
+          background: rgba(15,26,22,0.94); color: #fff; border-radius: 16px; padding: 10px 10px 10px 12px; box-shadow: 0 16px 36px -12px rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+          animation: avisoIn .42s var(--ease) both; font-size: 14px; }
+        @media (min-width: 1100px) { .aviso { bottom: 28px; } }
+        .aviso-ok { width: 26px; height: 26px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; flex-shrink: 0; animation: okPop .5s var(--ease) .05s both; }
+        .aviso-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+        .aviso button { border: none; background: rgba(255,255,255,0.12); color: #6EE7B7; font: inherit; font-weight: 700; border-radius: 10px; padding: 7px 12px; cursor: pointer; flex-shrink: 0; }
+        @keyframes avisoIn { from { opacity: 0; transform: translate(-50%, 16px) scale(.96); } }
+        @keyframes okPop { 0% { transform: scale(0); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+        .app .conf-ok:active, .app .badge:active { transform: scale(0.94); }
+        /* tema escuro com a mesma linguagem: preto esverdeado e destaques em verde */
+        :root[data-theme="dark"] { --bg: #0A110F; --surface: #111A17; --surface-2: #15201C; --surface-3: #1B2924; --text: #E8EFEB; --text-dim: #8FA39B; --border: rgba(255,255,255,0.07); --hair: rgba(255,255,255,0.06);
+          --sombra: 0 1px 0 rgba(255,255,255,0.03) inset, 0 12px 30px -18px rgba(0,0,0,0.7); }
+        :root[data-theme="dark"] body, :root[data-theme="dark"] .app { background: #0A110F; color: var(--text); }
+        :root[data-theme="dark"] .app { background-image: radial-gradient(90% 50% at 50% -10%, rgba(16,185,129,0.10), transparent 70%); }
+        :root[data-theme="dark"] .app .balance-card { background: radial-gradient(120% 140% at 100% 0%, rgba(52,211,153,0.20) 0%, rgba(52,211,153,0) 46%), linear-gradient(155deg, #0F4A37 0%, #0B3226 60%, #08231B 100%); border-color: rgba(110,231,183,0.12); color: #fff; }
+        :root[data-theme="dark"] .app .balance-card .bc-top, :root[data-theme="dark"] .app .balance-card .bc-sub { color: rgba(255,255,255,0.7); }
+        :root[data-theme="dark"] .app .balance-card .flow { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); }
+        :root[data-theme="dark"] .app .balance-card .flow-ico { background: rgba(255,255,255,0.1); }
+        :root[data-theme="dark"] .app .card, :root[data-theme="dark"] .app .kpi-box { background: var(--surface); border-color: var(--hair); }
+        @media (max-width: 1099px) {
+          :root[data-theme="dark"] .app .dock { background: rgba(17,26,23,0.78); -webkit-backdrop-filter: saturate(1.4) blur(18px); backdrop-filter: saturate(1.4) blur(18px); border: 1px solid rgba(255,255,255,0.07); box-shadow: 0 14px 34px -12px rgba(0,0,0,0.7); }
+          :root[data-theme="dark"] .app .topbar2 { background: rgba(10,17,15,0.82); -webkit-backdrop-filter: saturate(1.4) blur(16px); backdrop-filter: saturate(1.4) blur(16px); border-bottom: 1px solid var(--hair); }
+          :root[data-theme="dark"] .app .dk-btn.on { background: rgba(52,211,153,0.14); color: #34D399; }
+        }
+        :root[data-theme="dark"] .app .grade-t, :root[data-theme="dark"] .app .eixo-x { fill: #7E928A; }
+        :root[data-theme="dark"] .app .delta.good { color: #6EE7B7; background: rgba(110,231,183,0.12); } :root[data-theme="dark"] .app .delta.bad { color: #FCA5A5; background: rgba(252,165,165,0.12); }
+        :root[data-theme="dark"] .app .chart-tip { background: rgba(232,239,235,0.95); color: #0F1A16; }
+        :root[data-theme="dark"] .app .alert-danger { background: rgba(207,88,102,0.12); color: #F2A3AC; } :root[data-theme="dark"] .app .alert-warning { background: rgba(214,160,51,0.12); color: #EBC77A; } :root[data-theme="dark"] .app .alert-info { background: rgba(52,211,153,0.10); color: #7FE0B5; }
+        @media (prefers-reduced-motion: reduce) {
+          .app *, .app *::before, .app *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
+          .app .linha-anim { stroke-dashoffset: 0; }
+        }
 `}</style>
 
       <div className="main">
@@ -4821,6 +5086,8 @@ function App() {
         <QuickCargoFixo onClose={() => setCargoOpen(false)} monthKey={monthKey} onSave={(d) => addVinculo(d)} />
       )}
 
+      <Aviso />
+      <input ref={reanexarRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => reanexar(e.target.files && e.target.files[0])} />
       <button className="fab2" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
 
       <div className="footnote">
@@ -5435,7 +5702,7 @@ function FaturamentoTab({
   const confirmar = aConfirmar.length > 0 && (
     <div className="card conf-card" id="fat-confirmar">
       <div className="conf-head"><div><h3 className="card-title">Confirme o que caiu na conta</h3><span className="card-note">{(() => { const at = aConfirmar.filter((i) => String(i.dateIso || "") < hojeIso).length; const tot = aConfirmar.length === 1 ? "1 a receber" : aConfirmar.length + " a receber"; return at ? `${tot}, ${at} com a data já passada` : `${tot} em ${MONTHS_PT[viewMonth].toLowerCase()}`; })()}</span></div>
-        {aConfirmar.length > 1 && <button type="button" className="btn btn-ghost btn-sm conf-todos" onClick={() => aConfirmar.forEach((x) => x.toggle())}>Recebi todos</button>}</div>
+        {aConfirmar.length > 1 && <button type="button" className="btn btn-ghost btn-sm conf-todos" onClick={() => { const lista = [...aConfirmar]; lista.forEach((x) => x.toggle(true)); vibrar([8, 40, 12]); avisar(`${lista.length} recebimentos confirmados`, () => lista.forEach((x) => x.toggle(true))); }}>Recebi todos</button>}</div>
       <div className="conf-list">
         {(verTodosConf ? aConfirmar : aConfirmar.slice(0, 5)).map((it) => (
           <div key={it.key} className="conf-it">
@@ -5481,7 +5748,7 @@ function FaturamentoTab({
                   </button>
                   {aberto && (
                     <div className="fg-body">
-                      {pend.length > 1 && <button type="button" className="link-btn fg-todos" onClick={() => pend.forEach((x) => x.toggle())}>Marcar os {pend.length} como recebidos</button>}
+                      {pend.length > 1 && <button type="button" className="link-btn fg-todos" onClick={() => { const lista = [...pend]; lista.forEach((x) => x.toggle(true)); vibrar([8, 40, 12]); avisar(`${lista.length} recebimentos confirmados`, () => lista.forEach((x) => x.toggle(true))); }}>Marcar os {pend.length} como recebidos</button>}
                       <table className="tbl tbl-fat">
                         <thead><tr><th>Data</th><th className="hide-sm">Detalhe</th><th className="num hide-sm">Bruto</th><th className="num">Líquido</th><th>Status</th><th /></tr></thead>
                         <tbody>
@@ -7076,11 +7343,14 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         {alerts.length > 0 && (
           <Avisos alerts={alerts} />
         )}
-        <div className="dkpis">
-          <DKpi label="Receita líquida" value={fmtBRL(curStats.net)} sub={deltaTxt(curStats.net, prevStats.net, prevNome)} subTone={curStats.net >= prevStats.net ? "#15803D" : "#B91C1C"} spark={hs.map((h) => h.value)} sparkColor="#16A34A" />
-          <DKpi label="Despesas" value={fmtBRL(curStats.expTotal)} sub={deltaTxt(curStats.expTotal, prevStats.expTotal, prevNome)} subTone={curStats.expTotal <= prevStats.expTotal ? "#15803D" : "#B91C1C"} spark={hs.map((h) => h.expenses)} sparkColor="#F59E0B" />
-          <DKpi label="Sobra do mês" value={fmtBRL(sobra)} tone={sobra < 0 ? "#B91C1C" : null} sub={curStats.net > 0 ? Math.round((sobra / curStats.net) * 100) + "% da receita" : null} subTone="#15803D" spark={hs.map((h) => h.value - h.expenses)} sparkColor="#0F766E" />
-          <DKpi label="Patrimônio" value={fmtBRL(patrimonioTotal)} sub={"investido " + fmtBRL(portfolio.totalValue || totalInvestedAllTime)} subTone="#64748B" spark={hs.map((h) => h.invested)} sparkColor="#7C3AED" />
+        <div className="dhero">
+          <div className="dhero-s"><span>Saldo em caixa</span><b className="mono"><CountUp value={saldoRealizado} /></b><small>Patrimônio total <strong className="mono">{fmtBRL(patrimonioTotal)}</strong></small><small>Investido <strong className="mono">{fmtBRL(portfolio.totalValue || totalInvestedAllTime)}</strong></small></div>
+          <div className="dkpis">
+          <DKpi label="Receita líquida" value={fmtBRL(curStats.net)} sub={deltaTxt(curStats.net, prevStats.net, prevNome)} subTone={curStats.net >= prevStats.net ? "#15803D" : "#B91C1C"} spark={hs.map((h) => h.value)} sparkColor="#6EE7B7" />
+          <DKpi label="Despesas" value={fmtBRL(curStats.expTotal)} sub={deltaTxt(curStats.expTotal, prevStats.expTotal, prevNome)} subTone={curStats.expTotal <= prevStats.expTotal ? "#15803D" : "#B91C1C"} spark={hs.map((h) => h.expenses)} sparkColor="#FCD34D" />
+          <DKpi label="Sobra do mês" value={fmtBRL(sobra)} tone={sobra < 0 ? "#B91C1C" : null} sub={curStats.net > 0 ? Math.round((sobra / curStats.net) * 100) + "% da receita" : null} subTone="#15803D" spark={hs.map((h) => h.value - h.expenses)} sparkColor="#A7F3D0" />
+          <DKpi label="Investido no mês" value={fmtBRL(curStats.invested || 0)} sub={"carteira " + fmtBRL(portfolio.totalValue || 0)} subTone="#64748B" spark={hs.map((h) => h.invested)} sparkColor="#C4B5FD" />
+        </div>
         </div>
         <div className="dgrid" style={{ gridTemplateColumns: "1.9fr 1fr" }}>
           <div className="card"><div className="card-head"><h3 className="card-title">Dinheiro do mês, dia a dia</h3><span className="card-note">o que entrou menos o que saiu · tracejado é previsão</span></div><DFluxo fluxoDia={fluxoDia} viewYear={viewYear} viewMonth={viewMonth} /></div>
@@ -8230,6 +8500,74 @@ function MiniLinha({ serie, cor, id }) {
     </svg>
   );
 }
+// patrimônio no estilo de corretora: valor grande, períodos e o dedo percorrendo o gráfico
+function PatrimonioCard({ hist = [], investments = [], totalValue = 0 }) {
+  const [faixa, setFaixa] = useState("6M");
+  const [ativo, setAtivo] = useState(null);
+  const hoje = todayStr();
+  const serie = useMemo(() => {
+    const real = [...hist.filter((h) => h.d < hoje && h.v > 0), { d: hoje, v: Number(totalValue) || 0 }].map((h) => ({ d: h.d, v: h.v }));
+    const ini = real[0].d;
+    // antes do primeiro registro diário: o valor aplicado no fim de cada mês (estimativa)
+    const invs = investments.filter((i) => i.date && i.tipo !== "ajuste").sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const est = [];
+    if (invs.length && invs[0].date < ini) {
+      let y = Number(invs[0].date.slice(0, 4)), m = Number(invs[0].date.slice(5, 7)) - 1;
+      const fimIni = ini.slice(0, 7);
+      while (true) {
+        const ultimo = new Date(y, m + 1, 0).getDate(); const dfim = `${y}-${String(m + 1).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`;
+        if (dfim.slice(0, 7) >= fimIni) break;
+        const cum = invs.filter((i) => i.date <= dfim).reduce((a, i) => a + Number(i.amount || 0), 0);
+        if (cum > 0) est.push({ d: dfim, v: cum, est: true });
+        m++; if (m > 11) { m = 0; y++; } if (est.length > 240) break;
+      }
+    }
+    return [...est, ...real];
+  }, [hist, investments, totalValue, hoje]);
+  const dias = { "1M": 31, "6M": 183, "1A": 366, Tudo: 99999 }[faixa];
+  const corte = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  let pts = serie.filter((x) => x.d >= corte);
+  const antes = [...serie].reverse().find((x) => x.d < corte);
+  if (antes && faixa !== "Tudo") pts = [antes, ...pts];
+  if (pts.length === 1) pts = [{ ...pts[0], d: corte }, pts[0]];
+  const W = 600, H = 190, pt = 10, pb = 10;
+  const ts = pts.map((x) => new Date(x.d + "T12:00:00").getTime());
+  const t0 = ts[0], t1 = ts[ts.length - 1] || t0 + 1;
+  const vs = pts.map((x) => x.v); const vmin = Math.min(...vs), vmax = Math.max(...vs), faixaV = Math.max(1, vmax - vmin);
+  const X = (t) => ((t - t0) / Math.max(1, t1 - t0)) * W;
+  const Y = (v) => pt + (H - pt - pb) * (1 - (v - vmin) / faixaV) * 0.9 + (H - pt - pb) * 0.05;
+  const xy = pts.map((x, i) => [X(ts[i]), Y(x.v)]);
+  const linha = xy.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + "," + q[1].toFixed(1)).join(" ");
+  const area = linha + ` L${W},${H} L0,${H} Z`;
+  const primeiro = pts[0].v, i = ativo !== null && ativo < pts.length ? ativo : pts.length - 1, atual = pts[i];
+  const dif = atual.v - primeiro, pct = primeiro > 0 ? (dif / primeiro) * 100 : 0, sobe = dif >= 0;
+  const cor = sobe ? "#16A34A" : "#DC2626";
+  const arr = useArrasto(pts.length, (x) => { let best = 0, bd = 1e9; xy.forEach((q, k) => { const dd = Math.abs(q[0] - x); if (dd < bd) { bd = dd; best = k; } }); return best; }, setAtivo);
+  const dataTxt = (d) => { const [yy, mm, dd] = d.split("-").map(Number); return d === hoje ? "hoje" : `${dd} de ${MONTHS_ABBR_PT[mm - 1].toLowerCase()}. de ${yy}`; };
+  const gid = "pg-" + faixa;
+  return (
+    <div className="card pat-card" onPointerLeave={() => setAtivo(null)}>
+      <div className="pat-top">
+        <span className="pat-l">Patrimônio investido</span>
+        <div className="pat-v mono">{comCentavos(fmtBRL(atual.v))}</div>
+        <div className={`pat-d ${sobe ? "up" : "down"}`}><b className="mono">{(sobe ? "+ " : "− ") + fmtBRL(Math.abs(dif))} ({(sobe ? "+" : "−") + Math.abs(pct).toFixed(2).replace(".", ",")}%)</b><span>{ativo !== null ? dataTxt(atual.d) + (atual.est ? " · valor aplicado" : "") : { "1M": "no último mês", "6M": "nos últimos 6 meses", "1A": "nos últimos 12 meses", Tudo: "desde o início" }[faixa]}</span></div>
+      </div>
+      <div className="chart-box pat-ch">
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="none" height="170" {...arr}>
+          <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={cor} stopOpacity="0.22" /><stop offset="100%" stopColor={cor} stopOpacity="0" /></linearGradient></defs>
+          <line x1="0" x2={W} y1={Y(primeiro)} y2={Y(primeiro)} className="pat-base" vectorEffect="non-scaling-stroke" />
+          <g className="revela" key={faixa}>
+            <path d={area} fill={`url(#${gid})`} />
+            <path d={linha} fill="none" stroke={cor} strokeWidth="2.2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          </g>
+          {ativo !== null && <line x1={xy[i][0]} x2={xy[i][0]} y1="0" y2={H} stroke="rgba(15,26,22,0.25)" vectorEffect="non-scaling-stroke" />}
+        </svg>
+        {ativo !== null && <span className="pat-pt" style={{ left: `${(xy[i][0] / W) * 100}%`, top: `${(xy[i][1] / H) * 170}px`, background: cor }} />}
+      </div>
+      <div className="pat-f" role="tablist">{["1M", "6M", "1A", "Tudo"].map((f) => <button key={f} type="button" role="tab" aria-selected={faixa === f} className={faixa === f ? "on" : ""} onClick={() => { setFaixa(f); setAtivo(null); }}>{f}</button>)}</div>
+    </div>
+  );
+}
 function RentabilidadeCard({ hist = [], investments = [], totalValue, totalBought, totalSold }) {
   const [info, setInfo] = useState(false);
   const hoje = todayStr();
@@ -8376,6 +8714,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   return (
     <div>
       <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
+      {positions.length > 0 && <PatrimonioCard hist={Array.isArray(cotacoes.__hist) ? cotacoes.__hist : []} investments={investments} totalValue={totalValue} />}
       <div className="kpi-row three">
         <Kpi label="Total investido" num={totalCost} sub="custo das posições" />
         <Kpi label="Patrimônio atual" num={totalValue} sub={positions.length + " posição(ões)"} />
@@ -9621,3 +9960,9 @@ function OverviewTab({ chartScope, setChartScope, expensesByDesc, investByCatego
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);
+// abertura: some com suavidade quando o app já desenhou a primeira tela (fica no mínimo ~0,8 s para a animação terminar)
+(function fecharAbertura() {
+  const el = document.getElementById("splash"); if (!el) return;
+  const espera = Math.max(0, 800 - (performance.now ? performance.now() : 0));
+  setTimeout(() => requestAnimationFrame(() => { el.classList.add("sair"); setTimeout(() => el.remove(), 600); }), espera);
+})();

@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Sallos · As finanças do médico, organizadas</title>
+<meta name="description" content="Plantões, hospitais, contas, impostos e investimentos num lugar só. Feito para médicos." />
+<meta property="og:title" content="Sallos · As finanças do médico, organizadas" />
+<meta property="og:description" content="Plantões, hospitais, contas, impostos e investimentos num lugar só." />
+<meta property="og:image" content="https://sallos.com.br/conheca/img/pc-inicio.jpg" />
+<meta name="theme-color" content="#0B3D2E" />
+<link rel="icon" type="image/png" sizes="32x32" href="../sallos-32.png" />
+<link rel="apple-touch-icon" href="../sallos-180.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" />
+<style>
+  :root {
+    --deep: #0B3D2E; --deep-2: #0E5640; --deep-3: #072A1F; --mint: #6EE7B7; --verde: #16A34A;
+    --ink: #0F1A16; --dim: #5E6F69; --paper: #F3F5F4; --card: #FFFFFF; --line: rgba(15,26,22,0.08);
+    --ease: cubic-bezier(.22,1,.36,1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --ink: #E8EFEB; --dim: #9AB0A8; --paper: #0A110F; --card: #111A17; --line: rgba(255,255,255,0.08); }
+  }
+  :root[data-theme="dark"] { --ink: #E8EFEB; --dim: #9AB0A8; --paper: #0A110F; --card: #111A17; --line: rgba(255,255,255,0.08); }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; }
+  h1, h2, h3 { font-family: Manrope, Inter, sans-serif; letter-spacing: -0.03em; line-height: 1.1; margin: 0; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; padding: 0 22px; border-radius: 14px; font-weight: 700; font-size: 16px; text-decoration: none; transition: transform .2s var(--ease), background .2s var(--ease), box-shadow .2s var(--ease); }
+  .btn:active { transform: scale(0.97); }
+  .btn:focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; }
+  .btn-cheio { background: var(--mint); color: #062118; box-shadow: 0 12px 28px -12px rgba(110,231,183,0.7); }
+  .btn-cheio:hover { background: #8DF0C8; }
+  .btn-linha { color: #fff; border: 1px solid rgba(255,255,255,0.28); }
+  .btn-linha:hover { background: rgba(255,255,255,0.08); }
+
+  /* topo */
+  .topo { position: absolute; inset: 0 0 auto 0; z-index: 5; }
+  .topo .wrap { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+  .marca { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font: 800 22px/1 Manrope, sans-serif; letter-spacing: -0.03em; }
+  .marca i { color: var(--mint); font-style: normal; }
+  .marca svg { width: 34px; height: 34px; }
+  .topo nav { display: flex; align-items: center; gap: 22px; }
+  .topo nav a { color: rgba(255,255,255,0.8); text-decoration: none; font-size: 15px; font-weight: 500; }
+  .topo nav a:hover { color: #fff; }
+  .topo nav .btn { min-height: 40px; padding: 0 16px; font-size: 14px; border-radius: 11px; }
+  @media (max-width: 760px) { .topo nav a:not(.btn) { display: none; } }
+
+  /* abertura */
+  .hero { position: relative; overflow: hidden; color: #fff; padding: 128px 0 0;
+    background: radial-gradient(60% 70% at 85% 10%, rgba(52,211,153,0.22) 0%, rgba(52,211,153,0) 60%), linear-gradient(160deg, var(--deep-2) 0%, var(--deep) 50%, var(--deep-3) 100%); }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: end; }
+  .hero h1 { font-size: clamp(40px, 6vw, 66px); font-weight: 800; max-width: 12ch; }
+  .hero p.sub { font-size: clamp(17px, 2vw, 20px); color: rgba(255,255,255,0.78); max-width: 34ch; margin: 22px 0 30px; }
+  .hero .acoes { display: flex; flex-wrap: wrap; gap: 12px; }
+  .hero .nota { margin: 18px 0 72px; font-size: 14px; color: rgba(255,255,255,0.6); }
+  .telas { position: relative; height: 560px; }
+  .cel { position: absolute; width: 270px; border-radius: 42px; padding: 10px; background: #0A0F0D; box-shadow: 0 40px 80px -30px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08) inset; }
+  .cel img { border-radius: 33px; width: 100%; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; }
+  .cel.a { left: 6%; bottom: -60px; transform: rotate(-4deg); animation: sobe .9s var(--ease) .1s both; }
+  .cel.b { right: 2%; bottom: -120px; transform: rotate(5deg); animation: sobe .9s var(--ease) .25s both; }
+  @keyframes sobe { from { opacity: 0; translate: 0 60px; } }
+  @media (max-width: 900px) {
+    .hero { padding-top: 112px; }
+    .hero .wrap { grid-template-columns: 1fr; }
+    .hero .nota { margin-bottom: 36px; }
+    .telas { height: 420px; }
+    .cel { width: 210px; border-radius: 34px; padding: 8px; } .cel img { border-radius: 27px; }
+    .cel.a { left: calc(50% - 205px); } .cel.b { right: calc(50% - 205px); }
+  }
+  @media (max-width: 420px) { .cel.a { left: -10px; } .cel.b { right: -10px; } }
+
+  /* blocos */
+  section { padding: 96px 0; }
+  .titulo { max-width: 640px; margin-bottom: 48px; }
+  .titulo h2 { font-size: clamp(30px, 4vw, 44px); font-weight: 800; }
+  .titulo p { color: var(--dim); font-size: 18px; margin: 14px 0 0; }
+  .linha { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; padding: 36px 0; border-top: 1px solid var(--line); }
+  .linha:first-of-type { border-top: none; }
+  .linha.inv .txt { order: 2; }
+  .linha h3 { font-size: clamp(24px, 3vw, 32px); font-weight: 800; }
+  .linha p { color: var(--dim); font-size: 17px; margin: 14px 0 0; max-width: 46ch; }
+  .linha ul { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .linha li { display: flex; gap: 10px; font-size: 16px; }
+  .linha li::before { content: ""; flex: 0 0 18px; height: 18px; margin-top: 4px; border-radius: 50%; background: var(--verde) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center/11px no-repeat; }
+  .foto { display: flex; justify-content: center; gap: 18px; }
+  .foto .cel { position: static; width: 240px; transform: none; animation: none; }
+  .foto.pc img { border-radius: 16px; box-shadow: 0 30px 60px -30px rgba(15,26,22,0.45), 0 0 0 1px var(--line); }
+  @media (max-width: 860px) {
+    section { padding: 72px 0; }
+    .linha { grid-template-columns: 1fr; gap: 28px; } .linha.inv .txt { order: 0; }
+    .foto .cel { width: 200px; }
+  }
+  .mais { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; margin-top: 48px; }
+  .mais div { background: var(--card); padding: 22px; }
+  .mais b { display: block; font-family: Manrope, sans-serif; font-size: 17px; letter-spacing: -0.02em; }
+  .mais span { color: var(--dim); font-size: 15px; }
+  @media (max-width: 860px) { .mais { grid-template-columns: 1fr; } }
+
+  /* vídeo */
+  .video { background: var(--deep-3); color: #fff; }
+  .video .titulo p { color: rgba(255,255,255,0.7); }
+  .video video { width: 100%; border-radius: 20px; background: #000; box-shadow: 0 40px 80px -40px rgba(0,0,0,0.8); aspect-ratio: 16 / 9; }
+
+  /* começar */
+  .passos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; counter-reset: p; }
+  .passo { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 26px; counter-increment: p; }
+  .passo::before { content: counter(p); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--deep); color: var(--mint); font: 800 16px Manrope, sans-serif; margin-bottom: 16px; }
+  .passo h3 { font-size: 20px; font-weight: 800; }
+  .passo p { color: var(--dim); margin: 8px 0 0; font-size: 15.5px; }
+  .passo small { display: block; margin-top: 10px; color: var(--dim); font-size: 14px; }
+  @media (max-width: 860px) { .passos { grid-template-columns: 1fr; } }
+
+  /* privacidade */
+  .priv { display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 28px; padding: 44px; }
+  .priv h2 { font-size: clamp(28px, 3.6vw, 40px); font-weight: 800; }
+  .priv p { color: var(--dim); font-size: 17px; }
+  .priv ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 18px; }
+  .priv li b { display: block; font-family: Manrope, sans-serif; font-size: 17px; }
+  .priv li span { color: var(--dim); font-size: 15.5px; }
+  @media (max-width: 860px) { .priv { grid-template-columns: 1fr; padding: 28px; gap: 24px; } }
+
+  /* perguntas */
+  .faq { max-width: 760px; }
+  details { border-top: 1px solid var(--line); padding: 18px 0; }
+  details:last-child { border-bottom: 1px solid var(--line); }
+  summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 16px; font-family: Manrope, sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.02em; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; font-size: 24px; line-height: 1; color: var(--verde); transition: transform .25s var(--ease); }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { color: var(--dim); margin: 10px 0 0; font-size: 16px; }
+
+  /* fim */
+  .fim { color: #fff; text-align: center; background: radial-gradient(60% 90% at 50% 0%, rgba(52,211,153,0.2), rgba(52,211,153,0) 60%), linear-gradient(160deg, var(--deep-2), var(--deep-3)); }
+  .fim h2 { font-size: clamp(32px, 5vw, 52px); font-weight: 800; max-width: 18ch; margin: 0 auto; }
+  .fim p { color: rgba(255,255,255,0.75); font-size: 18px; margin: 16px auto 30px; max-width: 44ch; }
+  footer { padding: 28px 0 40px; color: var(--dim); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+  .aparece { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+  .aparece.vis { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .aparece { opacity: 1; transform: none; transition: none; } .cel.a, .cel.b { animation: none; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<header class="topo">
+  <div class="wrap">
+    <a class="marca" href="./" aria-label="Sallos">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="24" fill="#34D399"/><g transform="translate(50 50) scale(.86) translate(-50 -46)"><rect x="32" y="44" width="13" height="34" rx="6.5" fill="#0B3D2E"/><rect x="55" y="28" width="13" height="50" rx="6.5" fill="#0B3D2E"/><circle cx="61.5" cy="17" r="7" fill="#FFFFFF"/></g></svg>
+      <span>Sa<i>ll</i>os</span>
+    </a>
+    <nav>
+      <a href="#recursos">Recursos</a>
+      <a href="#video">Vídeo</a>
+      <a href="#comecar">Como começar</a>
+      <a class="btn btn-cheio" href="/">Abrir o app</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <h1>As finanças do médico, organizadas.</h1>
+        <p class="sub">Plantões, hospitais, contas, impostos e investimentos num lugar só. Você vê quanto ganhou, quanto falta cair e quanto sobrou no mês.</p>
+        <div class="acoes">
+          <a class="btn btn-cheio" href="/">Começar agora</a>
+          <a class="btn btn-linha" href="#video">Ver o vídeo de 3 minutos</a>
+        </div>
+        <p class="nota">Funciona no celular e no computador. Não precisa baixar nada na loja.</p>
+      </div>
+      <div class="telas" aria-hidden="true">
+        <div class="cel a"><img src="img/cel-inicio.jpg" alt="" /></div>
+        <div class="cel b"><img src="img/cel-faturamento.jpg" alt="" /></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="recursos">
+    <div class="wrap">
+      <div class="titulo aparece">
+        <h2>Feito para a rotina de quem dá plantão</h2>
+        <p>Vários hospitais, pagamentos em datas diferentes, Pix como sócio, nota pela empresa. O Sallos entende isso sem você precisar de planilha.</p>
+      </div>
+
+      <div class="linha aparece">
+        <div class="txt">
+          <h3>Seus plantões e quanto falta cair</h3>
+          <p>Lance o plantão em segundos. Se for fixo, escolha os dias uma vez e o app lança os próximos sozinho.</p>
+          <ul>
+            <li>Faturamento separado por hospital</li>
+            <li>Um toque em "Recebi" quando o dinheiro cai</li>
+            <li>Bruto, imposto e líquido de cada plantão</li>
+          </ul>
+        </div>
+        <div class="foto"><div class="cel"><img src="img/cel-faturamento.jpg" alt="Tela de faturamento com os recebimentos a confirmar" /></div></div>
+      </div>
+
+      <div class="linha inv aparece">
+        <div class="txt">
+          <h3>O mês inteiro no calendário</h3>
+          <p>Cada dia mostra os plantões, os recebimentos e as contas. No computador, o saldo do mês fica sempre à vista.</p>
+          <ul>
+            <li>Horas e dias trabalhados no mês</li>
+            <li>Toque num dia para ver e lançar</li>
+            <li>Ganho líquido por hora de trabalho</li>
+          </ul>
+        </div>
+        <div class="foto"><div class="cel"><img src="img/cel-calendario.jpg" alt="Calendário do mês com os plantões marcados" /></div></div>
+      </div>
+
+      <div class="linha aparece">
+        <div class="txt">
+          <h3>Contas e fatura do cartão sem esforço</h3>
+          <p>Cadastre as contas fixas uma vez. Importe a fatura do cartão e o app separa cada compra por categoria: mercado, restaurante, transporte, saúde e mais.</p>
+          <ul>
+            <li>Aviso antes do vencimento</li>
+            <li>Gastos de saúde e escola separados para o imposto de renda</li>
+            <li>Nota fiscal guardada junto com o gasto</li>
+          </ul>
+        </div>
+        <div class="foto"><div class="cel"><img src="img/cel-despesas.jpg" alt="Lista de contas do mês" /></div></div>
+      </div>
+
+      <div class="linha inv aparece">
+        <div class="txt">
+          <h3>Impostos sem susto</h3>
+          <p>O app calcula as guias, avisa o vencimento e mostra quanto separar de cada recebimento. Também estima o seu imposto de renda e quanto deve voltar.</p>
+          <ul>
+            <li>Simples Nacional e carnê-leão</li>
+            <li>Caixinha do imposto</li>
+            <li>Estimativa da restituição</li>
+          </ul>
+        </div>
+        <div class="foto"><div class="cel"><img src="img/cel-impostos.jpg" alt="Tela de impostos com guias e estimativa do imposto de renda" /></div></div>
+      </div>
+
+      <div class="linha aparece">
+        <div class="txt">
+          <h3>Investimentos com cotação automática</h3>
+          <p>Ações, fundos imobiliários, renda fixa e exterior. Os preços se atualizam sozinhos e você vê a evolução do patrimônio como numa corretora.</p>
+          <ul>
+            <li>Importa nota de corretagem, print ou planilha</li>
+            <li>Rentabilidade no ano e no total</li>
+            <li>Carteira em dólar convertida para real</li>
+          </ul>
+        </div>
+        <div class="foto"><div class="cel"><img src="img/cel-investimentos.jpg" alt="Gráfico de patrimônio investido" /></div></div>
+      </div>
+
+      <div class="mais aparece">
+        <div><b>Metas e teto de gastos</b><span>Reserva, viagem, carro. O app avisa quando os gastos passam de 80% do teto.</span></div>
+        <div><b>Relatório do mês em PDF</b><span>Para guardar ou mandar para o contador.</span></div>
+        <div><b>Pix como sócio</b><span>Informe o imposto que a empresa já pagou e veja bruto e líquido.</span></div>
+        <div><b>Celular e computador</b><span>Com a nuvem ligada, os dados aparecem nos dois.</span></div>
+        <div><b>Trava com senha</b><span>Senha ou digital para abrir o app no celular.</span></div>
+        <div><b>Modo escuro</b><span>Claro, escuro ou igual ao celular.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="video" id="video">
+    <div class="wrap">
+      <div class="titulo aparece">
+        <h2>Veja o Sallos funcionando</h2>
+        <p>Três minutos mostrando o dia a dia: lançar plantão, conferir o mês, receber, pagar e investir.</p>
+      </div>
+      <video class="aparece" controls preload="none" playsinline poster="img/video-capa.jpg">
+        <source src="sallos-demonstracao.mp4" type="video/mp4" />
+      </video>
+    </div>
+  </section>
+
+  <section id="comecar">
+    <div class="wrap">
+      <div class="titulo aparece">
+        <h2>Comece em dois minutos</h2>
+        <p>Não tem loja de aplicativo nem cadastro longo.</p>
+      </div>
+      <div class="passos">
+        <div class="passo aparece">
+          <h3>Abra no celular</h3>
+          <p>Entre em <b>sallos.com.br</b> pelo navegador do celular.</p>
+        </div>
+        <div class="passo aparece">
+          <h3>Coloque na tela inicial</h3>
+          <p>Assim ele abre como um app, em tela cheia.</p>
+          <small><b>iPhone:</b> no Safari, toque em Compartilhar e depois em "Adicionar à Tela de Início".</small>
+          <small><b>Android:</b> no Chrome, toque nos três pontinhos e depois em "Instalar app".</small>
+        </div>
+        <div class="passo aparece">
+          <h3>Lance o seu mês</h3>
+          <p>Cadastre os hospitais, os plantões e as contas fixas. Em poucos minutos o mês aparece organizado.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="priv aparece">
+        <div>
+          <h2>Seus dados são seus</h2>
+          <p>O Sallos foi pensado para quem não quer expor a vida financeira.</p>
+        </div>
+        <ul>
+          <li><b>Ficam no seu aparelho</b><span>Tudo é salvo no celular ou no computador que você usa.</span></li>
+          <li><b>Nuvem só se você quiser</b><span>Ligando a nuvem, os dados ficam numa conta só sua, para usar em mais de um aparelho.</span></li>
+          <li><b>Trava e cópia de segurança</b><span>Senha para abrir o app e um arquivo de cópia para guardar onde quiser.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="perguntas">
+    <div class="wrap">
+      <div class="titulo aparece"><h2>Perguntas frequentes</h2></div>
+      <div class="faq aparece">
+        <details><summary>Preciso entender de contabilidade?</summary><p>Não. O app usa palavras do dia a dia: quanto entrou, quanto saiu, quanto separar para o imposto. As contas ficam por conta dele.</p></details>
+        <details><summary>Funciona no iPhone e no Android?</summary><p>Sim. Abra sallos.com.br no navegador e coloque na tela inicial. No computador, é só abrir o mesmo endereço.</p></details>
+        <details><summary>Substitui o meu contador?</summary><p>Não. O Sallos organiza seus números e estima os impostos para você não ter surpresa. Ele também gera um relatório para mandar ao contador.</p></details>
+        <details><summary>Dá para usar com vários hospitais e formas de pagamento?</summary><p>Sim. Cada hospital fica numa caixa própria, com nota pela sua empresa, Pix como sócio ou carteira assinada, cada um com a sua data de pagamento.</p></details>
+        <details><summary>Onde ficam os meus dados?</summary><p>No seu aparelho. Se você ligar a nuvem, também numa conta só sua, que só você acessa.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="fim">
+    <div class="wrap aparece">
+      <h2>Organize o seu próximo mês de plantões</h2>
+      <p>Abra o Sallos, lance seus plantões e contas e veja o mês inteiro em uma tela.</p>
+      <a class="btn btn-cheio" href="/">Começar agora</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Sallos · sallos.com.br</span>
+    <span>Feito para médicos no Brasil.</span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll(".aparece");
+    if (!("IntersectionObserver" in window)) { els.forEach(function (e) { e.classList.add("vis"); }); return; }
+    var io = new IntersectionObserver(function (ents) { ents.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add("vis"); io.unobserve(en.target); } }); }, { rootMargin: "0px 0px -8% 0px" });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+</script>
+</body>
+</html>
