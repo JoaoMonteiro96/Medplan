@@ -224,3 +224,21 @@ begin
 end $$;
 revoke all on function public.resumo_uso(int) from public;
 grant execute on function public.resumo_uso(int) to anon, authenticated;
+
+-- ============================================================
+-- Excluir minha conta (botão em Configurações → Nuvem e conta)
+-- Apaga os dados, os pedidos de cotação e o login de quem chamou.
+-- Só apaga a própria conta (usa auth.uid()). As notas fiscais o app
+-- apaga antes, pela pasta "notas".
+-- ============================================================
+create or replace function public.excluir_minha_conta()
+returns void language plpgsql security definer set search_path = public, auth as $$
+declare eu uuid := auth.uid();
+begin
+  if eu is null then raise exception 'sem login'; end if;
+  delete from public.records where user_id = eu;
+  delete from public.cotacoes_pedidos where user_id = eu;
+  delete from auth.users where id = eu;
+end $$;
+revoke all on function public.excluir_minha_conta() from public, anon;
+grant execute on function public.excluir_minha_conta() to authenticated;

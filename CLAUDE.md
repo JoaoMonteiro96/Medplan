@@ -22,6 +22,7 @@ O Sallos (antigo Mediplan) é um app de finanças para médicos. Ele organiza pl
 - `conheca/`: página de apresentação (sallos.com.br/conheca), com imagens e o vídeo de demonstração.
 - `schema.sql`: tabelas, regras de acesso, pasta de notas e tarefas automáticas do Supabase.
 - `supabase/functions/cotacoes/index.ts`: cópia da função da central de cotações (a que roda está no Supabase).
+- `privacidade/` e `termos/`: Política de privacidade e Termos de uso (sallos.com.br/privacidade e /termos). São geradas por `ferramentas/paginas/gerar.py` (rode `python3 ferramentas/paginas/gerar.py .` na raiz). O e-mail de contato e o responsável entram pelas variáveis `CONTATO` e `RESP`.
 - `CNAME`: domínio sallos.com.br (GitHub Pages).
 - `ferramentas/`: montagem (`build.mjs`), testes automáticos, dados fictícios e a gravação do vídeo de demonstração. Veja `ferramentas/LEIA-ME.md`.
 
@@ -38,6 +39,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 ## Testes que sempre fazer
 
 - `node ferramentas/testes/larguras.cjs`: confere as larguras **344 px** (Galaxy Z Fold fechado), 360, 390, **412** (celular do João), 430, 600, 690 (Fold aberto) e 1440 (computador), nos temas claro e escuro, nos modos Simples e Completo e no guia de pessoa nova. Tem que terminar com "Tudo certo".
+- `node ferramentas/testes/nuvem.cjs`: testa a nuvem com um Supabase de mentira (envio, download só do que mudou, mudança sem internet, excluir conta). Rode sempre que mexer na sincronização.
 - `node ferramentas/testes/telas.cjs simples` (ou `completo`, `novo`): fotos das telas em `ferramentas/saida/` para mandar ao João. Olhe as fotos antes de mandar.
 - Nada pode sair da tela na horizontal. Números grandes não podem ficar cortados.
 - Use só os dados fictícios de `ferramentas/dados/teste.json` (Hospital Central, UPA Norte, Hospital São Lucas). Nunca dados reais do João.
@@ -53,6 +55,9 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - `contab.modoApp`: `"simples"` ou `"completo"`. Sem valor: quem já tem dados fica no Completo; quem não tem vê o guia de abertura.
 - `contab.ferias`: lista de férias salvas (`{ id, ini, fim }`, datas `AAAA-MM-DD`).
 - `mediplan-guia` (`novo`/`antigo`) e `mediplan-guia-off`: cartão "Primeiros passos", só para quem começou agora.
+- `mediplan-sync-cursor`: até quando o aparelho já baixou da nuvem (`{ u: conta, t: data }`). Com ele, o app baixa só o que mudou (`pullChanges`); sem ele, baixa tudo (`pullFromCloud`).
+- `mediplan-resumo-visto`: mês (`AAAA-MM`) cujo resumo a pessoa já fechou.
+- `cobrarWhats` dentro de cada vínculo (hospital): WhatsApp do financeiro, salvo pelo botão Cobrar.
 - `mediplan-uso-fila`, `mediplan-uso-id`, `mediplan-uso-off`: contagem anônima de uso das telas (a pessoa pode desligar em Ajustes → Privacidade).
 
 ## Como o app está organizado (novembro de 2026)
@@ -65,6 +70,9 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Modo Simples e modo Completo** (`OCULTAS_SIMPLES`, `ModoEscolha`): os dados são os mesmos; o Simples esconde investimentos, contabilidade e importar, e mostra o mês em três números (entra, sai, sobra) mais "Separe R$ X para o imposto". A troca fica só em Configurações → Modo do app.
 - **Guia de abertura** (`BoasVindas`, `BV_PASSOS`): 9 telas com todas as funções (cada uma diz em qual modo existe) e a escolha do modo no fim. Só aparece para quem não tem dados e depois que a nuvem terminou de baixar.
 - **Tela Hoje** (`HojeCard`): Trabalho, Para receber e Para pagar, com Recebi/Paguei; "O que pagar agora" (`PagarAgoraMini`).
+- **Resumo do mês que passou** (`ResumoMes`): na Hoje, do dia 1 ao 7, com entrou, contas, investiu (só no Completo), sobrou, ganho por hora e o hospital que pagou melhor. Fecha no X.
+- **Cobrar pelo WhatsApp** (`CobrarSheet`): botão nos recebimentos atrasados (Hoje e Plantões › Recebimentos). Lista o que está atrasado no hospital, guarda o WhatsApp do financeiro e abre a conversa com a mensagem pronta (`wa.me`).
+- **Excluir minha conta e meus dados** (`cloudActions.excluirConta`): em Configurações › Nuvem e conta. Apaga as notas na pasta `notas`, as linhas de `records`, chama `excluir_minha_conta()` e limpa o aparelho.
 - **Férias** (`FeriasSheet`, `resumoFerias`): botão no calendário. Mostra os plantões para passar, quanto deixa de receber e, pelo mês em que o dinheiro cairia, se as contas continuam pagas. Salva no calendário (dias em azul) e pode tirar os plantões da agenda (com Desfazer).
 - **Vale a pena esse plantão?** (`ValePlantao`): no menu Mais (no Simples, na tela de Metas) e na barra lateral do computador.
 - **Metas em plantões** (`MetaEmPlantoes`): quantos plantões em cada hospital pagam a meta.
@@ -85,7 +93,13 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - Tarefas automáticas (pg_cron): `sallos-cotacoes` (11h, 13h e 15h de Brasília, dias úteis) e `sallos-cotacoes-fechamento` (18h30).
 - Pasta privada `notas`: cada pessoa só vê os próprios arquivos (a regra usa a pasta com o id do usuário). O SQL está no `schema.sql`. Confira se foi rodado no projeto.
 - Contagem de uso: tabela `uso_telas` e função `registrar_uso` (só grava, ninguém de fora lê). O João consulta o resumo pelo painel do Supabase (SQL salvo "resumo de uso").
+- Função `excluir_minha_conta()` (fim do `schema.sql`): apaga os dados e o login de quem chamou. **Pendente:** o João rodar no SQL Editor. Até lá, o botão apaga os dados, mas o login (e-mail) continua existindo.
 - Relatório de uso em PDF (`ferramentas/relatorio/relatorio.py`): usa a função `resumo_uso(dias)` (só totais, no fim do `schema.sql`). Uma tarefa agendada do Claude ("Relatório de uso do Sallos", ambiente "medplan") gera e manda para o João a cada 3 dias, às 7h45. **Pendente:** confirmar que o João rodou o bloco `resumo_uso` no SQL Editor.
+
+## Pendências do João
+
+- Rodar no SQL Editor os blocos `resumo_uso` e `excluir_minha_conta` do `schema.sql`.
+- Mandar o e-mail de contato (sugestão: privacidade@sallos.com.br) e o responsável (nome e CPF ou empresa e CNPJ) para completar a Política de privacidade e os Termos.
 
 ## Visual (padrão atual)
 

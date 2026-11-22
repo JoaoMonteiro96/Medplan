@@ -1735,6 +1735,57 @@ function FeriasSheet({ lista = [], calcular, onSalvar, onApagar, onTirar, onClos
   );
 }
 
+// ---- cobrar o hospital pelo WhatsApp: número do financeiro guardado em cada hospital e mensagem pronta ----
+const soDigitos = (t) => String(t || "").replace(/\D/g, "");
+const linkWhats = (num, texto) => { let d = soDigitos(num); if (d && d.length <= 11) d = "55" + d; return `https://wa.me/${d}?text=${encodeURIComponent(texto)}`; };
+const fmtFone = (t) => { const d = soDigitos(t).replace(/^55(?=\d{10,11}$)/, ""); if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`; if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`; return t || ""; };
+function mensagemCobranca(itens) {
+  const dm = (it) => { const m = String(it.dateLabel || "").match(/(\d{2})\/(\d{2})/); return m ? `${m[1]}/${m[2]}` : fmtDatePt(it.dateIso).slice(0, 5); };
+  const tot = itens.reduce((a, i) => a + (Number(i.gross) || Number(i.net) || 0), 0);
+  const pl = itens.filter((i) => i.tipo === "plantao"), outros = itens.filter((i) => i.tipo !== "plantao");
+  const partes = [];
+  if (pl.length === 1) partes.push(`do plantão de ${dm(pl[0])}`);
+  else if (pl.length > 1) { const ds = pl.map(dm); partes.push(`dos plantões de ${ds.slice(0, -1).join(", ")} e ${ds[ds.length - 1]}`); }
+  if (outros.length) partes.push(outros.length === 1 ? `de ${String(outros[0].dateLabel || "").replace(/^dia \d+ · /, "")}` : `de ${outros.length} pagamentos do mês`);
+  const um = itens.length === 1;
+  return `Olá, tudo bem? ${um ? "O pagamento" : "Os pagamentos"} ${partes.join(" e ")} (${um ? "" : "total de "}${fmtBRL(tot)}) ainda não ${um ? "caiu" : "caíram"} na minha conta. Consegue verificar, por favor? Obrigado!`;
+}
+function CobrarSheet({ vinculo, itens = [], onSalvarNumero, onClose }) {
+  const [num, setNum] = useState(fmtFone(vinculo.cobrarWhats || ""));
+  const [texto, setTexto] = useState(() => mensagemCobranca(itens));
+  useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
+  const enviar = () => { const d = soDigitos(num); if (d !== soDigitos(vinculo.cobrarWhats)) onSalvarNumero(vinculo.id, d); window.open(linkWhats(d, texto), "_blank", "noopener"); onClose(); };
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet cob" role="dialog" aria-label={"Cobrar " + vinculo.nome} id="cobrar-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="cob-h"><span className="legend-dot" style={{ background: vinculo.cor }} /><div className="sheet-title" style={{ margin: 0 }}>Cobrar {vinculo.nome}</div></div>
+        <div className="cob-lista">{itens.map((it) => <div key={it.key}><span>{it.tipo === "plantao" ? "Plantão " + (String(it.dateLabel || "").match(/\d{2}\/\d{2}/) || [""])[0] : it.dateLabel}<small>devia ter caído em {fmtDatePt(it.dateIso).slice(0, 5)}</small></span><b className="mono">{fmtBRL(Number(it.gross) || Number(it.net) || 0)}</b></div>)}</div>
+        <div className="field"><label htmlFor="cob-num">WhatsApp do financeiro</label><input id="cob-num" type="tel" inputMode="tel" placeholder="(71) 99999-9999" value={num} onChange={(e) => setNum(e.target.value)} onBlur={() => setNum(fmtFone(num))} />
+          <div className="field-hint">{vinculo.cobrarWhats ? "Fica guardado para as próximas cobranças." : "Guardamos o número para a próxima vez. Sem número, você escolhe o contato no WhatsApp."}</div></div>
+        <div className="field"><label htmlFor="cob-txt">Mensagem</label><textarea id="cob-txt" rows={5} value={texto} onChange={(e) => setTexto(e.target.value)} /></div>
+        <button type="button" className="btn btn-primary cob-env" id="cob-enviar" onClick={enviar}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20l1.3-5.1A8.4 8.4 0 1 1 21 11.5Z" /></svg>Enviar pelo WhatsApp</button>
+      </div>
+    </div>
+  );
+}
+
+function ResumoMes({ r, simples, onFechar }) {
+  if (!r) return null;
+  return (
+    <div className="card rm" id="resumo-mes">
+      <div className="rm-h"><div><span>Como foi</span><h3>{r.nome}</h3></div><button type="button" className="rm-x" aria-label="Fechar o resumo" onClick={() => onFechar(r.k)}><IconX size={16} /></button></div>
+      <div className={`rm-grid ${simples ? "tres" : ""}`}>
+        <div><small>Entrou</small><b className="mono in">{fmtBRL(r.entrou)}</b></div>
+        <div><small>Contas</small><b className="mono">{fmtBRL(r.saiu)}</b></div>
+        {!simples && <div><small>Investiu</small><b className="mono">{fmtBRL(r.investido)}</b></div>}
+        <div><small>Sobrou</small><b className={`mono ${r.sobra < 0 ? "neg" : "in"}`}>{fmtBRL(r.sobra)}</b></div>
+      </div>
+      {r.porHora > 0 && <div className="rm-l">Ganho por hora: <b className="mono">{fmtBRL(r.porHora)}</b>{r.melhor && <> · quem pagou melhor: <b>{r.melhor.nome}</b> (<span className="mono">{fmtBRL(r.melhor.hourly)}</span>/h)</>}</div>}
+    </div>
+  );
+}
+
 function Kpi({ label, value, sub, tone, num, fmt }) {
   return (
     <div className="kpi-box">
@@ -1904,6 +1955,7 @@ const CLOUD_CFG_KEY = "mediplan-cloud-config";
 const CLOUD_SKIP_KEY = "mediplan-cloud-skip";
 const OWNER_KEY = "mediplan-owner";
 const SYNCED_KEY = "mediplan-synced";
+const CURSOR_KEY = "mediplan-sync-cursor"; // até quando já baixamos da nuvem: { u: conta, t: data da última mudança vista }
 const COLLECTIONS = ["vinculos", "shifts", "presencas", "extraRecurringIncomes", "expenses", "recurringExpenses", "investments", "goals", "oneOffIncomes"];
 // Uso anônimo: conta só quais telas são abertas, por dia, com um código aleatório do aparelho (sem nome, e-mail ou valores).
 // Vai para a tabela uso_telas do Supabase do projeto pela função registrar_uso (o app só grava; ninguém lê por ele). Dá para desligar em Ajustes > Privacidade.
@@ -1972,10 +2024,13 @@ async function getSupabase(cfg) {
   _sbKey = key;
   return _sb;
 }
-async function fetchAllRecords(sb) {
+// desde: só o que mudou depois dessa data (sincronização leve); sem ela, baixa tudo
+async function fetchAllRecords(sb, desde) {
   const all = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await sb.from("records").select("collection,id,data,deleted").order("collection").order("id").range(from, from + 999);
+    let q = sb.from("records").select("collection,id,data,deleted,updated_at");
+    if (desde) q = q.gt("updated_at", desde);
+    const { data, error } = await q.order("collection").order("id").range(from, from + 999);
     if (error) throw error;
     all.push(...(data || []));
     if (!data || data.length < 1000) break;
@@ -2011,6 +2066,7 @@ const AUTH_CSS = `
   .auth-link { background: none; border: none; color: #15803D; font-weight: 600; font-size: 13.5px; cursor: pointer; padding: 10px 0 0; font-family: inherit; }
   .auth-msg { margin-top: 14px; font-size: 13.5px; padding: 10px 12px; border-radius: 10px; background: #F0FDF4; color: #166534; }
   .auth-msg.err { background: #FEF2F2; color: #B91C1C; }
+  .auth-legal { margin-top: 12px; font-size: 12px; color: #94A3B8; line-height: 1.5; } .auth-legal a { color: #64748B; margin-right: 12px; }
   .auth-foot { margin-top: 18px; padding-top: 14px; border-top: 1px solid #E7EBF0; font-size: 12.5px; color: #94A3B8; }
 `;
 
@@ -2053,12 +2109,14 @@ function AuthScreen({ cfg, onSkip, recovery, onRecovered }) {
         {mode === "esqueci" && <button className="auth-link" onClick={() => { setMode("entrar"); setMsg(null); }}>Voltar para entrar</button>}
         {msg && <div className={`auth-msg ${msg.err ? "err" : ""}`}>{msg.text}</div>}
         {mode !== "nova" && <div className="auth-foot">Prefere não usar conta agora? <button className="auth-link" style={{ padding: 0 }} onClick={onSkip}>Usar só neste aparelho</button></div>}
+        {mode === "criar" && <div className="auth-legal">Ao criar a conta, você concorda com os <a href="/termos/" target="_blank" rel="noopener">Termos de uso</a> e a <a href="/privacidade/" target="_blank" rel="noopener">Política de privacidade</a>.</div>}
+        {mode === "entrar" && <div className="auth-legal"><a href="/privacidade/" target="_blank" rel="noopener">Privacidade</a> <a href="/termos/" target="_blank" rel="noopener">Termos de uso</a></div>}
       </div>
     </div>
   );
 }
 
-function CloudCard({ cfg, session, cloud, onConnect, onDisconnect, onSyncNow, onLogout, onLogin }) {
+function CloudCard({ cfg, session, cloud, onConnect, onDisconnect, onSyncNow, onLogout, onLogin, onExcluir }) {
   const [url, setUrl] = useState("");
   const [key, setKey] = useState("");
   const [err, setErr] = useState("");
@@ -2093,6 +2151,7 @@ function CloudCard({ cfg, session, cloud, onConnect, onDisconnect, onSyncNow, on
             <button className="btn btn-primary" onClick={onSyncNow}>Sincronizar agora</button>
             <button className="btn btn-ghost" onClick={onLogout}>Sair da conta</button>
           </div>
+          {onExcluir && <button type="button" className="cc-excluir" id="cc-excluir" onClick={onExcluir}>Excluir minha conta e meus dados</button>}
         </>
       )}
       {cfg && !session && (
@@ -2173,6 +2232,7 @@ function App() {
   const [chartMonths, setChartMonths] = useState(12);
   const [quickOpen, setQuickOpen] = useState(false);
   const [valeAberto, setValeAberto] = useState(false);
+  const [cobrarId, setCobrarId] = useState(null);
   const [feriasAberto, setFeriasAberto] = useState(false);
   const [pickerYear, setPickerYear] = useState(null);
   const [signals, setSignals] = useState({ despesas: 0, investimentos: 0, dedutivel: 0 });
@@ -2357,7 +2417,57 @@ function App() {
     pulledRef.current = true;
     lsSet(OWNER_KEY, sessionRef.current.user.id);
     lsSet(SYNCED_KEY, JSON.stringify(syncedRef.current));
+    salvarCursor(rows, null);
     setCloud({ status: "synced", msg: "", at: Date.now() });
+  };
+  const lerCursor = () => { try { return JSON.parse(lsGet(CURSOR_KEY) || "null"); } catch (e) { return null; } };
+  const salvarCursor = (rows, antes) => {
+    let t = antes ? Date.parse(antes) : 0;
+    rows.forEach((r) => { const x = Date.parse(r.updated_at || ""); if (x > t) t = x; });
+    if (!(t > 0) && !antes) t = 1000; // nuvem vazia: na próxima vez, pede tudo o que chegou depois disso
+    if (t > 0 && sessionRef.current) lsSet(CURSOR_KEY, JSON.stringify({ u: sessionRef.current.user.id, t: new Date(t).toISOString() }));
+  };
+  // sincronização leve: baixa só o que mudou na nuvem desde a última vez e junta com o que mudou neste aparelho
+  // (mesma regra do download completo: o que foi editado ou apagado aqui sem internet vale e depois é enviado)
+  const pullChanges = async () => {
+    const ses = sessionRef.current, cur = lerCursor();
+    let snap = syncedRef.current;
+    if (!snap) { try { snap = JSON.parse(lsGet(SYNCED_KEY) || "null"); } catch (e) { snap = null; } }
+    const velho = cur && cur.t ? Date.parse(cur.t) > 1000 && Date.now() - Date.parse(cur.t) > 30 * 864e5 : true;
+    if (!ses || !cur || cur.u !== ses.user.id || velho || !snap || lsGet(OWNER_KEY) !== ses.user.id) return pullFromCloud(lsGet(OWNER_KEY) === (ses && ses.user.id) || !lsGet(OWNER_KEY));
+    const sb = await getSupabase(cloudCfg);
+    if (!pulledRef.current) setCloud((cs) => ({ ...cs, status: "loading", msg: "" }));
+    const rows = await fetchAllRecords(sb, new Date(Date.parse(cur.t) - 60000).toISOString());
+    const local = latestRef.current;
+    snap = JSON.parse(JSON.stringify(snap));
+    COLLECTIONS.forEach((c) => { if (!snap[c]) snap[c] = {}; });
+    const muda = {}; let novasConfig = null;
+    rows.forEach((r) => {
+      if (r.collection === "settings") {
+        if (r.deleted || !r.data) return;
+        const j = stableStr(r.data), editadoAqui = snap.__settings && stableStr(local.settings) !== snap.__settings;
+        if (!editadoAqui && stableStr(local.settings) !== j) novasConfig = r.data;
+        snap.__settings = j; return;
+      }
+      const c = r.collection; if (!snap[c]) return;
+      const id = String(r.id), antes = snap[c][id];
+      const it = (local[c] || []).find((x) => x && String(x.id) === id), j = it ? stableStr(it) : undefined;
+      const editadoAqui = antes !== undefined ? j !== antes : j !== undefined;
+      if (r.deleted) { delete snap[c][id]; if (!editadoAqui && it) (muda[c] = muda[c] || []).push([id, null]); return; }
+      const sj = stableStr(r.data); snap[c][id] = sj;
+      if (!editadoAqui && j !== sj) (muda[c] = muda[c] || []).push([id, r.data]);
+    });
+    COLLECTIONS.forEach((c) => {
+      const l = muda[c]; if (!l) return;
+      settersRef.current[c]((prev) => { const m = new Map((prev || []).map((x) => [String(x.id), x])); l.forEach(([id, d]) => { if (d === null) m.delete(id); else m.set(id, d); }); return [...m.values()]; });
+    });
+    if (novasConfig) settersRef.current.settings(novasConfig);
+    syncedRef.current = snap;
+    pulledRef.current = true;
+    lsSet(SYNCED_KEY, JSON.stringify(snap));
+    salvarCursor(rows, cur.t);
+    setCloud({ status: "synced", msg: "", at: Date.now() });
+    setTimeout(() => pushToCloud(), 400); // envia o que mudou neste aparelho sem internet
   };
 
   // conecta e acompanha o login
@@ -2391,8 +2501,7 @@ function App() {
     if (!session || !cloudCfg) return;
     if (!recovery) setAuthNeeded(false);
     if (pulledRef.current) return;
-    const owner = lsGet(OWNER_KEY);
-    pullFromCloud(!owner || owner === session.user.id).catch((e) => setCloud({ status: "offline", msg: authMsg(e) }));
+    pullChanges().catch((e) => setCloud({ status: "offline", msg: authMsg(e) }));
   }, [session]);
 
   // envia as mudanças (com pequeno atraso para juntar edições)
@@ -2409,7 +2518,7 @@ function App() {
     const onVis = () => {
       if (document.visibilityState !== "visible" || !pulledRef.current) return;
       if (computeDiff().rows.length) pushToCloud();
-      else pullFromCloud(false).catch(() => {});
+      else pullChanges().catch(() => {});
     };
     const iv = setInterval(() => { if (computeDiff().rows.length) pushToCloud(); }, 30000);
     window.addEventListener("online", onOnline);
@@ -2420,7 +2529,7 @@ function App() {
   const cloudActions = {
     connect: (cfg) => { lsSet(CLOUD_CFG_KEY, JSON.stringify(cfg)); lsSet(CLOUD_SKIP_KEY, null); pulledRef.current = false; syncedRef.current = null; setCloudSkip(false); setCloudCfg(cfg); },
     disconnect: () => { if (!window.confirm("Desconectar este banco? Os dados continuam salvos lá e neste aparelho.")) return; lsSet(CLOUD_CFG_KEY, null); _sb = null; pulledRef.current = false; syncedRef.current = null; setSession(null); setCloudCfg(CLOUD_DEFAULT.url ? CLOUD_DEFAULT : null); },
-    syncNow: async () => { try { if (computeDiff().rows.length) await pushToCloud(); await pullFromCloud(false); } catch (e) { setCloud({ status: "offline", msg: authMsg(e) }); } },
+    syncNow: async () => { try { if (computeDiff().rows.length) await pushToCloud(); await pullChanges(); } catch (e) { setCloud({ status: "offline", msg: authMsg(e) }); } },
     login: () => { lsSet(CLOUD_SKIP_KEY, null); setCloudSkip(false); setAuthNeeded(true); },
     skip: () => { lsSet(CLOUD_SKIP_KEY, "1"); setCloudSkip(true); setAuthNeeded(false); },
     logout: async () => {
@@ -2430,8 +2539,32 @@ function App() {
       pulledRef.current = false; syncedRef.current = null;
       COLLECTIONS.forEach((c) => settersRef.current[c]([]));
       settersRef.current.settings({});
-      lsSet(STORAGE_KEY, null); lsSet(OWNER_KEY, null); lsSet(SYNCED_KEY, null);
+      lsSet(STORAGE_KEY, null); lsSet(OWNER_KEY, null); lsSet(SYNCED_KEY, null); lsSet(CURSOR_KEY, null);
       setSession(null); setAuthNeeded(true);
+    },
+    // apaga a conta e tudo dela: na nuvem (dados, notas fiscais, login) e neste aparelho
+    excluirConta: async () => {
+      if (!window.confirm("Excluir sua conta? Isso apaga para sempre todos os seus dados: plantões, contas, investimentos, notas fiscais e o seu login. Não dá para desfazer.")) return;
+      const resp = window.prompt("Para confirmar, escreva EXCLUIR");
+      if ((resp || "").trim().toUpperCase() !== "EXCLUIR") return;
+      setCloud({ status: "saving" });
+      try {
+        const sb = await getSupabase(cloudCfg);
+        const uid = sessionRef.current && sessionRef.current.user.id;
+        if (!uid) throw new Error("sem sessão");
+        try { const { data } = await sb.storage.from(ANEXO_BUCKET).list(uid, { limit: 1000 }); const arqs = (data || []).map((f) => `${uid}/${f.name}`); if (arqs.length) await sb.storage.from(ANEXO_BUCKET).remove(arqs); } catch (e) {}
+        const { error } = await sb.from("records").delete().eq("user_id", uid);
+        if (error) throw error;
+        try { await sb.rpc("excluir_minha_conta"); } catch (e) {}
+        try { await sb.auth.signOut(); } catch (e) {}
+      } catch (e) { setCloud({ status: "offline", msg: "Não deu para excluir agora. Confira a internet e tente de novo." }); return; }
+      pulledRef.current = false; syncedRef.current = null;
+      COLLECTIONS.forEach((c) => settersRef.current[c]([]));
+      settersRef.current.settings({});
+      [STORAGE_KEY, OWNER_KEY, SYNCED_KEY, CURSOR_KEY, "mediplan-resumo-visto", "mediplan-guia", "mediplan-guia-off"].forEach((k) => lsSet(k, null));
+      try { indexedDB.deleteDatabase("mediplan-anexos"); } catch (e) {}
+      setSession(null); setAuthNeeded(true);
+      avisar("Conta e dados excluídos");
     },
   };
   const cloudLabel = { synced: "Salvo na nuvem", saving: "Salvando…", loading: "Carregando…", offline: "Sem conexão: salvo no aparelho", auth: "Entre na sua conta", off: "Salvo só neste aparelho" }[cloud.status] || "";
@@ -2681,6 +2814,15 @@ function App() {
   });
   const updateExtraPrazo = (id, val) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, prazoMeses: Number(val) || 0 } : e));
   const updateShiftPrazo = (id, val) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, prazoDias: Number(val) || 0, payDate: addDaysIso(s.date, Number(val) || 0) } : s));
+  const salvarNumeroCobranca = (id, num) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, cobrarWhats: num } : v));
+  // tudo que esse hospital ainda deve (este mês e o anterior), para a mensagem de cobrança
+  const atrasadosDe = (vid) => {
+    const h = new Date(), hoje = todayStr();
+    const ant = new Date(h.getFullYear(), h.getMonth() - 1, 1);
+    return [...buildIncomeItems(ant.getFullYear(), ant.getMonth()), ...buildIncomeItems(h.getFullYear(), h.getMonth())]
+      .filter((i) => i.vinculoId === vid && !i.recebido && String(i.dateIso || "") < hoje)
+      .sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso)));
+  };
   const updateVinculoEscala = (id, escala) => setVinculos((prev) => prev.map((v) => v.id === id ? { ...v, escala } : v));
   const toggleEscalaOff = (id, date) => setVinculos((prev) => prev.map((v) => {
     if (v.id !== id) return v;
@@ -2964,6 +3106,8 @@ function App() {
       vinculos.reduce((a, v) => a + (v.tipo === "mensal" && v.startMonth <= mk ? Number(v.valorMensal || 0) : 0), 0);
   };
 
+  // resumo do mês que passou: aparece na Hoje nos primeiros 7 dias do mês, até a pessoa fechar
+  const [resumoVisto, setResumoVisto] = useState(() => lsGet("mediplan-resumo-visto"));
   // férias: o que muda no período escolhido
   const feriasLista = contab.ferias || [];
   const resumoFerias = (ini, fim) => {
@@ -3014,6 +3158,15 @@ function App() {
 
   const curStats = monthStats(viewYear, viewMonth);
   // ---- tela Hoje: o que pede ação hoje (plantão de hoje e amanhã, o que cai e o que vence) ----
+  const resumoMes = (() => {
+    const h = new Date(); if (h.getDate() > 7) return null;
+    const a = new Date(h.getFullYear(), h.getMonth() - 1, 1), y = a.getFullYear(), m = a.getMonth(), k = monthKeyOf(y, m);
+    if (resumoVisto === k) return null;
+    const st = monthStats(y, m); if (!(st.net > 0 || st.expTotal > 0)) return null;
+    const w = workStats(y, m);
+    return { k, nome: MONTHS_PT[m], entrou: st.net, saiu: st.expTotal, investido: st.invested, sobra: st.leftover, porHora: w.hourly, melhor: (w.byVinculo || [])[0] || null };
+  })();
+  const fecharResumo = (k) => { lsSet("mediplan-resumo-visto", k); setResumoVisto(k); };
   const hojeInfo = (() => {
     const t = new Date(), ty = t.getFullYear(), tm = t.getMonth(), hoje = todayStr(), amanha = addDaysIso(hoje, 1);
     const ehMesAtual = ty === viewYear && tm === viewMonth;
@@ -3035,7 +3188,7 @@ function App() {
     }));
     inc.filter((i) => !i.recebido && i.dateIso && i.dateIso <= hoje && i.net > 0).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso))).forEach((i) => {
       const d = dias(i.dateIso);
-      itens.push({ key: "rec-" + i.key, tipo: "receber", ordem: 2, titulo: i.nome, sub: d === 0 ? "cai hoje" : `devia ter caído em ${dm(i.dateIso)}`, late: d > 0, valor: i.net, acao: typeof i.toggle === "function" ? "Recebi" : null, fazer: i.toggle });
+      itens.push({ key: "rec-" + i.key, tipo: "receber", ordem: 2, titulo: i.nome, sub: d === 0 ? "cai hoje" : `devia ter caído em ${dm(i.dateIso)}`, late: d > 0, valor: i.net, acao: typeof i.toggle === "function" ? "Recebi" : null, fazer: i.toggle, vinculoId: i.vinculoId });
     });
     exp.filter((e) => !e.paid && e.amount > 0 && e.dateIso <= amanha).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso))).forEach((e) => {
       const d = dias(e.dateIso);
@@ -4720,7 +4873,7 @@ function App() {
         .conf-ok { display: inline-flex; align-items: center; gap: 5px; border: none; border-radius: 999px; background: var(--teal); color: #fff; font: inherit; font-size: 13px; font-weight: 600; padding: 8px 13px; cursor: pointer; white-space: nowrap; }
         .conf-ok:hover { filter: brightness(1.06); } .conf-ok:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
         .conf-mais { margin-top: 6px; font-size: 13px; } .conf-atr { font-style: normal; color: #B45309; font-weight: 600; } .conf-todos { white-space: nowrap; }
-        @media (max-width: 380px) { .conf-it { grid-template-columns: auto minmax(0, 1fr) auto; } .conf-v { grid-column: 2; grid-row: 2; font-size: 13px; } .conf-ok { grid-column: 3; grid-row: 1 / span 2; } }
+        @media (max-width: 380px) { .conf-it { grid-template-columns: auto minmax(0, 1fr) auto; } .conf-v { grid-column: 2; grid-row: 2; font-size: 13px; } .conf-bts { grid-column: 3; grid-row: 1 / span 2; flex-direction: column; align-items: stretch; } }
         .fg-todos { margin: 10px 18px 2px; font-size: 13px; } .tbl .fz-ed, .tbl .fz-ed * { white-space: normal; } .tbl .fz-ed .fm-op b, .tbl .fz-ed .fm-op small { overflow-wrap: anywhere; } .tbl .fz-ed label { overflow-wrap: break-word; }
         .fat-bruto { font-size: 11.5px; color: var(--text-dim); font-weight: 400; font-family: inherit; }
         .fg-body .tbl thead th:nth-child(2), .fg-body .tbl tbody tr:not(.fz-row) > td:nth-child(2) { display: none; }
@@ -5172,6 +5325,34 @@ function App() {
         .oa-res .oa-res-lb { display: flex; align-items: center; }
         .oa-inv { margin-top: 10px; padding-top: 10px; border-top: 1px dashed currentColor; opacity: .9; font-size: 13px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
         @media (min-width: 1100px) { .oa-topo { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; align-items: start; } .oa-topo > * { margin-top: 0 !important; } }
+        .cfg-legal { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; } .cfg-legal a { font-size: 13.5px; font-weight: 600; color: var(--accent, #15803D); }
+        .cc-excluir { display: block; margin-top: 14px; padding: 6px 0; border: none; background: none; color: #B91C1C; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+        :root[data-theme="dark"] .cc-excluir { color: #FCA5A5; }
+        /* resumo do mês que passou */
+        .desk .rm { margin-bottom: 18px; }
+        .rm { border: 1.5px solid color-mix(in srgb, #16A34A 26%, var(--border)); }
+        .rm-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+        .rm-h span { font-size: 13px; color: var(--text-dim); font-weight: 600; } .rm-h h3 { margin: 0; font-family: "Manrope", "Inter", sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+        .rm-x { border: none; background: var(--surface-3); color: var(--text-dim); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+        .rm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        @media (min-width: 560px) { .rm-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .rm-grid.tres { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        .rm-grid > div { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; min-width: 0; } .rm-grid small { display: block; font-size: 12px; color: var(--text-dim); } .rm-grid b { font-size: 15.5px; font-weight: 800; white-space: nowrap; }
+        .rm-grid b.in { color: #15803D; } .rm-grid b.neg { color: #B91C1C; } :root[data-theme="dark"] .rm-grid b.in { color: #6EE7B7; }
+        .rm-l { margin-top: 10px; font-size: 13.5px; color: var(--text-dim); } .rm-l b { color: var(--text); }
+        /* cobrar pelo WhatsApp */
+        .conf-bts { display: flex; gap: 6px; align-items: center; }
+        @media (max-width: 520px) { .conf-it.tem-cob { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 8px; } .conf-it.tem-cob .conf-v { grid-column: 3; grid-row: 1; font-size: 14px; } .conf-it.tem-cob .conf-bts { grid-column: 2 / -1; grid-row: 2; flex-direction: row; justify-content: flex-end; } }
+        .cob .field-hint { margin-bottom: 14px; }
+        .conf-cob, .hoje-cob { border: 1.5px solid #FCD34D; background: #FFFBEB; color: #92400E; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .conf-cob { font-size: 13px; padding: 7px 12px; } .hoje-cob { font-size: 12.5px; padding: 4px 10px; }
+        :root[data-theme="dark"] .conf-cob, :root[data-theme="dark"] .hoje-cob { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.4); color: #FCD34D; }
+        .hoje-bts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+        .cob-h { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .cob-lista { border: 1px solid var(--border); border-radius: 14px; margin-bottom: 14px; }
+        .cob-lista > div { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); font-size: 14px; } .cob-lista > div:first-child { border-top: none; }
+        .cob-lista small { display: block; font-size: 12px; color: var(--text-dim); } .cob-lista b { white-space: nowrap; }
+        .cob textarea { width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14.5px; line-height: 1.45; background: var(--surface); color: var(--text); resize: vertical; }
+        .cob-env { width: 100%; height: 48px; justify-content: center; gap: 8px; margin-top: 4px; }
         /* modo Simples x Completo */
         .modo-esc { display: grid; gap: 10px; }
         @media (min-width: 560px) { .modo-esc { grid-template-columns: 1fr 1fr; } }
@@ -5772,12 +5953,12 @@ function App() {
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} quickGo={quickGo}
             setup={{ vinculos: vinculos.length, shifts: shifts.length, expenses: expenses.length + recurringExpenses.length, investments: investments.length }}
             monthExpenseItems={monthExpenseItems} limits={limits} monthShiftsCount={monthShifts.length} insights={insights}
-            desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12} hojeInfo={hojeInfo} simples={simples}
+            desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12} hojeInfo={hojeInfo} simples={simples} onCobrar={setCobrarId} resumoMes={resumoMes} fecharResumo={fecharResumo}
             workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
         {activeTab === "faturamento" && (
-          <FaturamentoTab onAdd={() => setQuickOpen(true)} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0}
+          <FaturamentoTab onCobrar={setCobrarId} onAdd={() => setQuickOpen(true)} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0}
             expanded={expanded} toggleSection={toggleSection} viewMonth={viewMonth} monthKey={monthKey}
             monthIncomeItems={monthIncomeItems}
             totalGross={totalGross} totalNet={totalNet}
@@ -5843,7 +6024,7 @@ function App() {
             privacyCard={<PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} />}
             posicaoCard={<PosicaoInicialCard investments={investments} onToggle={setPosicaoInicial} />}
             wipeCard={<WipeDataCard data={latestRef.current} onWipe={wipeData} undo={wipeUndo} onUndo={undoWipe} onDismissUndo={() => setWipeUndo(null)} downloadBackup={downloadBackup} />}
-            cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} />} />
+            cloudCard={<CloudCard cfg={cloudCfg} session={session} cloud={cloud} onConnect={cloudActions.connect} onDisconnect={cloudActions.disconnect} onSyncNow={cloudActions.syncNow} onLogout={cloudActions.logout} onLogin={cloudActions.login} onExcluir={cloudActions.excluirConta} />} />
         )}
       </div>
       </div>
@@ -5853,6 +6034,7 @@ function App() {
           onPick={(y, m) => { setPickerYear(null); goMonth(y, m); }} onClose={() => setPickerYear(null)} />
       )}
       {feriasAberto && <FeriasSheet lista={contab.ferias || []} calcular={resumoFerias} onSalvar={salvarFerias} onApagar={apagarFerias} onTirar={tirarPlantoes} onClose={() => setFeriasAberto(false)} />}
+      {cobrarId && (() => { const v = vinculos.find((x) => x.id === cobrarId); const l = v ? atrasadosDe(v.id) : []; return v ? <CobrarSheet vinculo={v} itens={l} onSalvarNumero={salvarNumeroCobranca} onClose={() => setCobrarId(null)} /> : null; })()}
       {valeAberto && <ValePlantao vinculos={vinculos} netOf={netOf} info={valeInfo} onClose={() => setValeAberto(false)} />}
       {quickOpen && (
         <AddSheet inicial={typeof quickOpen === "string" ? quickOpen : null} onClose={() => setQuickOpen(false)} onDespesa={() => quickGo("despesa")} onOutro={(k) => quickGo(k)}
@@ -6420,7 +6602,7 @@ function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
   shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff, addOneOff, onAdd, taxaPadrao,
-  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk, simples = false
+  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk, simples = false, onCobrar
 }) {
   const gv = useGv();
   const [editKey, setEditKey] = useState(null);
@@ -6477,11 +6659,14 @@ function FaturamentoTab({
         {aConfirmar.length > 1 && <button type="button" className="btn btn-ghost btn-sm conf-todos" onClick={() => { const lista = [...aConfirmar]; lista.forEach((x) => x.toggle(true)); vibrar([8, 40, 12]); avisar(`${lista.length} recebimentos confirmados`, () => lista.forEach((x) => x.toggle(true))); }}>Recebi todos</button>}</div>
       <div className="conf-list">
         {(verTodosConf ? aConfirmar : aConfirmar.slice(0, 5)).map((it) => (
-          <div key={it.key} className="conf-it">
+          <div key={it.key} className={`conf-it ${onCobrar && it.vinculoId && String(it.dateIso || "") < hojeIso ? "tem-cob" : ""}`}>
             <span className="legend-dot" style={{ background: it.cor }} />
             <span className="conf-t"><b>{String(it.nome || "").split(" · ")[0]}</b><small>{it.tipo === "plantao" ? rotuloPlantao(it) : it.dateLabel}{String(it.dateIso || "") < hojeIso ? <em className="conf-atr"> · atrasado</em> : null}</small></span>
             <b className="mono conf-v">{fmtBRL(it.net)}</b>
-            <button type="button" className="conf-ok" onClick={it.toggle} aria-label={"Marcar " + it.nome + " como recebido"}><IconCheck size={15} color="#fff" /> Recebi</button>
+            <span className="conf-bts">
+              {onCobrar && it.vinculoId && String(it.dateIso || "") < hojeIso && <button type="button" className="conf-cob" onClick={() => onCobrar(it.vinculoId)} aria-label={"Cobrar " + it.nome}>Cobrar</button>}
+              <button type="button" className="conf-ok" onClick={it.toggle} aria-label={"Marcar " + it.nome + " como recebido"}><IconCheck size={15} color="#fff" /> Recebi</button>
+            </span>
           </div>
         ))}
       </div>
@@ -7056,6 +7241,7 @@ function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioI
       <button className="btn btn-ghost sm" onClick={() => setDiscreto(!discreto)}>{discreto ? "Desligar modo discreto" : "Ligar modo discreto"}</button>
       <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "16px 0 8px" }}>Ajudar a melhorar o app: envia, sem identificar você, só quais telas são abertas. Nenhum valor, nome ou e-mail sai do aparelho.</p>
       <button className="btn btn-ghost sm" id="cfg-uso" onClick={trocarUso}>{usoOn ? "Parar de enviar" : "Voltar a ajudar"}</button>
+      <div className="cfg-legal"><a href="/privacidade/" target="_blank" rel="noopener">Política de privacidade</a><a href="/termos/" target="_blank" rel="noopener">Termos de uso</a></div>
       <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "16px 0 8px" }}>Trava com código: pede os 4 números ao abrir o app e depois de ficar fora dele por mais de 1 minuto. É uma proteção de tela neste aparelho, não substitui o bloqueio do celular.</p>
       {pinOn ? (
         <>
@@ -8127,7 +8313,7 @@ function InsightsCaixa({ items = [] }) {
   );
 }
 // ---- tela Hoje: lista do que pede ação hoje, com um toque para resolver ----
-function HojeCard({ itens = [] }) {
+function HojeCard({ itens = [], onCobrar }) {
   const ic = (x) => x.tipo === "receber" ? <IconArrowIn size={18} /> : x.tipo === "pagar" ? <IconArrowOut size={18} /> : <ProIc n="plantao" size={18} />;
   const partes = [
     ["trabalho", "Trabalho", itens.filter((x) => x.tipo === "plantao" || x.tipo === "escala" || x.tipo === "confirmar"), false],
@@ -8147,7 +8333,10 @@ function HojeCard({ itens = [] }) {
               <span className="hoje-n"><b>{x.titulo}</b><small>{x.sub}</small></span>
               <span className="hoje-r">
                 {x.valor > 0 && <b className={`mono ${x.tipo === "receber" ? "in" : ""}`}>{fmtBRL(x.valor)}</b>}
-                {x.acao && <button type="button" className="dia-chk" onClick={x.fazer}><IconCheck size={14} />{x.acao}</button>}
+                <span className="hoje-bts">
+                  {onCobrar && x.tipo === "receber" && x.late && x.vinculoId && <button type="button" className="hoje-cob" onClick={() => onCobrar(x.vinculoId)}>Cobrar</button>}
+                  {x.acao && <button type="button" className="dia-chk" onClick={x.fazer}><IconCheck size={14} />{x.acao}</button>}
+                </span>
               </span>
             </div>
           ))}
@@ -8229,7 +8418,7 @@ function ValePlantao({ vinculos = [], netOf, info, onClose }) {
   );
 }
 
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false }) {
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false, onCobrar, resumoMes = null, fecharResumo }) {
   const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
@@ -8301,6 +8490,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           {guia}
           {alerts.length > 0 && <Avisos alerts={alerts} />}
           <InsightsCaixa items={insights} />
+          {ehMesAtual && <ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} />}
           <div className="dhero" id="mes-simples">
             <div className="dhero-s"><span>Sobra em {mesNome}</span><b className="mono" style={sobraMes < 0 ? { color: "#FCA5A5" } : null}><CountUp value={sobraMes} /></b><small>Já caiu <strong className="mono">{fmtBRL(jaCaiu)}</strong> de <strong className="mono">{fmtBRL(curStats.net)}</strong></small>{separar}</div>
             <div className="dkpis">
@@ -8311,7 +8501,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
             </div>
           </div>
           <div className="dgrid" style={{ gridTemplateColumns: hoje ? "1fr 1fr" : "1fr", alignItems: "start" }}>
-            {hoje && <div>{hoje && <HojeCard itens={hojeInfo.itens} />}<PagarAgoraMini p={hojeInfo.pagar} onVer={() => setActiveTab("organizacao")} /></div>}
+            {hoje && <div>{hoje && <HojeCard itens={hojeInfo.itens} onCobrar={onCobrar} />}<PagarAgoraMini p={hojeInfo.pagar} onVer={() => setActiveTab("organizacao")} /></div>}
             <div className="card"><div className="card-head"><h3 className="card-title">Próximos lançamentos</h3></div><DProximos incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} max={8} onVer={() => setActiveTab("despesas")} /></div>
           </div>
         </div>
@@ -8321,7 +8511,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       <div>
         <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${mesNome} de ${viewYear}.`}</p></div>
         {guia}
-        {ehMesAtual && hojeInfo && <HojeCard itens={hojeInfo.itens} />}
+        {ehMesAtual && hojeInfo && <><HojeCard itens={hojeInfo.itens} onCobrar={onCobrar} /><ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} /></>}
         {alerts.length > 0 && <Avisos alerts={alerts} />}
           <InsightsCaixa items={insights} />
         <div className="balance-card" id="mes-simples">
@@ -8350,6 +8540,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           <Avisos alerts={alerts} />
         )}
         <InsightsCaixa items={insights} />
+        {viewYear === new Date().getFullYear() && viewMonth === new Date().getMonth() && <ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} />}
         <div className="dhero">
           <div className="dhero-s"><span>Saldo em caixa</span><b className="mono"><CountUp value={saldoRealizado} /></b><small>Patrimônio total <strong className="mono">{fmtBRL(patrimonioTotal)}</strong></small><small>Investido <strong className="mono">{fmtBRL(portfolio.totalValue || totalInvestedAllTime)}</strong></small></div>
           <div className="dkpis">
@@ -8398,7 +8589,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${MONTHS_PT[viewMonth].toLowerCase()} de ${viewYear}.`}</p></div>
       {guia}
 
-      {ehMesAtual && hojeInfo && <HojeCard itens={hojeInfo.itens} />}
+      {ehMesAtual && hojeInfo && <><HojeCard itens={hojeInfo.itens} onCobrar={onCobrar} /><ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} /></>}
 
       {alerts.length > 0 && (
         <Avisos alerts={alerts} />

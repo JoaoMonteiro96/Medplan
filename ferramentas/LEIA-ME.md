@@ -13,6 +13,8 @@ Antes de usar: `npm install` (uma vez). Os testes precisam do Playwright com o C
 | Comando | O que faz |
 |---|---|
 | `node ferramentas/testes/larguras.cjs` | Abre o app em 344, 360, 390, 412, 430, 600, 690 e 1440 px, nos temas claro e escuro, como pessoa nova (guia), modo Simples e modo Completo. Confere se algo sai da tela e se dá erro. Tem que terminar com "Tudo certo". |
+| `node ferramentas/testes/nuvem.cjs` | Testa a nuvem com um Supabase de mentira: envio, download só do que mudou, mudança feita sem internet e excluir conta. Tem que terminar com "Tudo certo". |
+| `python3 ferramentas/paginas/gerar.py .` | Gera de novo as páginas de Privacidade e Termos. Para pôr o contato: `CONTATO="..." RESP="..." python3 ferramentas/paginas/gerar.py .` |
 | `node ferramentas/testes/telas.cjs simples` | Tira as fotos das telas principais (Hoje, calendário, recebimentos, contas, férias, menu Mais) em `ferramentas/saida/`. Troque `simples` por `completo` ou `novo` (guia de abertura). |
 
 As datas dos dados de teste andam junto com o dia de hoje (`comum.cjs`), então sempre há plantão hoje, coisa para receber e conta vencendo.
