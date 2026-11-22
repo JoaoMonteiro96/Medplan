@@ -79,6 +79,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 
 ## O que o João já recusou (não sugerir de novo)
 
+- Trocar os 4 cartões de Recebimentos (bruta, impostos, líquida, já recebido) por um cartão verde do "já recebido" com barra e o previsto embaixo (22/11/2026).
 - Mudar a estrutura do calendário e redesenhar a faixa de cima do app.
 - Lançar gastos por mensagem (conversa).
 - Notificação depois do plantão.
@@ -93,12 +94,11 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - Tarefas automáticas (pg_cron): `sallos-cotacoes` (11h, 13h e 15h de Brasília, dias úteis) e `sallos-cotacoes-fechamento` (18h30).
 - Pasta privada `notas`: cada pessoa só vê os próprios arquivos (a regra usa a pasta com o id do usuário). O SQL está no `schema.sql`. Confira se foi rodado no projeto.
 - Contagem de uso: tabela `uso_telas` e função `registrar_uso` (só grava, ninguém de fora lê). O João consulta o resumo pelo painel do Supabase (SQL salvo "resumo de uso").
-- Função `excluir_minha_conta()` (fim do `schema.sql`): apaga os dados e o login de quem chamou. **Pendente:** o João rodar no SQL Editor. Até lá, o botão apaga os dados, mas o login (e-mail) continua existindo.
-- Relatório de uso em PDF (`ferramentas/relatorio/relatorio.py`): usa a função `resumo_uso(dias)` (só totais, no fim do `schema.sql`). Uma tarefa agendada do Claude ("Relatório de uso do Sallos", ambiente "medplan") gera e manda para o João a cada 3 dias, às 7h45. **Pendente:** confirmar que o João rodou o bloco `resumo_uso` no SQL Editor.
+- Função `excluir_minha_conta()` (fim do `schema.sql`): apaga os dados e o login de quem chamou. Rodada no projeto em 22/11/2026.
+- Relatório de uso em PDF (`ferramentas/relatorio/relatorio.py`): usa a função `resumo_uso(dias)` (só totais, no fim do `schema.sql`). Uma tarefa agendada do Claude ("Relatório de uso do Sallos", ambiente "medplan") gera e manda para o João a cada 3 dias, às 7h45. A função foi rodada no projeto em 22/11/2026.
 
 ## Pendências do João
 
-- Rodar no SQL Editor os blocos `resumo_uso` e `excluir_minha_conta` do `schema.sql`.
 - Mandar o e-mail de contato (sugestão: privacidade@sallos.com.br) e o responsável (nome e CPF ou empresa e CNPJ) para completar a Política de privacidade e os Termos.
 
 ## Visual (padrão atual)
