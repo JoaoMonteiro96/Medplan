@@ -33,3 +33,9 @@ O roteiro das cenas (textos, legendas, toques) fica em `cenas.py`. Hoje são 16 
 ## Fotos da página de apresentação
 
 As fotos de celular da página (`conheca/img/cel-*.jpg`) têm 780 × 1688 (tela de 390 × 844 em dobro). Dá para tirar da pasta `video/cap/` (as `m-*.jpg`, redimensionadas) ou com o `telas.cjs` numa largura de 390.
+
+## Relatório de uso em PDF (a cada 72 horas)
+
+`python3 ferramentas/relatorio/relatorio.py` busca os totais na função `resumo_uso` do Supabase (só números somados, com a chave pública do app) e gera `ferramentas/saida/relatorio-uso-AAAA-MM-DD.pdf`. Com `--exemplo`, usa números inventados para conferir o visual. Precisa do Python com `reportlab`; as fontes ficam em `ferramentas/relatorio/fontes/`.
+
+Uma tarefa agendada do Claude roda isso a cada 3 dias, no ambiente "medplan" (o único que libera o endereço do Supabase), e manda o PDF para o João.

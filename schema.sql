@@ -189,3 +189,38 @@ grant execute on function public.registrar_uso(text, jsonb) to anon, authenticat
 -- Para ver o resumo (rode no SQL Editor do Supabase):
 -- select tela, count(distinct aparelho) as pessoas, sum(vezes) as aberturas
 -- from public.uso_telas where dia >= current_date - 30 group by tela order by pessoas desc, aberturas desc;
+
+-- ============================================================
+-- Resumo de uso (só totais): base do relatório em PDF a cada 72 horas
+-- Devolve números somados (quantos aparelhos, quantas aberturas, por dia e por tela).
+-- Não devolve o código de nenhum aparelho nem nada de pessoa nenhuma.
+-- ============================================================
+create or replace function public.resumo_uso(dias int default 3)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  n   int  := least(90, greatest(1, coalesce(dias, 3)));
+  ate date := current_date;
+  de  date := current_date - (least(90, greatest(1, coalesce(dias, 3))) - 1);
+begin
+  return jsonb_build_object(
+    'de', de, 'ate', ate, 'dias', n,
+    'aparelhos',          (select count(distinct aparelho) from uso_telas where dia between de and ate),
+    'aparelhos_antes',    (select count(distinct aparelho) from uso_telas where dia between de - n and de - 1),
+    'aberturas',          (select coalesce(sum(vezes), 0) from uso_telas where dia between de and ate),
+    'aberturas_antes',    (select coalesce(sum(vezes), 0) from uso_telas where dia between de - n and de - 1),
+    'novos',              (select count(*) from (select aparelho from uso_telas group by aparelho having min(dia) between de and ate) x),
+    'aparelhos_30',       (select count(distinct aparelho) from uso_telas where dia > ate - 30),
+    'aparelhos_total',    (select count(distinct aparelho) from uso_telas),
+    'por_dia', coalesce((select jsonb_agg(jsonb_build_object('dia', d, 'aparelhos', a, 'aberturas', v) order by d)
+                 from (select dia d, count(distinct aparelho) a, sum(vezes) v from uso_telas
+                       where dia > ate - 14 group by dia) x), '[]'::jsonb),
+    'por_tela', coalesce((select jsonb_agg(jsonb_build_object('tela', t, 'aparelhos', a, 'aberturas', v) order by a desc, v desc)
+                 from (select tela t, count(distinct aparelho) a, sum(vezes) v from uso_telas
+                       where dia between de and ate group by tela) x), '[]'::jsonb),
+    'por_tela_30', coalesce((select jsonb_agg(jsonb_build_object('tela', t, 'aparelhos', a, 'aberturas', v) order by a desc, v desc)
+                 from (select tela t, count(distinct aparelho) a, sum(vezes) v from uso_telas
+                       where dia > ate - 30 group by tela) x), '[]'::jsonb)
+  );
+end $$;
+revoke all on function public.resumo_uso(int) from public;
+grant execute on function public.resumo_uso(int) to anon, authenticated;
