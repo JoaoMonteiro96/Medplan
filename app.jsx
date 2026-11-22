@@ -4471,6 +4471,13 @@ function App() {
         .add-op b { display: block; font-size: 15px; } .add-op small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35; }
         .add-op > svg { color: var(--text-dim); }
         .add-mais { display: flex; gap: 18px; justify-content: center; margin-top: 6px; }
+        @media (max-width: 370px) { .month-pill .mp-open { min-width: 0; padding: 0 6px; font-size: 12.5px; } .month-pill button:not(.mp-open) { width: 26px; } .tb-left { gap: 8px; } }
+        .add-mini-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 2px; }
+        .add-mini { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 6px 11px; border: 1.5px solid var(--border); border-radius: 16px; background: var(--surface, #fff); font: inherit; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; transition: border-color .2s, transform .12s; }
+        .add-mini i { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-3); color: #334155; font-style: normal; }
+        .add-mini span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .add-mini:active { transform: scale(.96); } .add-mini:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        :root[data-theme="dark"] .add-mini i { color: #CBD5E1; }
         .seg2 { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface-3); border-radius: 11px; padding: 3px; }
         .seg2 button { border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-dim); padding: 9px 6px; border-radius: 9px; cursor: pointer; }
         .seg2 button.on { background: var(--surface, #fff); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
@@ -5482,10 +5489,10 @@ function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, 
                 <i style={{ background: bg }} aria-hidden="true"><ProIc n={ic} color={IC_TOM[bg]} /></i><span><b>{l}</b><small>{d}</small></span><IconChevronRight size={18} />
               </button>
             ))}
-            <div className="add-mais">
-              <button type="button" className="link-btn" onClick={() => onOutro("aporte")}>Investimento</button>
-              <button type="button" className="link-btn" onClick={() => onOutro("importar")}>Importar</button>
-              <button type="button" className="link-btn" id="add-vale" onClick={() => onOutro("vale")}>Vale a pena esse plantão?</button>
+            <div className="add-mini-row">
+              <button type="button" className="add-mini" onClick={() => onOutro("aporte")}><i aria-hidden="true"><IconTrending size={19} /></i><span>Investimento</span></button>
+              <button type="button" className="add-mini" onClick={() => onOutro("importar")}><i aria-hidden="true"><IconUpload size={19} /></i><span>Importar</span></button>
+              <button type="button" className="add-mini" id="add-vale" onClick={() => onOutro("vale")}><i aria-hidden="true"><ProIc n="calculo" size={19} /></i><span>Vale a pena?</span></button>
             </div>
           </>
         )}
