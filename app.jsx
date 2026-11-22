@@ -4829,6 +4829,10 @@ function App() {
         .hoje-vazio i { width: 24px; height: 24px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; flex: none; }
         .hoje-it { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 0; }
         .hoje-it + .hoje-it { border-top: 1px solid var(--hair, var(--border)); }
+        .hoje-sec + .hoje-sec { margin-top: 6px; }
+        .hoje-sec-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 12px 0 4px; border-bottom: 1px solid var(--hair, var(--border)); font-size: 13px; font-weight: 700; color: var(--text-dim); }
+        .hoje-sec-h b { font-size: 13px; font-weight: 700; } .hoje-sec.s-receber .hoje-sec-h b { color: #15803D; } .hoje-sec.s-pagar .hoje-sec-h b { color: var(--text); }
+        :root[data-theme="dark"] .hoje-sec.s-receber .hoje-sec-h b { color: #4ADE80; }
         .hoje-ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-3); color: var(--text-dim); }
         .hoje-it.t-receber .hoje-ic { background: #DCFCE7; color: #15803D; } .hoje-it.t-pagar .hoje-ic { background: #F1F5F9; color: #475569; } .hoje-it.t-pagar.late .hoje-ic { background: #FEE2E2; color: #B91C1C; }
         .hoje-n { min-width: 0; } .hoje-n b { display: block; font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -7669,25 +7673,32 @@ function Avisos({ alerts = [] }) {
 }
 // ---- tela Hoje: lista do que pede ação hoje, com um toque para resolver ----
 function HojeCard({ itens = [] }) {
-  const [todos, setTodos] = useState(false);
-  const vis = todos ? itens : itens.slice(0, 5);
   const ic = (x) => x.tipo === "receber" ? <IconArrowIn size={18} /> : x.tipo === "pagar" ? <IconArrowOut size={18} /> : <ProIc n="plantao" size={18} />;
+  const partes = [
+    ["trabalho", "Trabalho", itens.filter((x) => x.tipo === "plantao" || x.tipo === "escala" || x.tipo === "confirmar"), false],
+    ["receber", "Para receber", itens.filter((x) => x.tipo === "receber"), true],
+    ["pagar", "Para pagar", itens.filter((x) => x.tipo === "pagar"), true],
+  ].filter((p) => p[2].length > 0);
   return (
     <div className="card hoje" id="hoje-card">
-      <div className="hoje-h"><h3>Para hoje</h3>{itens.length > 0 && <span>{itens.length} {itens.length === 1 ? "item" : "itens"}</span>}</div>
+      <div className="hoje-h"><h3>Para hoje</h3></div>
       {itens.length === 0 && <div className="hoje-vazio"><i><IconCheck size={14} color="#fff" /></i>Tudo em dia. Nada pendente para hoje.</div>}
-      {vis.map((x) => (
-        <div key={x.key} className={`hoje-it t-${x.tipo} ${x.late ? "late" : ""}`}>
-          <span className="hoje-ic" style={x.cor ? { background: x.cor + "22", color: x.cor } : null}>{ic(x)}</span>
-          <span className="hoje-n"><b>{x.titulo}</b><small>{x.sub}</small></span>
-          <span className="hoje-r">
-            {x.valor > 0 && <b className={`mono ${x.tipo === "receber" ? "in" : ""}`}>{fmtBRL(x.valor)}</b>}
-            {x.acao && <button type="button" className="dia-chk" onClick={x.fazer}><IconCheck size={14} />{x.acao}</button>}
-            {x.ok && <span className="dia-chk on" aria-label="feito"><IconCheck size={14} />Feito</span>}
-          </span>
+      {partes.map(([id, nome, lista, soma]) => (
+        <div key={id} className={`hoje-sec s-${id}`}>
+          <div className="hoje-sec-h"><span>{nome}</span>{soma && <b className="mono">{fmtBRL(lista.reduce((a, x) => a + (Number(x.valor) || 0), 0))}</b>}</div>
+          {lista.map((x) => (
+            <div key={x.key} className={`hoje-it t-${x.tipo} ${x.late ? "late" : ""}`}>
+              <span className="hoje-ic" style={x.cor ? { background: x.cor + "22", color: x.cor } : null}>{ic(x)}</span>
+              <span className="hoje-n"><b>{x.titulo}</b><small>{x.sub}</small></span>
+              <span className="hoje-r">
+                {x.valor > 0 && <b className={`mono ${x.tipo === "receber" ? "in" : ""}`}>{fmtBRL(x.valor)}</b>}
+                {x.acao && <button type="button" className="dia-chk" onClick={x.fazer}><IconCheck size={14} />{x.acao}</button>}
+                {x.ok && <span className="dia-chk on" aria-label="feito"><IconCheck size={14} />Feito</span>}
+              </span>
+            </div>
+          ))}
         </div>
       ))}
-      {itens.length > 5 && <button type="button" className="oa-mais" onClick={() => setTodos((v) => !v)}>{todos ? "Mostrar menos" : `Mostrar mais ${itens.length - 5}`}</button>}
     </div>
   );
 }
