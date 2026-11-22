@@ -2745,7 +2745,7 @@ function App() {
       itens.push({ key: "pl-" + x.id, tipo: "plantao", ordem: 1, titulo: v ? v.nome : "Plantão", sub: `${x.date === hoje ? "Plantão hoje" : "Plantão amanhã"} · ${fmtHoras(x.hours || 0)}`, cor: v ? v.cor : GOLD, valor: liquidoVinc(v, x.gross) });
     });
     vinculos.filter((v) => v.tipo === "mensal").forEach((v) => escalaDoMes(v, ty, tm).filter((e) => e.date === hoje && !e.off).forEach((e) => {
-      itens.push({ key: "esc-" + e.id, tipo: "escala", ordem: 1, titulo: v.nome, sub: `Hoje · ${TURNOS[e.turno] || "Escala"} · ${fmtHoras(e.hours)}`, cor: v.cor, acao: e.feito ? null : "Fiz", ok: e.feito, fazer: () => toggleEscalaFeito(v.id, e.date) });
+      itens.push({ key: "esc-" + e.id, tipo: "escala", ordem: 1, titulo: v.nome, sub: `Hoje · ${TURNOS[e.turno] || "Escala"} · ${fmtHoras(e.hours)}`, cor: v.cor });
     }));
     inc.filter((i) => !i.recebido && i.dateIso && i.dateIso <= hoje && i.net > 0).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso))).forEach((i) => {
       const d = dias(i.dateIso);
@@ -7693,7 +7693,6 @@ function HojeCard({ itens = [] }) {
               <span className="hoje-r">
                 {x.valor > 0 && <b className={`mono ${x.tipo === "receber" ? "in" : ""}`}>{fmtBRL(x.valor)}</b>}
                 {x.acao && <button type="button" className="dia-chk" onClick={x.fazer}><IconCheck size={14} />{x.acao}</button>}
-                {x.ok && <span className="dia-chk on" aria-label="feito"><IconCheck size={14} />Feito</span>}
               </span>
             </div>
           ))}
@@ -8603,8 +8602,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                     <div key={e.id} className={`dia-it ${e.off ? "off" : ""}`} data-escala-dia={nome}>
                       <i className="dia-dot" style={{ background: cor }} />
                       <span className="dia-n"><b>{nome}</b><small>{(TURNOS[e.turno] || "Escala")} · {e.off ? "não trabalhado" : fmtHoras(e.previsto)}</small></span>
-                      {e.off ? <button type="button" className="dia-mini" onClick={() => toggleEscalaOff(e.vinculoId, e.date)}>Voltar a contar</button>
-                        : <button type="button" className={`dia-chk ${e.feito ? "on" : ""}`} aria-pressed={e.feito} title={e.feito ? "Desmarcar" : "Marcar como feito"} onClick={() => toggleEscalaFeito && toggleEscalaFeito(e.vinculoId, e.date)}><IconCheck size={14} />{e.feito ? "Feito" : "Fiz"}</button>}
+                      {e.off && <button type="button" className="dia-mini" onClick={() => toggleEscalaOff(e.vinculoId, e.date)}>Voltar a contar</button>}
                     </div>
                   );
                 }
@@ -8821,7 +8819,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
                       <span className="xl-date mono">{dm}</span>
                       <div className="xl-main">
                         <div className="xl-title">{e.description}{(e.anexos || []).length > 0 && <span className="xl-anx" title="Nota anexada" aria-label="Nota anexada"><ProIc n="clipe" size={13} color="var(--text-dim)" /></span>}{ehDedutivel(e) && <span className="xl-ded" title="Dedutível no IR">IR</span>}</div>
-                        {e.itens && <button type="button" className="xl-more" data-fat-open aria-expanded={openFat === e.key} onClick={() => setOpenFat(openFat === e.key ? null : e.key)}>{openFat === e.key ? "Fechar" : `Ver os ${e.itens.length} gastos`} <span aria-hidden="true">{openFat === e.key ? "▴" : "▾"}</span></button>}
+                        {e.itens && <button type="button" className="xl-more" data-fat-open aria-expanded={openFat === e.key} onClick={() => setOpenFat(openFat === e.key ? null : e.key)}>{openFat === e.key ? "Fechar" : (e.itens.length === 1 ? "Ver 1 gasto" : `Ver os ${e.itens.length} gastos`)} <span aria-hidden="true">{openFat === e.key ? "▴" : "▾"}</span></button>}
                         <div className="xl-sub"><span className="mono">{dm}</span><span>·</span><i style={{ background: meta.color }} /><span>{meta.label}</span>{e.tipo === "recorrente" && <><span>·</span><span>todo mês</span></>}</div>
                       </div>
                       <span className="xl-cat"><i style={{ background: meta.color }} />{meta.label}</span>
