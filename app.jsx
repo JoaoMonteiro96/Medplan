@@ -1491,17 +1491,18 @@ function GrupoSeg({ itens, ativo, onPick }) {
 // ---- modo Simples x Completo: os dados são os mesmos, o Simples só esconde as seções avançadas ----
 const OCULTAS_SIMPLES = ["investimentos", "visao", "contabilidade", "importar"];
 const MODOS_APP = [
-  ["simples", "Simples", "O essencial para o dia a dia", ["Plantões e recebimentos", "Contas do mês", "Quanto separar para o imposto"]],
-  ["completo", "Completo", "Para acompanhar tudo", ["Tudo do Simples", "Investimentos e patrimônio", "Impostos, importar e relatórios"]],
+  ["simples", "Simples", "Para organizar o dia a dia", ["Plantões, recebimentos e contas", "Calendário, férias e metas", "Quanto separar para o imposto"], "Bom para quem quer saber o que entra, o que sai e o que sobra no mês."],
+  ["completo", "Completo", "Para quem também investe ou tem empresa", ["Tudo do Simples", "Investimentos com cotação automática", "Guias, imposto de renda, importar e relatórios"], "Bom para quem investe, emite nota como PJ ou gosta de gráficos e relatórios."],
 ];
 function ModoEscolha({ valor, onEscolher }) {
   return (
     <div className="modo-esc" role="radiogroup" aria-label="Modo do app">
-      {MODOS_APP.map(([id, nome, sub, itens]) => (
+      {MODOS_APP.map(([id, nome, sub, itens, quem]) => (
         <button key={id} type="button" role="radio" aria-checked={valor === id} data-modo={id} className={`modo-op ${valor === id ? "on" : ""}`} onClick={() => onEscolher(id)}>
           <span className="modo-top"><b>{nome}</b><i className="modo-r" aria-hidden="true">{valor === id && <IconCheck size={13} color="#fff" />}</i></span>
           <small>{sub}</small>
           <span className="modo-lista">{itens.map((t) => <span key={t}><IconCheck size={13} />{t}</span>)}</span>
+          <span className="modo-quem">{quem}</span>
         </button>
       ))}
     </div>
@@ -1518,44 +1519,105 @@ function ModoTroca({ valor, onTrocar }) {
     </div>
   );
 }
-// desenhos do guia de abertura: mini telas do próprio app
+const IconSol = (p) => <Ico {...p}><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.9" y1="4.9" x2="6.7" y2="6.7"/><line x1="17.3" y1="17.3" x2="19.1" y2="19.1"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.9" y1="19.1" x2="6.7" y2="17.3"/><line x1="17.3" y1="6.7" x2="19.1" y2="4.9"/></Ico>;
+// desenhos do guia de abertura: mini telas do próprio app (dados fictícios)
 function BvIlu({ tipo }) {
+  const it = (cor, ic, nome, sub, valor, botao, ok) => (
+    <div className="bvi-it"><i style={{ background: cor + "22", color: cor }}>{ic}</i><span><b>{nome}</b><small>{sub}</small></span><span className="bvi-dir">{valor && <b className="mono">{valor}</b>}{botao && <em className={ok ? "ok" : ""}><IconCheck size={12} />{botao}</em>}</span></div>
+  );
+  const linha = (k, v, cor) => <div className="bvi-campo"><span>{k}</span><b className="mono" style={cor ? { color: cor } : null}>{v}</b></div>;
   if (tipo === "plantao") return (
     <div className="bvi">
       <div className="bvi-card">
         <div className="bvi-tit">Novo plantão</div>
-        <div className="bvi-campo"><span>Onde</span><b>Hospital Central</b></div>
-        <div className="bvi-campo"><span>Quando</span><b>Sábado, 12 horas</b></div>
-        <div className="bvi-campo"><span>Quanto</span><b className="mono">R$ 1.500,00</b></div>
+        {linha("Onde", "Hospital Central")}{linha("Quando", "Sábado, 12 horas")}{linha("Quanto", "R$ 1.500,00")}
         <div className="bvi-dias">{["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => <i key={i} className={i === 6 ? "on" : ""}>{d}</i>)}<small>Fixo, todo sábado</small></div>
       </div>
       <span className="bvi-mais" aria-hidden="true"><IconPlus size={24} color="#fff" /></span>
     </div>
   );
   if (tipo === "recebi") return (
-    <div className="bvi">
-      <div className="bvi-card">
-        <div className="bvi-tit">Para receber <b className="mono">R$ 2.880,00</b></div>
-        <div className="bvi-it"><i style={{ background: "#2563EB22", color: "#2563EB" }}><IconArrowIn size={16} /></i><span><b>UPA Norte</b><small>plantão de 05/11</small></span><span className="bvi-dir"><b className="mono">R$ 1.380,00</b><em className="ok"><IconCheck size={12} />Recebido</em></span></div>
-        <div className="bvi-it"><i style={{ background: "#16A34A22", color: "#16A34A" }}><IconArrowIn size={16} /></i><span><b>Hospital Central</b><small>plantão de 08/11</small></span><span className="bvi-dir"><b className="mono">R$ 1.500,00</b><em><IconCheck size={12} />Recebi</em></span></div>
-      </div>
-    </div>
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit">Para receber <b className="mono">R$ 2.880,00</b></div>
+      {it("#2563EB", <IconArrowIn size={16} />, "UPA Norte", "plantão de 05/11", "R$ 1.380,00", "Recebido", true)}
+      {it("#16A34A", <IconArrowIn size={16} />, "Hospital Central", "plantão de 08/11", "R$ 1.500,00", "Recebi")}
+    </div></div>
+  );
+  if (tipo === "contas") return (
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit">Para pagar <b className="mono">R$ 4.700,00</b></div>
+      {it("#DC2626", <IconArrowOut size={16} />, "Aluguel", "vence hoje", "R$ 2.800,00", "Paguei")}
+      {it("#B45309", <IconArrowOut size={16} />, "Escola", "vence dia 15", "R$ 1.900,00")}
+      <div className="bvi-dica"><IconWallet size={15} />Dá para pagar as 2 com o que já caiu</div>
+    </div></div>
+  );
+  if (tipo === "calendario") {
+    const tom = { 3: "in", 6: "in2", 9: "out", 12: "in", 15: "out2", 19: "in2", 22: "in", 25: "out", 28: "in" };
+    return (
+      <div className="bvi"><div className="bvi-card">
+        <div className="bvi-tit">Novembro <b className="mono" style={{ color: "#15803D" }}>+ R$ 36.915</b></div>
+        <div className="bvi-cal">
+          {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => <span key={"w" + i} className="w">{d}</span>)}
+          {Array.from({ length: 30 }, (_, i) => i + 1).map((d) => <span key={d} className={`${tom[d] || ""} ${d === 22 ? "hj" : ""} ${d >= 24 && d <= 27 ? "fer" : ""}`}>{d}</span>)}
+        </div>
+        <div className="bvi-leg"><span><i className="in" />entrou mais</span><span><i className="out" />saiu mais</span><span><i className="fer" />férias</span></div>
+      </div></div>
+    );
+  }
+  if (tipo === "ferias") return (
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit"><span className="bvi-tit-ic"><IconSol size={16} />Férias</span><b className="mono">20/12 a 05/01</b></div>
+      {linha("Plantões para passar", "4")}
+      {linha("Deixa de receber", "R$ 5.440,00", "#B91C1C")}
+      {linha("Sobra em janeiro", "R$ 3.120,00")}
+      <div className="bvi-dica"><IconCheck size={15} />As contas de janeiro continuam pagas</div>
+    </div></div>
+  );
+  if (tipo === "vale") return (
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit">Vale a pena? <b className="mono">R$ 1.600 · 12h</b></div>
+      <div className="bvi-dois"><div><small>Entra na conta</small><b className="mono">R$ 1.360,00</b></div><div><small>Por hora</small><b className="mono">R$ 113,33</b></div></div>
+      <div className="bvi-barra"><span>Este plantão</span><i style={{ width: "92%", background: "#16A34A" }} /></div>
+      <div className="bvi-barra"><span>Sua média</span><i style={{ width: "80%", background: "#94A3B8" }} /></div>
+      <div className="bvi-dica"><IconTrending size={15} />Paga 15% a mais por hora que a sua média</div>
+    </div></div>
+  );
+  if (tipo === "metas") return (
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit">Viagem em família <b className="mono">62%</b></div>
+      <div className="bvi-prog"><i style={{ width: "62%" }} /></div>
+      <div className="bvi-sub mono">R$ 18.600 de R$ 30.000</div>
+      {linha("Hospital Central", "9 plantões")}{linha("UPA Norte", "12 plantões")}
+      <div className="bvi-dica"><IconTarget size={15} />2 plantões por mês até junho</div>
+    </div></div>
+  );
+  if (tipo === "impostos") return (
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit">Impostos <b className="mono">novembro</b></div>
+      {linha("Separe para o imposto", "R$ 2.180,00")}
+      {it("#B45309", <IconCalendar size={16} />, "Guia de imposto", "vence 20/12", "R$ 1.430,00")}
+      {linha("Imposto de renda", "+ R$ 3.200 de volta", "#15803D")}
+    </div></div>
   );
   return (
-    <div className="bvi">
-      <div className="bvi-card">
-        <div className="bvi-tit">Para pagar <b className="mono">R$ 4.700,00</b></div>
-        <div className="bvi-it"><i style={{ background: "#DC262622", color: "#DC2626" }}><IconArrowOut size={16} /></i><span><b>Aluguel</b><small>vence hoje</small></span><span className="bvi-dir"><b className="mono">R$ 2.800,00</b><em><IconCheck size={12} />Paguei</em></span></div>
-        <div className="bvi-it"><i style={{ background: "#F59E0B22", color: "#B45309" }}><IconArrowOut size={16} /></i><span><b>Escola</b><small>vence dia 15</small></span><span className="bvi-dir"><b className="mono">R$ 1.900,00</b></span></div>
-        <div className="bvi-dica"><IconWallet size={15} />Dá para pagar as 2 com o que já caiu</div>
-      </div>
-    </div>
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit">Carteira <b className="mono" style={{ color: "#15803D" }}>▲ 12,4% no ano</b></div>
+      <div className="bvi-grande mono">R$ 184.320,00</div>
+      <svg className="bvi-graf" viewBox="0 0 200 44" preserveAspectRatio="none" aria-hidden="true"><path d="M0 38 L20 35 L40 36 L60 30 L80 31 L100 25 L120 22 L140 24 L160 15 L180 12 L200 6" fill="none" stroke="#16A34A" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      {it("#334155", <IconUpload size={16} />, "Nota da corretora", "PDF, print ou planilha", null, "Importar")}
+    </div></div>
   );
 }
 const BV_PASSOS = [
-  ["plantao", "Lance seus plantões", "Toque no + e diga onde, quando e quanto. Se o plantão é fixo, escolha os dias uma vez e o app lança os próximos."],
-  ["recebi", "Marque quando o dinheiro cair", "A tela Hoje mostra o que já devia ter caído na conta. Um toque em Recebi e pronto."],
-  ["contas", "Suas contas do mês", "Cadastre as contas fixas uma vez. Elas voltam todo mês, e o app mostra o que dá para pagar com o que já caiu."],
+  ["plantao", "Lance seus plantões", "Toque no + e diga onde, quando e quanto. Plantão fixo você lança uma vez e o app repete nos próximos.", "dois"],
+  ["recebi", "Marque quando o dinheiro cair", "A tela Hoje mostra o que já devia ter caído na conta. Um toque em Recebi e pronto.", "dois"],
+  ["contas", "Suas contas do mês", "Cadastre as contas fixas uma vez. Elas voltam todo mês, e o app mostra o que dá para pagar com o que já caiu.", "dois"],
+  ["calendario", "O mês inteiro no calendário", "Cada dia mostra plantões, recebimentos e contas. Verde: entrou mais. Vermelho: saiu mais.", "dois"],
+  ["ferias", "Planeje suas férias", "No calendário, toque em Férias e escolha o período. O app mostra os plantões para passar, quanto você deixa de receber e se as contas continuam pagas.", "dois"],
+  ["vale", "Vale a pena esse plantão?", "Digite o valor oferecido e as horas. O app mostra quanto entra, quanto dá por hora e compara com a sua média.", "dois"],
+  ["metas", "Metas contadas em plantões", "Diga quanto quer juntar e até quando. O app mostra quantos plantões em cada hospital pagam a meta.", "dois"],
+  ["impostos", "Impostos sem susto", "No Simples, o app mostra quanto separar de cada recebimento. No Completo, também avisa as guias e estima o imposto de renda.", "dois"],
+  ["invest", "Investimentos e importação", "Ações, fundos, renda fixa e exterior com preço atualizado sozinho. Importe a nota da corretora ou a fatura do cartão em vez de digitar.", "completo"],
 ];
 function BoasVindas({ onFim }) {
   const [i, setI] = useState(0);
@@ -1574,21 +1636,99 @@ function BoasVindas({ onFim }) {
           {!ult && <div key={i} className="bv-ilu"><BvIlu tipo={passo[0]} /></div>}
         </div>
         <div className="bv-txt">
-          <div className="bv-pontos" aria-hidden="true">{[0, 1, 2, 3].map((n) => <i key={n} className={n === i ? "on" : ""} />)}</div>
+          <div className="bv-pontos" aria-hidden="true">{Array.from({ length: BV_PASSOS.length + 1 }, (_, n) => <i key={n} className={n === i ? "on" : ""} />)}</div>
           {ult ? (
             <div key="ult" className="bv-corpo">
-              <h2>Como você quer usar o app?</h2>
-              <p>Os dados são os mesmos nos dois. Dá para trocar quando quiser, no menu Mais.</p>
+              <h2>Qual modo combina com você?</h2>
+              <p>Comece pelo Simples se quer só organizar plantões e contas. Escolha o Completo se também investe ou cuida dos impostos da sua empresa.</p>
               <ModoEscolha valor={modo} onEscolher={setModo} />
+              <div className="bv-troca"><i aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg></i><span><b>Dá para trocar quando quiser.</b> No celular, em Mais. No computador, no pé da barra lateral. Nenhum dado se perde.</span></div>
             </div>
           ) : (
-            <div key={i} className="bv-corpo"><h2>{passo[1]}</h2><p>{passo[2]}</p></div>
+            <div key={i} className="bv-corpo"><span className={`bv-tag ${passo[3]}`}>{passo[3] === "completo" ? "Só no modo Completo" : "Nos modos Simples e Completo"}</span><h2>{passo[1]}</h2><p>{passo[2]}</p></div>
           )}
           <div className="bv-acoes">
             {i > 0 ? <button type="button" className="btn btn-ghost" onClick={() => setI(i - 1)}>Voltar</button> : <span />}
             <button type="button" className="btn btn-primary bv-seguir" onClick={() => (ult ? onFim(modo) : setI(i + 1))}>{ult ? "Começar" : "Continuar"}</button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- modo férias: escolhe o período e vê os plantões para passar, quanto deixa de receber e como ficam as contas ----
+const dataCurta = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}/${m}`; };
+const semCurta = (iso) => ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][new Date(iso + "T12:00:00").getDay()];
+function FeriasSheet({ lista = [], calcular, onSalvar, onApagar, onTirar, onClose }) {
+  const hoje = todayStr();
+  const padrao = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + 1); const i = dateStr(d.getFullYear(), d.getMonth(), 1); return [i, addDaysIso(i, 14)]; };
+  const prox = lista.find((f) => f.fim >= hoje) || null;
+  const [selId, setSelId] = useState(prox ? prox.id : null);
+  const [ini, setIni] = useState(prox ? prox.ini : padrao()[0]);
+  const [fim, setFim] = useState(prox ? prox.fim : padrao()[1]);
+  useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
+  const sel = lista.find((f) => f.id === selId) || null;
+  const escolher = (f) => { setSelId(f ? f.id : null); const [a, b] = f ? [f.ini, f.fim] : padrao(); setIni(a); setFim(b); };
+  const res = ini && fim && fim >= ini ? calcular(ini, fim) : null;
+  const salvo = !!(sel && sel.ini === ini && sel.fim === fim);
+  const salvar = () => { const id = selId || uid(); onSalvar({ id, ini, fim }); setSelId(id); };
+  const n = res ? res.plantoes.length : 0;
+  const anoDif = (m) => m.ano !== new Date().getFullYear();
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet fer-sheet" role="dialog" aria-label="Férias" id="ferias-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="fer-h">
+          <span className="fer-ic" aria-hidden="true"><IconSol size={20} /></span>
+          <div><div className="sheet-title" style={{ margin: 0 }}>Férias</div><small>Veja o que muda antes de sair</small></div>
+          <button type="button" className="btn-icon" aria-label="Fechar" onClick={onClose}><IconX size={16} /></button>
+        </div>
+        {lista.length > 0 && (
+          <div className="chip-row fer-lista">
+            {lista.map((f) => <button key={f.id} type="button" className={`chip sm ${selId === f.id ? "active" : ""}`} aria-pressed={selId === f.id} onClick={() => escolher(f)}>{dataCurta(f.ini)} a {dataCurta(f.fim)}</button>)}
+            <button type="button" className={`chip sm ${!selId ? "active" : ""}`} aria-pressed={!selId} onClick={() => escolher(null)}>Novas férias</button>
+          </div>
+        )}
+        <div className="fer-datas">
+          <div className="field"><label htmlFor="fer-ini">Primeiro dia</label><input id="fer-ini" type="date" value={ini} onChange={(e) => { setIni(e.target.value); if (fim && e.target.value > fim) setFim(addDaysIso(e.target.value, 14)); }} /></div>
+          <div className="field"><label htmlFor="fer-fim">Último dia</label><input id="fer-fim" type="date" value={fim} min={ini} onChange={(e) => setFim(e.target.value)} /></div>
+        </div>
+        {!res ? <div className="vale-vazio">Escolha o primeiro e o último dia das férias.</div> : (
+          <>
+            <div className="fer-res" id="fer-resumo">
+              <div><span>Deixa de receber</span><b className="mono">{comCentavos(fmtBRL(res.perda))}</b><small>{n === 0 ? "nenhum plantão" : n === 1 ? "1 plantão" : n + " plantões"} em {res.dias} {res.dias === 1 ? "dia" : "dias"} de férias</small></div>
+            </div>
+            <div className="fer-sec">Plantões para passar</div>
+            {n === 0 ? <div className="fer-vazio">Nenhum plantão lançado nesse período.</div> : (
+              <div className="fer-lst">{res.plantoes.map((p) => (
+                <div key={p.id} className="fer-pl"><i style={{ background: p.cor }} /><span><b>{p.nome}</b><small>{dataCurta(p.date)} · {semCurta(p.date)} · {fmtHoras(p.horas)}</small></span><b className="mono">{fmtBRL(p.liq)}</b></div>
+              ))}</div>
+            )}
+            {res.escalas.length > 0 && (
+              <>
+                <div className="fer-sec">Escala fixa no período</div>
+                <div className="fer-lst">{res.escalas.map((e) => (
+                  <div key={e.nome} className="fer-pl"><i style={{ background: e.cor }} /><span><b>{e.nome}</b><small>{e.dias} {e.dias === 1 ? "dia" : "dias"} de escala. Combine a folga.</small></span></div>
+                ))}</div>
+              </>
+            )}
+            <div className="fer-sec">E as contas?<small>pelo mês em que o dinheiro cairia</small></div>
+            {res.meses.length === 0 ? <div className="fer-vazio ok"><IconCheck size={15} />Nada muda: não há plantões lançados nesse período.</div> : res.meses.map((m) => (
+              <div key={m.k} className={`fer-mes ${m.depois >= 0 ? "ok" : "falta"}`}>
+                <div className="fer-mes-h"><b>{m.nome}{anoDif(m) ? " de " + m.ano : ""}</b><span className="fer-tag">{m.depois >= 0 ? <><IconCheck size={13} />Contas pagas</> : "Faltam " + fmtBRL(-m.depois)}</span></div>
+                <div className="fer-mes-l"><span>Entra no mês</span><b className="mono">{fmtBRL(m.entra - m.perda)}<s className="mono">{fmtBRL(m.entra)}</s></b></div>
+                <div className="fer-mes-l"><span>Contas do mês</span><b className="mono">{fmtBRL(m.contas)}</b></div>
+                <div className="fer-mes-l tot"><span>Sobra</span><b className="mono">{fmtBRL(m.depois)}</b></div>
+              </div>
+            ))}
+            <div className="fer-acoes">
+              <button type="button" className="btn btn-primary" id="fer-salvar" disabled={salvo} onClick={salvar}>{salvo ? <><IconCheck size={15} color="#fff" /> Férias no calendário</> : "Salvar no calendário"}</button>
+              {n > 0 && <button type="button" className="btn btn-ghost" id="fer-tirar" onClick={() => onTirar(res.plantoes.map((p) => p.id))}>{n === 1 ? "Tirar o plantão da agenda" : `Tirar os ${n} plantões da agenda`}</button>}
+              {sel && <button type="button" className="link-btn fer-apagar" onClick={() => { onApagar(sel.id); escolher(null); }}>Apagar estas férias</button>}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2031,6 +2171,7 @@ function App() {
   const [chartMonths, setChartMonths] = useState(12);
   const [quickOpen, setQuickOpen] = useState(false);
   const [valeAberto, setValeAberto] = useState(false);
+  const [feriasAberto, setFeriasAberto] = useState(false);
   const [pickerYear, setPickerYear] = useState(null);
   const [signals, setSignals] = useState({ despesas: 0, investimentos: 0, dedutivel: 0 });
   const [chartScope, setChartScope] = useState("month");
@@ -2821,6 +2962,32 @@ function App() {
       vinculos.reduce((a, v) => a + (v.tipo === "mensal" && v.startMonth <= mk ? Number(v.valorMensal || 0) : 0), 0);
   };
 
+  // férias: o que muda no período escolhido
+  const feriasLista = contab.ferias || [];
+  const resumoFerias = (ini, fim) => {
+    const pl = shifts.filter((s) => s.date >= ini && s.date <= fim).sort((a, b) => a.date.localeCompare(b.date)).map((s) => {
+      const v = vinculos.find((x) => x.id === s.vinculoId);
+      return { id: s.id, date: s.date, nome: v ? v.nome : "Plantão", cor: v ? v.cor : GOLD, horas: Number(s.hours) || 0, liq: liquidoVinc(v, s.gross), pay: payDateOf(s) };
+    });
+    const esc = {};
+    let y = Number(ini.slice(0, 4)), m = Number(ini.slice(5, 7)) - 1, n = 0;
+    const yf = Number(fim.slice(0, 4)), mf = Number(fim.slice(5, 7)) - 1;
+    while ((y < yf || (y === yf && m <= mf)) && n++ < 14) {
+      vinculos.forEach((v) => escalaDoMes(v, y, m).forEach((e) => { if (e.date < ini || e.date > fim || e.off) return; const g = (esc[v.id] = esc[v.id] || { nome: v.nome, cor: v.cor, datas: {} }); g.datas[e.date] = 1; }));
+      m += 1; if (m > 11) { m = 0; y += 1; }
+    }
+    const porMes = {};
+    pl.forEach((x) => { const k = String(x.pay).slice(0, 7); porMes[k] = (porMes[k] || 0) + x.liq; });
+    const meses = Object.keys(porMes).sort().map((k) => {
+      const yy = Number(k.slice(0, 4)), mm = Number(k.slice(5, 7)) - 1, st = monthStats(yy, mm);
+      return { k, nome: MONTHS_PT[mm], ano: yy, perda: porMes[k], entra: st.net, contas: st.expTotal, depois: st.net - porMes[k] - st.expTotal };
+    });
+    const dias = Math.round((new Date(fim + "T12:00:00") - new Date(ini + "T12:00:00")) / 864e5) + 1;
+    return { plantoes: pl, escalas: Object.values(esc).map((g) => ({ nome: g.nome, cor: g.cor, dias: Object.keys(g.datas).length })), perda: pl.reduce((a, x) => a + x.liq, 0), meses, dias };
+  };
+  const salvarFerias = (f) => { setContab((p) => ({ ...p, ferias: [...(p.ferias || []).filter((x) => x.id !== f.id), f].sort((a, b) => a.ini.localeCompare(b.ini)) })); avisar("Férias marcadas no calendário"); };
+  const apagarFerias = (id) => { const antes = contab.ferias || []; setContab((p) => ({ ...p, ferias: (p.ferias || []).filter((x) => x.id !== id) })); avisar("Férias apagadas", () => setContab((p) => ({ ...p, ferias: antes }))); };
+  const tirarPlantoes = (ids) => { const tirados = shifts.filter((s) => ids.includes(s.id)); setShifts((p) => p.filter((s) => !ids.includes(s.id))); avisar(tirados.length === 1 ? "Plantão tirado da agenda" : `${tirados.length} plantões tirados da agenda`, () => setShifts((p) => [...p, ...tirados])); };
   const monthStats = (y, m) => {
     const inc = buildIncomeItems(y, m);
     const exp = buildExpenseItems(y, m);
@@ -4588,7 +4755,8 @@ function App() {
         .add-op b { display: block; font-size: 15px; } .add-op small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.35; }
         .add-op > svg { color: var(--text-dim); }
         .add-mais { display: flex; gap: 18px; justify-content: center; margin-top: 6px; }
-        @media (max-width: 370px) { .month-pill .mp-open { min-width: 0; padding: 0 6px; font-size: 12.5px; } .month-pill button:not(.mp-open) { width: 26px; } .tb-left { gap: 8px; } }
+        .month-pill .mp-c { display: none; }
+        @media (max-width: 370px) { .month-pill .mp-l { display: none; } .month-pill .mp-c { display: inline; } .month-pill .mp-open { min-width: 0; padding: 0 6px; font-size: 12.5px; } .month-pill button:not(.mp-open) { width: 26px; } .tb-left { gap: 8px; } }
         .add-mini-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 2px; }
         .add-mini { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 6px 11px; border: 1.5px solid var(--border); border-radius: 16px; background: var(--surface, #fff); font: inherit; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; transition: border-color .2s, transform .12s; }
         .add-mini i { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-3); color: #334155; font-style: normal; }
@@ -5014,6 +5182,65 @@ function App() {
         :root:not([data-theme="dark"]) .app .balance-card .bc-imp b { color: #fff; } :root:not([data-theme="dark"]) .app .balance-card .bc-imp svg { color: #FCD34D; }
         .dhero .bc-imp { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); margin-top: 10px; } .dhero .bc-imp b { color: #fff; } .dhero .bc-imp svg { color: #FCD34D; }
         .add-mini-row.um { grid-template-columns: 1fr; } .add-mini-row.um .add-mini { flex-direction: row; justify-content: center; padding: 10px 12px; } .add-mini-row.um .add-mini i { width: 32px; height: 32px; border-radius: 10px; }
+        .modo-quem { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--border); font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
+        .modo-op.on .modo-quem { color: var(--text); }
+        .bv-troca { display: flex; gap: 11px; align-items: flex-start; margin-top: 12px; padding: 12px 14px; border-radius: 16px; background: #ECFDF3; color: #14532D; font-size: 13.5px; line-height: 1.45; }
+        .bv-troca i { flex-shrink: 0; width: 32px; height: 32px; border-radius: 10px; background: #16A34A; color: #fff; display: grid; place-items: center; font-style: normal; }
+        .bv-troca b { font-weight: 700; }
+        :root[data-theme="dark"] .bv-troca { background: rgba(52,211,153,.12); color: #A7F3D0; }
+        .bv-tag { display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px; background: #ECFDF3; color: #15803D; }
+        .bv-tag.completo { background: #EEF2FF; color: #4338CA; }
+        :root[data-theme="dark"] .bv-tag { background: rgba(52,211,153,.14); color: #6EE7B7; } :root[data-theme="dark"] .bv-tag.completo { background: rgba(129,140,248,.16); color: #A5B4FC; }
+        .bv-pontos { gap: 5px !important; } .bv-pontos i { width: 6px !important; } .bv-pontos i.on { width: 20px !important; }
+        .bvi-tit-ic { display: inline-flex; align-items: center; gap: 6px; } .bvi-tit-ic svg { color: #0284C7; }
+        .bvi-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 4px; }
+        .bvi-cal span { height: 26px; border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 600; color: #475569; background: #F8FAFC; }
+        .bvi-cal span.w { background: none; height: 16px; color: #94A3B8; font-size: 10.5px; }
+        .bvi-cal span.in { background: rgba(22,163,74,.22); } .bvi-cal span.in2 { background: rgba(22,163,74,.42); color: #14532D; }
+        .bvi-cal span.out { background: rgba(220,38,38,.16); } .bvi-cal span.out2 { background: rgba(220,38,38,.3); }
+        .bvi-cal span.fer { box-shadow: inset 0 -3px 0 #0EA5E9; background-image: linear-gradient(rgba(14,165,233,.14), rgba(14,165,233,.14)); }
+        .bvi-cal span.hj { background: #16A34A; color: #fff; }
+        .bvi-leg { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 9px; font-size: 11px; color: #64748B; }
+        .bvi-leg i { display: inline-block; width: 12px; height: 4px; border-radius: 9px; margin-right: 4px; vertical-align: 2px; }
+        .bvi-leg i.in { background: #16A34A; } .bvi-leg i.out { background: #DC2626; } .bvi-leg i.fer { background: #0EA5E9; }
+        .bvi-dois { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 10px; }
+        .bvi-dois div { background: #F1F5F9; border-radius: 12px; padding: 9px 11px; } .bvi-dois small { display: block; font-size: 11px; color: #64748B; } .bvi-dois b { font-size: 15px; font-weight: 800; }
+        .bvi-barra { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 8px; font-size: 11.5px; color: #475569; margin-bottom: 6px; }
+        .bvi-barra i { height: 8px; border-radius: 9px; display: block; }
+        .bvi-prog { height: 9px; border-radius: 9px; background: #E2E8F0; overflow: hidden; margin: 6px 0 5px; } .bvi-prog i { display: block; height: 100%; border-radius: 9px; background: #7C3AED; }
+        .bvi-sub { font-size: 12px; color: #64748B; margin-bottom: 4px; }
+        .bvi-grande { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin: 2px 0 2px; }
+        .bvi-graf { width: 100%; height: 44px; display: block; margin-bottom: 4px; }
+        /* férias */
+        .cal-acoes { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
+        .cal-fer-txt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0369A1; min-width: 0; }
+        .cal-fer-btn { display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--border); background: var(--surface, #fff); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 700; padding: 8px 14px; border-radius: 999px; cursor: pointer; flex-shrink: 0; }
+        .cal-fer-btn svg { color: #0284C7; } .cal-fer-btn:hover { border-color: #7DD3FC; } .cal-fer-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        .cal-leg .lg-fer { background: #0EA5E9; }
+        :root[data-theme="dark"] .cal-fer-txt { color: #7DD3FC; } :root[data-theme="dark"] .cal-fer-btn svg, :root[data-theme="dark"] .bvi-tit-ic svg { color: #38BDF8; }
+        .fer-sheet { max-height: 92vh; overflow-y: auto; }
+        .fer-h { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; } .fer-h > div { flex: 1; min-width: 0; } .fer-h small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+        .fer-ic { width: 42px; height: 42px; border-radius: 14px; background: #E0F2FE; color: #0284C7; display: grid; place-items: center; flex-shrink: 0; }
+        :root[data-theme="dark"] .fer-ic { background: rgba(56,189,248,.15); color: #38BDF8; }
+        .fer-lista { margin-bottom: 12px; }
+        .fer-datas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .fer-datas .field { margin-bottom: 4px; min-width: 0; } .fer-datas input { width: 100%; min-width: 0; }
+        .fer-res { margin: 12px 0 4px; padding: 16px 18px; border-radius: 18px; color: #fff; background: linear-gradient(150deg, #0E5640 0%, #0B3D2E 60%, #08291F 100%); }
+        .fer-res > div > span { display: block; font-size: 13px; color: rgba(255,255,255,.75); } .fer-res > div > b { display: block; font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0; color: #fff; } .fer-res small { font-size: 13px; color: rgba(255,255,255,.72); }
+        .fer-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 700; color: var(--text-dim); margin: 16px 0 6px; } .fer-sec small { font-weight: 500; font-size: 12px; }
+        .fer-lst { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+        .fer-pl { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); } .fer-pl:first-child { border-top: none; }
+        .fer-pl > i { width: 9px; height: 9px; border-radius: 50%; } .fer-pl span b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .fer-pl small { display: block; font-size: 12px; color: var(--text-dim); } .fer-pl > b { font-size: 14px; white-space: nowrap; }
+        .fer-vazio { font-size: 13.5px; color: var(--text-dim); padding: 10px 12px; border: 1px dashed var(--border); border-radius: 14px; display: flex; gap: 8px; align-items: center; } .fer-vazio.ok svg { color: #16A34A; }
+        .fer-mes { border: 1px solid var(--border); border-radius: 14px; padding: 11px 13px; margin-bottom: 8px; }
+        .fer-mes-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; } .fer-mes-h b { font-size: 14.5px; }
+        .fer-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+        .fer-mes.ok .fer-tag { background: #DCFCE7; color: #15803D; } .fer-mes.falta { border-color: #FCA5A5; } .fer-mes.falta .fer-tag { background: #FEE2E2; color: #B91C1C; }
+        :root[data-theme="dark"] .fer-mes.ok .fer-tag { background: rgba(52,211,153,.14); color: #6EE7B7; } :root[data-theme="dark"] .fer-mes.falta .fer-tag { background: rgba(248,113,113,.15); color: #FCA5A5; }
+        .fer-mes-l { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text-dim); padding: 3px 0; } .fer-mes-l b { color: var(--text); font-weight: 700; text-align: right; }
+        .fer-mes-l s { display: block; font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
+        .fer-mes-l.tot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 7px; } .fer-mes.falta .fer-mes-l.tot b { color: #B91C1C; }
+        .fer-acoes { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; } .fer-acoes .btn { justify-content: center; height: 46px; } .fer-apagar { align-self: center; color: var(--brick) !important; margin-top: 2px; }
+        @media (min-width: 700px) { .fer-acoes { flex-direction: row; flex-wrap: wrap; align-items: center; } .fer-apagar { margin-left: auto; } }
         /* guia de abertura */
         .bv { position: fixed; inset: 0; z-index: 90; background: #0B3D2E; display: flex; align-items: stretch; justify-content: center; animation: fadeIn .25s ease; }
         .bv-box { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--surface, #fff); overflow: hidden; }
@@ -5418,6 +5645,9 @@ function App() {
         .app .cal-dot.esc { opacity: 0.55; }
         .app .cal-hours, .app .cal-cell[class*="fx-"] .cal-hours { font-size: 10.5px; font-weight: 600; color: var(--text-dim); }
         /* modelo A: barra fina no pé do dia */
+        .app .cal-cell.ferias, .app .cal-cell.ferias[class*="fx-"] { background: #F0F9FF; border-color: #BAE6FD; }
+        .app .cal-cell.ferias::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #0EA5E9; }
+        :root[data-theme="dark"] .app .cal-cell.ferias, :root[data-theme="dark"] .app .cal-cell.ferias[class*="fx-"] { background: rgba(14,165,233,.13); border-color: rgba(56,189,248,.35); }
         .app .cal-m-a .cal-cell[class*="fx-"]::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 4px; height: 4px; border-radius: 999px; }
         .app .cal-m-a .cal-cell.fx-in1::after { background: rgba(22,163,74,0.35); } .app .cal-m-a .cal-cell.fx-in2::after { background: rgba(22,163,74,0.65); } .app .cal-m-a .cal-cell.fx-in3::after { background: #16A34A; }
         .app .cal-m-a .cal-cell.fx-out1::after { background: rgba(220,38,38,0.32); } .app .cal-m-a .cal-cell.fx-out2::after { background: rgba(220,38,38,0.6); } .app .cal-m-a .cal-cell.fx-out3::after { background: #DC2626; }
@@ -5494,7 +5724,7 @@ function App() {
           <div className="tb-right">
             <div className="month-pill">
               <button onClick={() => changeMonth(-1)} aria-label="Mês anterior"><IconChevronLeft size={17} /></button>
-              <button className="mp-open" onClick={() => setPickerYear(viewYear)} aria-label="Ver todos os meses">{MONTHS_PT[viewMonth]} {viewYear}</button>
+              <button className="mp-open" onClick={() => setPickerYear(viewYear)} aria-label="Ver todos os meses"><span className="mp-l">{MONTHS_PT[viewMonth]} {viewYear}</span><span className="mp-c">{MONTHS_ABBR_PT[viewMonth]} {viewYear}</span></button>
               <button onClick={() => changeMonth(1)} aria-label="Próximo mês"><IconChevronRight size={17} /></button>
             </div>
             <button type="button" className={`tb-gear ${activeTab === "backup" ? "on" : ""}`} aria-label="Configurações" title="Configurações" aria-current={activeTab === "backup" ? "page" : undefined} onClick={() => goTab("backup")}><IconGear size={19} /></button>
@@ -5548,6 +5778,7 @@ function App() {
             addShift={addShift} addPlantao={addPlantao} removeShiftSerie={removeShiftSerie} shifts={shifts} removeShift={removeShift} toggleShiftReceived={toggleShiftReceived} updateShiftPrazo={updateShiftPrazo}
             addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff} toggleEscalaFeito={toggleEscalaFeito}
             vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab} fluxoDia={fluxoDia} desk={desk}
+            ferias={feriasLista} onFerias={() => setFeriasAberto(true)}
           />
         )}
         {activeTab === "despesas" && (
@@ -5600,6 +5831,7 @@ function App() {
         <MonthPicker year={pickerYear} setYear={setPickerYear} viewYear={viewYear} viewMonth={viewMonth} statsOf={monthStats}
           onPick={(y, m) => { setPickerYear(null); goMonth(y, m); }} onClose={() => setPickerYear(null)} />
       )}
+      {feriasAberto && <FeriasSheet lista={contab.ferias || []} calcular={resumoFerias} onSalvar={salvarFerias} onApagar={apagarFerias} onTirar={tirarPlantoes} onClose={() => setFeriasAberto(false)} />}
       {valeAberto && <ValePlantao vinculos={vinculos} netOf={netOf} info={valeInfo} onClose={() => setValeAberto(false)} />}
       {quickOpen && (
         <AddSheet inicial={typeof quickOpen === "string" ? quickOpen : null} onClose={() => setQuickOpen(false)} onDespesa={() => quickGo("despesa")} onOutro={(k) => quickGo(k)}
@@ -8722,8 +8954,11 @@ function GoalsTab({ valoresPlantao = [], goals, addGoal, removeGoal, contributeG
 }
 
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
-  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, toggleEscalaFeito, fluxoDia = {}, desk }) {
+  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, toggleEscalaFeito, fluxoDia = {}, desk, ferias = [], onFerias }) {
   const [modo, setModo] = useState("plantao");
+  const emFerias = (iso) => ferias.some((f) => iso >= f.ini && iso <= f.fim);
+  const iniMes = dateStr(viewYear, viewMonth, 1), fimMes = dateStr(viewYear, viewMonth, new Date(viewYear, viewMonth + 1, 0).getDate());
+  const feriasMes = ferias.filter((f) => f.fim >= iniMes && f.ini <= fimMes);
   const [diaAberto, setDiaAberto] = useState(null); // lançamento com detalhes abertos
   const [addAberto, setAddAberto] = useState(false);
   useEffect(() => { setDiaAberto(null); setAddAberto(false); }, [selectedDay]);
@@ -8775,6 +9010,12 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
         <Kpi label="Dias trabalhados" value={Object.values(entriesByDay).filter((l) => l.some((e) => !e.off)).length} />
         {desk && <Kpi label="Saldo do mês" value={fmtBRL(Object.values(fluxoDia).reduce((a, f) => a + f.entra - f.sai, 0))} sub="entra menos sai" />}
       </div>
+      {onFerias && (
+        <div className="cal-acoes">
+          <span className="cal-fer-txt">{feriasMes.length > 0 && <><IconSol size={15} />Férias de {dataCurta(feriasMes[0].ini)} a {dataCurta(feriasMes[0].fim)}</>}</span>
+          <button type="button" className="cal-fer-btn" id="cal-ferias" onClick={onFerias}><IconSol size={16} />Férias</button>
+        </div>
+      )}
       <div className={`calendar-grid cal-m-a ${desk ? "cal-desk" : ""}`}>
         {WEEKDAYS_PT.map((w, i) => <div key={i} className="weekday-label">{w}</div>)}
         {cells.map((day, idx) => {
@@ -8783,7 +9024,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
           const dEntries = entriesByDay[day] || [];
           const isToday = iso === today, isSelected = selectedDay === day;
           return (
-            <div key={idx} className={`cal-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""} ${fxClasse(day)} ${iso > today ? "fut" : ""}`} onClick={() => setSelectedDay(day)}>
+            <div key={idx} className={`cal-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""} ${fxClasse(day)} ${iso > today ? "fut" : ""} ${emFerias(iso) ? "ferias" : ""}`} onClick={() => setSelectedDay(day)}>
               <span className="cal-day-num mono">{day}</span>
               {(() => { const f = fluxoDia[day]; const net = f ? f.entra - f.sai : 0; if (Math.abs(net) < 1) return null; const av = Math.abs(net); const t = av >= 1e3 ? (av / 1e3).toFixed(av >= 1e4 ? 0 : 1).replace(".", ",") + " mil" : String(Math.round(av)); return <span className={`cal-val ${net > 0 ? "in" : "out"}`}>{(net > 0 ? "+" : "−") + t}</span>; })()}
               {dEntries.length > 0 && (
@@ -8803,7 +9044,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
       </div>
 
       <div className="cal-leg">
-        <span><i className="lg-in" />entrou mais</span><span><i className="lg-out" />saiu mais</span><span><i className="lg-prev" />previsto</span>
+        <span><i className="lg-in" />entrou mais</span><span><i className="lg-out" />saiu mais</span><span><i className="lg-prev" />previsto</span>{feriasMes.length > 0 && <span><i className="lg-fer" />férias</span>}
       </div>
       {usedVinc.length > 0 && (
         <div className="legend inline" style={{ marginTop: 10 }}>{usedVinc.map((v) => <span key={v.id}><i style={{ background: v.cor }} />{v.nome}</span>)}</div>
