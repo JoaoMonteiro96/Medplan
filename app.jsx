@@ -1419,7 +1419,7 @@ function DProximos({ incomeItems = [], expenseItems = [], max = 6, onVer }) {
     </div>
   );
 }
-function DSide({ active, onPick, onNovo, ocultar = [], modo, onModo }) {
+function DSide({ active, onPick, onNovo, onVale, ocultar = [], modo, onModo }) {
   const grupo = (ids) => ids.filter((id) => !ocultar.includes(id)).map((id) => { const t = NAV_ALL.find((x) => x.id === id); if (!t) return null; const Ic = id === "backup" ? IconGear : t.icon; return (
     <button key={id} type="button" data-tab={id} className={`dsb-i ${active === id ? "on" : ""}`} aria-current={active === id ? "page" : undefined} onClick={() => onPick(id)}><Ic size={18} /><span>{NAV_LABELS[id]}</span></button>
   ); });
@@ -1427,7 +1427,7 @@ function DSide({ active, onPick, onNovo, ocultar = [], modo, onModo }) {
     <aside className="dsb" aria-label="Páginas">
       <div className="dsb-brand"><span className="tb-logo"><IconLogo size={32} /></span><span className="brand-nm">Sa<span>ll</span>os</span></div>
       <button type="button" className="dsb-new" onClick={onNovo}><IconPlus size={16} color="#fff" /> Novo lançamento</button>
-      <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "organizacao", "metas", "contabilidade"])}</nav>
+      <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "metas", "contabilidade", "importar"])}{onVale && <button type="button" className="dsb-i" id="dsb-vale" onClick={onVale}><ProIc n="calculo" size={18} /><span>Vale a pena?</span></button>}</nav>
       {onModo && <ModoTroca valor={modo} onTrocar={onModo} />}
     </aside>
   );
@@ -1435,9 +1435,9 @@ function DSide({ active, onPick, onNovo, ocultar = [], modo, onModo }) {
 
 // barra de ações suspensa (celular): 5 seções + "Mais", que abre as outras numa folha
 // barra de baixo do celular: Hoje, Plantões, +, Contas e Mais
-const TITULO_CURTO = { inicio: "Hoje", calendario: "Plantões", faturamento: "Plantões", despesas: "Contas", organizacao: "Contas", investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
+const TITULO_CURTO = { inicio: "Hoje", calendario: "Plantões", faturamento: "Plantões", despesas: "Contas", organizacao: "Contas", investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Impostos", importar: "Importar", backup: "Ajustes" };
 const DOCK_GRUPOS = [["inicio", "Hoje", ["inicio"]], ["calendario", "Plantões", ["calendario", "faturamento"]], null, ["despesas", "Contas", ["despesas", "organizacao"]]];
-const DOCK_MAIS = ["investimentos", "metas", "contabilidade"]; // Ajustes só pela engrenagem; Importar e "Vale a pena?" só pelo botão +
+const DOCK_MAIS = ["investimentos", "metas", "contabilidade", "importar"]; // Ajustes só pela engrenagem; "Vale a pena?" também fica aqui
 const DOCK_NOMES = { investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
 function Dock({ active, onPick, onNovo, onVale, ocultar = [], modo, onModo, semMais = false }) {
   const [mais, setMais] = useState(false);
@@ -2164,7 +2164,7 @@ function App() {
     return () => { clearTimeout(t0); clearInterval(t); document.removeEventListener("visibilitychange", sair); };
   }, []);
   const goTab = (id0) => {
-    const id = id0 === "visao" ? "inicio" : id0; // Relatórios foi dissolvido nas outras telas
+    const id = id0 === "visao" ? "inicio" : id0 === "organizacao" ? "despesas" : id0; // Relatórios foi dissolvido; Organizar agora fica dentro de Contas
     const from = NAV_ALL.findIndex((x) => x.id === activeTab), to = NAV_ALL.findIndex((x) => x.id === id);
     setNavDir(to >= from ? "fwd" : "back");
     setActiveTab(id);
@@ -2777,7 +2777,7 @@ function App() {
   const [bvFeito, setBvFeito] = useState(false);
   const bvAberto = loaded && !bvFeito && !contab.modoApp && totalDadosApp === 0 && !["loading", "auth", "saving"].includes(cloud.status);
   const trocarModo = (m) => { setContab((p) => ({ ...p, modoApp: m })); if (m === "simples" && OCULTAS_SIMPLES.includes(activeTab)) goTab("inicio"); };
-  const ocultasNav = [...(contabAba ? [] : ["contabilidade"]), ...(simples ? OCULTAS_SIMPLES : [])];
+  const ocultasNav = ["organizacao", ...(contabAba ? [] : ["contabilidade"]), ...(simples ? OCULTAS_SIMPLES : [])];
   useEffect(() => { if (!contabAba && activeTab === "contabilidade") setActiveTab("inicio"); }, [contabAba, activeTab]);
 
   const addRecurringExpense = (data) => setRecurringExpenses((prev) => [...prev, { id: uid(), description: data.description, category: data.category || guessExpCat(data.description), amount: Number(data.amount) || 0,
@@ -4825,7 +4825,7 @@ function App() {
         .ct-list { margin: 4px 0 6px; }
         .ct-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--border); }
         .ct-row:first-child { border-top: none; }
-        .ct-row > .btn { grid-column: 1 / -1; justify-self: start; }
+        .ct-row > .btn { grid-column: 2; justify-self: end; } .ct-row:has(> .btn) > .ct-l { grid-row: span 2; }
         .ct-row.ct-chk { grid-template-columns: 22px minmax(0, 1fr) auto; cursor: pointer; } .ct-row.ct-chk input { width: 18px; height: 18px; }
         .ct-l { min-width: 0; } .ct-l b { font-size: 14px; } .ct-l small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
         .ct-v { font-size: 14px; white-space: nowrap; text-align: right; }
@@ -5065,7 +5065,7 @@ function App() {
         :root[data-theme="dark"] .gp-prazo.ok { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .gp-prazo.falta { background: rgba(245,158,11,.12); color: #FCD34D; }
 
         /* ================= v31: organização (caminho do dinheiro) ================= */
-        .oa { max-width: 640px; }
+        .oa { max-width: 640px; } @media (min-width: 1100px) { .oa { max-width: none; } .oa-chips { max-width: 420px; } .oa.oa-rodape { max-width: 760px; } }
         .oa-chips { display: flex; gap: 8px; margin-bottom: 12px; }
         .oa-chips button { flex: 1; font: inherit; font-size: 13.5px; font-weight: 600; padding: 10px 8px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); cursor: pointer; }
         .oa-chips button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
@@ -5152,6 +5152,26 @@ function App() {
         .vale-meta i { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex: none; }
         .vale-vazio { padding: 18px 0 8px; text-align: center; color: var(--text-dim); font-size: 14px; }
         :root[data-theme="dark"] .vale-tom.bom { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .vale-tom.baixo { background: rgba(245,158,11,.12); color: #FCD34D; }
+        .ct-hero { border-radius: 20px; padding: 20px 22px; margin-bottom: 14px; color: #fff; background: radial-gradient(120% 140% at 100% 0%, rgba(52,211,153,0.20) 0%, rgba(52,211,153,0) 46%), linear-gradient(155deg, #0E5640 0%, #0B3D2E 58%, #08291F 100%); box-shadow: 0 18px 40px -18px rgba(8,41,31,0.55); }
+        .ct-hero-l { display: block; font-size: 14px; color: rgba(255,255,255,.72); }
+        .ct-hero-v { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 34px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0 4px; color: #fff; font-variant-numeric: tabular-nums; }
+        .ct-hero-s { font-size: 13px; color: rgba(255,255,255,.78); }
+        .ct-hero-cx { margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08); }
+        .ct-hero-cx-t { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; color: rgba(255,255,255,.8); } .ct-hero-cx-t b { color: #fff; font-size: 14px; } .ct-hero-cx-t small { color: rgba(255,255,255,.62); font-weight: 500; font-size: 12.5px; }
+        .ct-hero-bar { height: 7px; border-radius: 9px; background: rgba(255,255,255,.15); margin-top: 8px; overflow: hidden; } .ct-hero-bar i { display: block; height: 100%; background: #6EE7B7; border-radius: 9px; }
+        .ct-pag-w { margin-bottom: 12px; } .ct-pag-w .ct-pag { margin-bottom: 8px; }
+        /* Contas: recebi, pago as contas, sobra para investir */
+        .mt-vale { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 14px; border: 1px solid var(--hair); font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+        .mt-vale i { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: #EDE9FE; color: #6D28D9; flex-shrink: 0; font-style: normal; }
+        .mt-vale span { flex: 1; min-width: 0; } .mt-vale b { display: block; font-size: 15px; } .mt-vale small { display: block; font-size: 12.5px; color: var(--text-dim); }
+        .ins-lista { margin-top: 8px; }
+        .oa-passos .oa-st { position: relative; padding-left: 38px; }
+        .oa-n { position: absolute; left: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; font-style: normal; background: var(--surface-3); color: var(--text-dim); }
+        .oa-n.in { background: #DCFCE7; color: #15803D; } .oa-n.out { background: #FEE2E2; color: #B91C1C; }
+        .oa-res .oa-n { position: static; display: inline-grid; margin-right: 8px; width: 24px; height: 24px; background: #16A34A; color: #fff; vertical-align: middle; }
+        .oa-res .oa-res-lb { display: flex; align-items: center; }
+        .oa-inv { margin-top: 10px; padding-top: 10px; border-top: 1px dashed currentColor; opacity: .9; font-size: 13px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        @media (min-width: 1100px) { .oa-topo { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; align-items: start; } .oa-topo > * { margin-top: 0 !important; } }
         /* modo Simples x Completo */
         .modo-esc { display: grid; gap: 10px; }
         @media (min-width: 560px) { .modo-esc { grid-template-columns: 1fr 1fr; } }
@@ -5735,17 +5755,13 @@ function App() {
         </header>
         <NavStrip items={NAV_ALL.filter((t) => !["backup", "importar", "visao"].includes(t.id) && !ocultasNav.includes(t.id))} active={activeTab} onPick={goTab} />
       </div>
-      <Dock active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={ocultasNav} semMais={simples} />
-      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={ocultasNav} />
+      <Dock active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} onVale={() => setValeAberto(true)} ocultar={ocultasNav} semMais={simples} />
+      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} onVale={() => setValeAberto(true)} ocultar={ocultasNav} />
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
         {!desk && (activeTab === "calendario" || activeTab === "faturamento") && <GrupoSeg itens={[["calendario", "Agenda"], ["faturamento", "Recebimentos"]]} ativo={activeTab} onPick={goTab} />}
-        {!desk && (activeTab === "despesas" || activeTab === "organizacao") && <GrupoSeg itens={[["despesas", "Contas"], ["organizacao", "Organizar"]]} ativo={activeTab} onPick={goTab} />}
-        {activeTab === "organizacao" && (
-          <OrganizacaoTab viewYear={viewYear} viewMonth={viewMonth} incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} invItems={monthInvestments.filter((i) => i.tipo !== "ajuste")} goTab={goTab}
-            history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} />
-        )}
+
         {activeTab === "inicio" && (
           <DashboardTab
             viewMonth={viewMonth} viewYear={viewYear}
@@ -5789,6 +5805,8 @@ function App() {
             monthExpenseItems={monthExpenseItems} addExpense={addExpense} addRecurringExpense={addRecurringExpense}
             viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} dedSignal={signals.dedutivel} limits={limits} setLimit={setLimit} updateExpense={updateExpense} updateRecurringExpense={updateRecurringExpense}
             desk={desk} simples={simples} history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} goTab={goTab}
+            topo={<OrganizacaoTab parte="topo" viewYear={viewYear} viewMonth={viewMonth} incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} invItems={monthInvestments.filter((i) => i.tipo !== "ajuste")} goTab={goTab} />}
+            rodape={<OrganizacaoTab parte="rodape" viewYear={viewYear} viewMonth={viewMonth} incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} invItems={[]} goTab={goTab} history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} />}
             catAprendida={contab.catAprendida || {}} aprenderCat={(desc, cat) => { const k = chaveLoja(desc); if (k) setContab((p) => ({ ...p, catAprendida: { ...(p.catAprendida || {}), [k]: cat } })); }}
           />
         )}
@@ -5799,7 +5817,7 @@ function App() {
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
         {activeTab === "metas" && (
-          <GoalsTab valoresPlantao={valoresPlantao} goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
+          <GoalsTab onVale={simples ? () => setValeAberto(true) : null} valoresPlantao={valoresPlantao} goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
         )}
         {activeTab === "visao" && (
           <OverviewTab chartScope={chartScope} setChartScope={setChartScope} expensesByDesc={expensesByDesc} investByCategory={investByCategory}
@@ -5927,11 +5945,6 @@ function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, 
                 <i style={{ background: bg }} aria-hidden="true"><ProIc n={ic} color={IC_TOM[bg]} /></i><span><b>{l}</b><small>{d}</small></span><IconChevronRight size={18} />
               </button>
             ))}
-            <div className={`add-mini-row ${simples ? "um" : ""}`}>
-              {!simples && <button type="button" className="add-mini" onClick={() => onOutro("aporte")}><i aria-hidden="true"><IconTrending size={19} /></i><span>Investimento</span></button>}
-              {!simples && <button type="button" className="add-mini" onClick={() => onOutro("importar")}><i aria-hidden="true"><IconUpload size={19} /></i><span>Importar</span></button>}
-              <button type="button" className="add-mini" id="add-vale" onClick={() => onOutro("vale")}><i aria-hidden="true"><ProIc n="calculo" size={19} /></i><span>Vale a pena?</span></button>
-            </div>
           </>
         )}
         {kind === "plantao" && <PlantaoAddForm vinculos={vinculos} taxaPadrao={taxaPadrao} onSave={(d) => { addPlantao(d); onClose(); }} />}
@@ -6875,7 +6888,7 @@ function PinGate({ hash, bioId, onOk, onForget }) {
 }
 
 // ---- Organização financeira (modelo "caminho do dinheiro"): entra − contas − investido = livre para gastos extras ----
-function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invItems, goTab, history12 = [], chartMonths, setChartMonths, goMonth }) {
+function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invItems, goTab, history12 = [], chartMonths, setChartMonths, goMonth, parte = "" }) {
   const gv = useGv();
   const [prev, setPrevState] = useState(() => lsGet("mediplan-org-previstos") !== "0");
   const setPrev = (v) => { lsSet("mediplan-org-previstos", v ? "1" : "0"); setPrevState(v); };
@@ -6938,45 +6951,7 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
       </>
     );
   };
-  return (
-    <div className="oa">
-      <div className="oa-chips" role="group" aria-label="O que entra na conta">
-        <button type="button" className={!prev ? "on" : ""} aria-pressed={!prev} onClick={() => setPrev(false)}>Só o que já aconteceu</button>
-        <button type="button" className={prev ? "on" : ""} aria-pressed={prev} onClick={() => setPrev(true)}>Mês completo</button>
-      </div>
-
-      <div className="card oa-flow">
-        <h3 className="oa-h">O caminho do dinheiro em {mes}</h3>
-        <div className="oa-st">
-          <span className="oa-lb">Entra no mês<small>{fmtBRL(recebido)} já caiu{prev ? ` · ${fmtBRL(aReceber)} ainda vai cair` : ""}</small></span>
-          <b className="oa-v in mono">{fmtBRL(entra)}</b>
-          <div className="oa-bar"><i className="in" style={{ width: pct(recebido) }} />{prev && <i className="in2" style={{ width: pct(aReceber) }} />}</div>
-        </div>
-        <div className="oa-st">
-          <span className="oa-lb">Contas do mês<small>{fmtBRL(pagas)} pagas{prev ? ` · ${fmtBRL(aPagar)} a pagar` : ""}</small></span>
-          <b className="oa-v out mono">− {fmtBRL(contas)}</b>
-          <div className="oa-bar"><i className="out" style={{ width: pct(pagas) }} />{prev && <i className="out2" style={{ width: pct(aPagar) }} />}</div>
-        </div>
-        <div className="oa-st">
-          <span className="oa-lb">Investido<small>{nAportes === 0 ? "nenhum aporte neste mês" : nAportes === 1 ? "1 aporte neste mês" : `${nAportes} aportes neste mês`}</small></span>
-          <b className="oa-v inv mono">− {fmtBRL(Math.max(0, investido))}</b>
-          <div className="oa-bar"><i className="inv" style={{ width: pct(Math.max(0, investido)) }} /></div>
-        </div>
-        <div className={`oa-res ${livre < 0 ? "neg" : ""}`}>
-          <div className="oa-res-lb">{prev ? (livre >= 0 ? "Livre para gastos extras" : "Falta para fechar o mês") : (livre >= 0 ? "Sobrou até agora" : "Saiu mais do que entrou")}</div>
-          <div className="oa-res-v mono">{fmtBRL(Math.abs(livre))}</div>
-          <div className="oa-res-sub">
-            {!prev && <>{livre >= 0 ? "Contando só o que já caiu e o que já foi pago." : "Até agora, as contas pagas e os investimentos passaram o que já caiu."}</>}
-            {prev && rel === 0 && livre > 0 && diasRest > 0 && <>Dá cerca de <b>{fmtBRL(livre / diasRest)} por dia</b> {diasRest === 1 ? "hoje" : `nos ${diasRest} dias que faltam`}.</>}
-            {prev && rel === 0 && livre < 0 && <>As contas e os investimentos do mês passam o que entra.</>}
-            {prev && rel < 0 && (livre >= 0 ? <>Foi o que sobrou em {mes}.</> : <>Em {mes}, as saídas passaram as entradas.</>)}
-            {prev && rel > 0 && <>Previsão com o que já está lançado para {mes}.</>}
-            {!prev && (aReceber > 0 || aPagar > 0) && <> Sem contar {fmtBRL(aReceber)} a receber e {fmtBRL(aPagar)} a pagar.</>}
-          </div>
-        </div>
-      </div>
-
-      {sugestao && (
+  const sugCard = sugestao && (
         <div className="card oa-list oa-sug" id="oa-sugestao">
           <div className="oa-sug-top">
             <div><h3 className="oa-h">O que pagar agora</h3><span className="oa-sug-cx">Você tem <b className="mono">{fmtBRL(sugestao.caixa)}</b> do que já caiu</span></div>
@@ -7004,36 +6979,45 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
             </>
           )}
         </div>
-      )}
-
-      <div className="card oa-list">
-        <h3 className="oa-h">Ainda vai cair</h3>
-        {lista("cair", vaiCair, (it) => (
-          <div key={it.key} className="oa-li">
-            {diaBox(it.dateIso)}
-            <span className="oa-li-n"><b>{it.nome}</b><small>{subRec(it)}</small></span>
-            <span className="oa-li-r"><b className="in mono">{fmtBRL(it.net)}</b>{typeof it.toggle === "function" && <button type="button" onClick={it.toggle}>Recebi</button>}</span>
-          </div>
-        ), `Tudo o que estava previsto para ${mes} já caiu.`, "faturamento", "Ver todas as receitas")}
-      </div>
-
-      <div className="card oa-list">
-        <h3 className="oa-h">Ainda vai sair</h3>
-        {lista("sair", vaiSair, (it) => { const s = subPag(it.dateIso); return (
-          <div key={it.key} className="oa-li">
-            {diaBox(it.dateIso)}
-            <span className="oa-li-n"><b>{it.description}</b><small className={s.late ? "late" : ""}>{s.t}</small></span>
-            <span className="oa-li-r"><b className="mono">{fmtBRL(it.amount)}</b>{typeof it.toggle === "function" && <button type="button" onClick={it.toggle}>Paguei</button>}</span>
-          </div>
-        ); }, `Nenhuma conta em aberto em ${mes}.`, "despesas", "Ver todas as contas")}
-      </div>
-
+      );
+  const sobraCard = (
       <div className="card" id="oa-sobra-meses">
         <div className="card-head"><h3 className="card-title">Sobra mês a mês</h3>{setChartMonths && <RangeTabs value={chartMonths} onChange={setChartMonths} />}</div>
         <SvgBarChart data={history12} height={200} color={TEAL} negativeColor={BRICK} signed valueKey="leftover" onOpen={(d) => goMonth && goMonth(d.y, d.m)} />
       </div>
+  );
+  const chips = (
+    <div className="oa-chips" role="group" aria-label="O que entra na conta">
+      <button type="button" className={!prev ? "on" : ""} aria-pressed={!prev} onClick={() => setPrev(false)}>Até agora</button>
+      <button type="button" className={prev ? "on" : ""} aria-pressed={prev} onClick={() => setPrev(true)}>Mês inteiro</button>
     </div>
   );
+  // o raciocínio do mês: quanto recebo, quanto vai para as contas e quanto sobra para investir
+  const sobraP = entra - contas;
+  const fluxo = (
+    <div className="card oa-flow oa-passos" id="oa-fluxo">
+      <h3 className="oa-h">Como fica {mes}</h3>
+      <div className="oa-st"><i className="oa-n in">1</i>
+        <span className="oa-lb">Você recebe<small>{fmtBRL(recebido)} já caiu{prev ? ` · ${fmtBRL(aReceber)} ainda vai cair` : ""}</small></span>
+        <b className="oa-v in mono">{fmtBRL(entra)}</b>
+        <div className="oa-bar"><i className="in" style={{ width: pct(recebido) }} />{prev && <i className="in2" style={{ width: pct(aReceber) }} />}</div>
+      </div>
+      <div className="oa-st"><i className="oa-n out">2</i>
+        <span className="oa-lb">Paga as contas<small>{fmtBRL(pagas)} pagas{prev ? ` · ${fmtBRL(aPagar)} a pagar` : ""}</small></span>
+        <b className="oa-v out mono">− {fmtBRL(contas)}</b>
+        <div className="oa-bar"><i className="out" style={{ width: pct(pagas) }} />{prev && <i className="out2" style={{ width: pct(aPagar) }} />}</div>
+      </div>
+      <div className={`oa-res ${sobraP < 0 ? "neg" : ""}`}>
+        <div className="oa-res-lb"><i className="oa-n">3</i>{sobraP >= 0 ? (prev ? "Sobra para investir" : "Sobrou até agora") : "Falta para pagar as contas"}</div>
+        <div className="oa-res-v mono">{fmtBRL(Math.abs(sobraP))}</div>
+        <div className="oa-res-sub">{sobraP >= 0 ? (prev ? "É o que fica livre depois das contas. Invista se quiser." : "Do que já caiu, depois das contas pagas.") : "As contas do mês passam o que entra."}</div>
+        {investido > 0 && sobraP >= 0 && <div className="oa-inv"><span>Já investido em {mes}: <b className="mono">{fmtBRL(investido)}</b></span><span>Ainda livre: <b className="mono">{fmtBRL(sobraP - investido)}</b></span></div>}
+      </div>
+    </div>
+  );
+  if (parte === "topo") return <div className="oa">{chips}<div className="oa-topo">{fluxo}{sugCard}</div></div>;
+  if (parte === "rodape") return <div className="oa oa-rodape">{sobraCard}</div>;
+  return <div className="oa">{chips}{fluxo}{sugCard}{sobraCard}</div>;
 }
 
 function ThemeCard({ tema, setTema }) {
@@ -7312,8 +7296,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
     return { k, nome, ic, bg, v, oque: oque(v), quem: [...new Set(l.map((i) => i.nome.split(" · ")[0]))].slice(0, 3).join(", ") };
   }).filter(Boolean);
   const quadro = (
-    <div className="card" id="ct-formas">
-      <div className="card-head"><h3 className="card-title">Seus recebimentos e os impostos</h3><span className="card-note">{mes}</span></div>
+    <div className="ct-formas-in">
       {resumoFormas.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Nenhuma receita em {mes}.</div> : resumoFormas.map((g) => (
         <div key={g.k} className="ct-fm" data-forma={g.k}>
           <i style={{ background: g.bg }} aria-hidden="true"><ProIc n={g.ic} size={19} color={IC_TOM[g.bg]} /></i>
@@ -7326,24 +7309,14 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   );
   const agenda = (
     <div className="card" id="ct-agenda">
-      <div className="card-head"><h3 className="card-title">Agenda de impostos</h3><span className="card-note">{mes} · referente a {mesAnt}</span></div>
-      <div className="ct-pag" role="group" aria-label="Como você paga os impostos">
-        <button type="button" className={`chip sm ${!boleto ? "active" : ""}`} aria-pressed={!boleto} onClick={() => set("pagamento", "guias")}>Pago as guias</button>
-        <button type="button" className={`chip sm ${boleto ? "active" : ""}`} aria-pressed={boleto} onClick={() => set("pagamento", "boleto")}>Boleto único do contador</button>
-      </div>
-      {boleto && (
-        <div className="ct-bol">
-          <div className="field"><label htmlFor="ct-bol-v">Valor do boleto (R$)</label><MoneyInput id="ct-bol-v" value={contab.boletoValor === undefined ? "" : contab.boletoValor} onChange={(v) => set("boletoValor", v)} placeholder="em branco: o app estima" /></div>
-          <div className="field"><label htmlFor="ct-bol-d">Vence todo dia</label><input id="ct-bol-d" type="number" min="1" max="31" value={contab.boletoDia || 20} onChange={(e) => set("boletoDia", e.target.value)} /></div>
-        </div>
-      )}
+      <div className="card-head"><h3 className="card-title">Guias para pagar</h3><span className="card-note">referente a {mesAnt}</span></div>
       {guias.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>{prevGross > 0 ? "Nenhuma guia neste mês." : `Sem receitas em ${mesAnt}, então não há imposto a pagar em ${mes}.`}</div> : (
         <div className="ct-list">
           {guias.map((g) => (
             <div key={g.id} className={`ct-row ${pagos[g.id] ? "pago" : ""}`} data-guia={g.id}>
               <span className="ct-l"><b>{g.nome}</b>{stGuia(g)}<small>vence {fmtDatePt(g.data)}{g.sub ? " · " + g.sub : ""}</small></span>
               <b className="mono ct-v">{fmtBRL(g.valor)}</b>
-              <button type="button" className={`btn ${pagos[g.id] ? "btn-ghost" : "btn-primary"} sm`} onClick={() => pagos[g.id] ? desfazerGuia(mk, g.id) : pagarGuia(mk, g)}>{pagos[g.id] ? "Desfazer" : "Marcar como pago"}</button>
+              <button type="button" className={`btn ${pagos[g.id] ? "btn-ghost" : "btn-primary"} sm`} onClick={() => pagos[g.id] ? desfazerGuia(mk, g.id) : pagarGuia(mk, g)}>{pagos[g.id] ? "Desfazer" : "Paguei"}</button>
             </div>
           ))}
         </div>
@@ -7352,12 +7325,8 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   );
   const caixinha = (
     <div className="card" id="ct-caixa">
-      <div className="card-head"><h3 className="card-title">Caixinha do imposto</h3><span className="card-note">a parte do imposto de cada recebimento, menos CLT</span></div>
+      <div className="card-head"><h3 className="card-title">Separe do que recebeu</h3><span className="card-note">marque quando separar</span></div>
       {recebidos.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>Quando um pagamento cair, aparece aqui quanto dele é imposto para você separar.</div> : (<>
-        <div className="ct-cx">
-          <Ring pct={pctCx} size={86} stroke={9} color="#0F766E"><b style={{ fontSize: 15 }}>{pctCx}%</b></Ring>
-          <div><b className="mono" style={{ fontSize: 20, display: "block" }}>{fmtBRL(guardado)} separados</b><span className="line-sub">de {fmtBRL(alvo)} de imposto dos recebimentos de {mes}</span>{alvo - guardado > 0.004 && <span style={{ display: "block", color: "#B45309", fontWeight: 600, fontSize: 13.5 }}>Falta separar {fmtBRL(alvo - guardado)}</span>}</div>
-        </div>
         <div className="ct-list">
           {gruposCx.map((g) => { const ok = grupoSep(g); return (
             <label key={g.nome} className="ct-row ct-chk">
@@ -7373,7 +7342,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   );
   const notas = (
     <div className="card" id="ct-notas">
-      <div className="card-head"><h3 className="card-title">Nota × recebimento</h3><span className="card-note">{mes}</span></div>
+      <div className="card-head"><h3 className="card-title">Notas do mês</h3><span className="card-note">{mes}</span></div>
       {semNotaPorForma.length > 0 && <div className="field-hint" style={{ marginTop: 0, marginBottom: 6 }}>Não precisam de nota: {[...new Set(semNotaPorForma.map((i) => i.nome.split(" · ")[0] + " (" + FORMA_CURTA[i.forma] + ")"))].join(", ")}.</div>}
       {tomadores.length === 0 ? <div className="empty-state" style={{ padding: "12px 0" }}>{semNotaPorForma.length ? "Nenhuma receita com nota em " + mes + "." : "Nenhuma receita em " + mes + "."}</div> : (
         <div className="ct-list">
@@ -7382,7 +7351,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
               <span className="ct-l"><b><span className="legend-dot" style={{ background: t.cor, marginRight: 7 }} />{t.nome}{t.n > 1 ? <small style={{ display: "inline", marginLeft: 6 }}>({t.n})</small> : null}</b>
                 <small>{emit ? "nota emitida" : <b style={{ color: "#B45309" }}>falta emitir a nota</b>} · {t.pend === 0 ? <b style={{ color: "#15803D" }}>recebido</b> : t.atras ? <b style={{ color: "#B91C1C" }}>pagamento atrasado</b> : "previsto " + fmtDatePt(t.data)}</small></span>
               <b className="mono ct-v">{fmtBRL(t.bruto)}</b>
-              <button type="button" className={`btn ${emit ? "btn-ghost" : "btn-primary"} sm`} onClick={() => toggleNota(t.nome)}>{emit ? "Desmarcar nota" : "Nota emitida"}</button>
+              <button type="button" className={`btn ${emit ? "btn-ghost" : "btn-primary"} sm`} onClick={() => toggleNota(t.nome)}>{emit ? "Desfazer" : "Emiti"}</button>
             </div>
           ); })}
         </div>
@@ -7461,30 +7430,51 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
     </div>
   );
   const calcSub = contab.modo === "contab" ? (contab.regime === "presumido" ? "Lucro Presumido" : "Simples Nacional") + " · calculado pelo app" : "porcentagem fixa de " + (Number(taxRateGeral) || 0).toLocaleString("pt-BR") + "%";
-  const gavetas = (
-    <>
-      <div className={desk ? "dsec" : "ct-sec"}>Para o ano</div>
-      <div className="dgvs">
-        <DGv id="ct-ir" wide={desk} open icon={<IconCalc size={18} />} tone="#15803D" title={"Imposto de renda de " + viewYear} sub="valor aproximado" val={rend > 0 ? (saldoIr >= 0 ? "recebe " : "paga ") + fmtBRL(Math.abs(saldoIr)) : ""}>{irBody}</DGv>
-        <DGv id="ct-ded" icon={<IconReceipt size={18} />} tone="#6D28D9" title="Gastos que descontam no IR" sub="saúde e escola, com as notas" val={rend > 0 && devolucaoDed > 0 ? fmtBRL(devolucaoDed) : fmtBRL(somaSaude + somaEscola)}>{dedBody}</DGv>
-        <DGv id="ct-rel" icon={<IconDownload size={18} />} tone="#1D4ED8" title="Relatório para o contador" sub="planilha do mês ou do ano" val="">{relBody}</DGv>
-        <DGv id="ct-calc" icon={<IconCalc size={18} />} tone="#334155" title="Como o imposto é calculado" sub={calcSub} val="">
-          <ContabCalc contab={contab} setContab={setContab} app={app} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} />
-        </DGv>
-      </div>
-    </>
+  const proxGuia = guias.filter((x) => !pagos[x.id]).sort((x, y) => String(x.data).localeCompare(String(y.data)))[0];
+  const nPagas = guias.filter((x) => pagos[x.id]).length;
+  const heroCt = (
+    <div className="ct-hero" id="ct-resumo">
+      <span className="ct-hero-l">Imposto de {mes}</span>
+      <b className="mono ct-hero-v">{comCentavos(fmtBRL(totGuias))}</b>
+      <span className="ct-hero-s">{(() => { if (guias.length === 0) return "nada a pagar neste mês"; if (nPagas === guias.length) return "tudo pago"; const venc = guias.filter((x) => !pagos[x.id] && x.data < hoje).length; if (venc) return `${venc} ${venc === 1 ? "guia vencida" : "guias vencidas"}: pague logo`; return `${guias.length - nPagas} ${guias.length - nPagas === 1 ? "guia a pagar" : "guias a pagar"} · próxima vence ${fmtDatePt(proxGuia.data).slice(0, 5)}`; })()}</span>
+      {alvo > 0.004 && (
+        <div className="ct-hero-cx">
+          <div className="ct-hero-cx-t"><span>Separado do que recebeu</span><b className="mono">{fmtBRL(guardado)} <small>de {fmtBRL(alvo)}</small></b></div>
+          <div className="ct-hero-bar"><i style={{ width: Math.min(100, (guardado / alvo) * 100) + "%" }} /></div>
+        </div>
+      )}
+    </div>
   );
+  const gFormas = <DGv id="ct-formas" icon={<IconReceipt size={18} />} tone="#0F766E" title="De onde vem o imposto" sub="cada forma de receber, explicada" val="">{quadro}</DGv>;
+  const gIr = <DGv id="ct-ir" open icon={<IconCalc size={18} />} tone="#15803D" title={"Imposto de renda de " + viewYear} sub="valor aproximado" val={rend > 0 ? (saldoIr >= 0 ? "recebe " : "paga ") + fmtBRL(Math.abs(saldoIr)) : ""}>{irBody}</DGv>;
+  const gDed = <DGv id="ct-ded" open icon={<IconReceipt size={18} />} tone="#6D28D9" title="Gastos que descontam no IR" sub="saúde e escola, com as notas" val={rend > 0 && devolucaoDed > 0 ? fmtBRL(devolucaoDed) : fmtBRL(somaSaude + somaEscola)}>{dedBody}</DGv>;
+  const gRel = <DGv id="ct-rel" open icon={<IconDownload size={18} />} tone="#1D4ED8" title="Relatório para o contador" sub="planilha do mês ou do ano" val="">{relBody}</DGv>;
+  const gCalc = <DGv id="ct-calc" icon={<IconCalc size={18} />} tone="#334155" title="Ajustar os impostos" sub={calcSub + (boleto ? " · boleto do contador" : " · guias")} val="">
+          <div className="ct-pag-w">
+      <div className="ct-pag" role="group" aria-label="Como você paga os impostos">
+          <button type="button" className={`chip sm ${!boleto ? "active" : ""}`} aria-pressed={!boleto} onClick={() => set("pagamento", "guias")}>Pago as guias</button>
+          <button type="button" className={`chip sm ${boleto ? "active" : ""}`} aria-pressed={boleto} onClick={() => set("pagamento", "boleto")}>Boleto único do contador</button>
+        </div>
+        {boleto && (
+          <div className="ct-bol">
+            <div className="field"><label htmlFor="ct-bol-v">Valor do boleto (R$)</label><MoneyInput id="ct-bol-v" value={contab.boletoValor === undefined ? "" : contab.boletoValor} onChange={(v) => set("boletoValor", v)} placeholder="em branco: o app estima" /></div>
+            <div className="field"><label htmlFor="ct-bol-d">Vence todo dia</label><input id="ct-bol-d" type="number" min="1" max="31" value={contab.boletoDia || 20} onChange={(e) => set("boletoDia", e.target.value)} /></div>
+          </div>
+        )}
+  </div>
+          <ContabCalc contab={contab} setContab={setContab} app={app} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} />
+        </DGv>;
+  const [abaCt, setAbaCt] = useState("mes");
   return (
     <div className={`ct ${desk ? "desk" : ""}`}>
-      {kpis}
-      {quadro}
-      {desk ? (
-        <>
-          <div className="dgrid" style={{ gridTemplateColumns: "1.4fr 1fr", alignItems: "start" }}>{agenda}{caixinha}</div>
-          {notas}
-        </>
-      ) : (<>{agenda}{caixinha}{notas}</>)}
-      {gavetas}
+      <GrupoSeg itens={[["mes", "Este mês"], ["notas", "Notas"], ["ir", "IR do ano"]]} ativo={abaCt} onPick={setAbaCt} />
+      {abaCt === "mes" && <>
+        {heroCt}
+        {desk ? <div className="dgrid" style={{ gridTemplateColumns: "1.3fr 1fr", alignItems: "start" }}>{agenda}{caixinha}</div> : <>{agenda}{caixinha}</>}
+        <div className="dgvs">{gFormas}{gCalc}</div>
+      </>}
+      {abaCt === "notas" && <>{notas}<div className="dgvs">{gRel}</div></>}
+      {abaCt === "ir" && <div className={desk ? "dgrid" : "dgvs"} style={desk ? { gridTemplateColumns: "1.3fr 1fr", alignItems: "start" } : null}>{gIr}{gDed}</div>}
       <div className="ct-off"><button type="button" className="link-btn" onClick={() => { if (window.confirm("Esconder a aba Contabilidade? Dá para mostrar de novo em Configurações.")) set("aba", false); }}>Não uso esta aba: esconder</button></div>
     </div>
   );
@@ -8123,6 +8113,19 @@ function Avisos({ alerts = [] }) {
     </div>
   );
 }
+function InsightsCaixa({ items = [] }) {
+  const [aberto, setAberto] = useState(false);
+  if (!items.length) return null;
+  return (
+    <div className="avisos ins-caixa" id="insights-caixa">
+      <button type="button" className="avisos-h alert-info" aria-expanded={aberto} onClick={() => setAberto(!aberto)}>
+        <span className="al-dot" /><b>{items.length} {items.length === 1 ? "insight" : "insights"}</b><span className="avisos-sub">{items[0].title}</span>
+        <IconChevronDown size={16} />
+      </button>
+      {aberto && <div className="ins-lista"><InsightList items={items} /></div>}
+    </div>
+  );
+}
 // ---- tela Hoje: lista do que pede ação hoje, com um toque para resolver ----
 function HojeCard({ itens = [] }) {
   const ic = (x) => x.tipo === "receber" ? <IconArrowIn size={18} /> : x.tipo === "pagar" ? <IconArrowOut size={18} /> : <ProIc n="plantao" size={18} />;
@@ -8297,6 +8300,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${mesNome} de ${viewYear}.`}</p></div>
           {guia}
           {alerts.length > 0 && <Avisos alerts={alerts} />}
+          <InsightsCaixa items={insights} />
           <div className="dhero" id="mes-simples">
             <div className="dhero-s"><span>Sobra em {mesNome}</span><b className="mono" style={sobraMes < 0 ? { color: "#FCA5A5" } : null}><CountUp value={sobraMes} /></b><small>Já caiu <strong className="mono">{fmtBRL(jaCaiu)}</strong> de <strong className="mono">{fmtBRL(curStats.net)}</strong></small>{separar}</div>
             <div className="dkpis">
@@ -8319,6 +8323,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         {guia}
         {ehMesAtual && hojeInfo && <HojeCard itens={hojeInfo.itens} />}
         {alerts.length > 0 && <Avisos alerts={alerts} />}
+          <InsightsCaixa items={insights} />
         <div className="balance-card" id="mes-simples">
           <div className="bc-top">Sobra em {mesNome}</div>
           <div className="bc-value mono" style={sobraMes < 0 ? { color: "var(--brick)" } : null}><CountUp value={sobraMes} /></div>
@@ -8344,6 +8349,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         {alerts.length > 0 && (
           <Avisos alerts={alerts} />
         )}
+        <InsightsCaixa items={insights} />
         <div className="dhero">
           <div className="dhero-s"><span>Saldo em caixa</span><b className="mono"><CountUp value={saldoRealizado} /></b><small>Patrimônio total <strong className="mono">{fmtBRL(patrimonioTotal)}</strong></small><small>Investido <strong className="mono">{fmtBRL(portfolio.totalValue || totalInvestedAllTime)}</strong></small></div>
           <div className="dkpis">
@@ -8382,9 +8388,6 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
               return <div key={g.id}><Ring pct={pct} size={58} stroke={7} color={g.cor}><b style={{ fontSize: 12 }}>{pct.toFixed(0)}%</b></Ring><span><b>{g.nome}</b><small className="mono">{fmtBRL(at)} de {fmtBRL(g.valorAlvo)}</small></span></div>;
             })}</div>}
           </DGv>
-          <DGv id="ini-ins" wide icon={<IconTrending size={18} />} tone="#A16207" title="Insights do mês" sub={insights.length ? insights[0].title : "nada novo por enquanto"} val={insights.length ? insights.length + (insights.length === 1 ? " novidade" : " novidades") : ""}>
-            <InsightList items={insights} max={6} />
-          </DGv>
         </DGrid>
         <button className="btn btn-ghost" style={{ marginTop: 16 }} onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>
       </div>
@@ -8400,6 +8403,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       {alerts.length > 0 && (
         <Avisos alerts={alerts} />
       )}
+      <InsightsCaixa items={insights} />
 
       <div className="balance-card">
         <div className="bc-top">Saldo em caixa</div>
@@ -8433,12 +8437,6 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           )}
         </div>
 
-      {insights.length > 0 && (
-        <div className="card" id="hoje-insights">
-          <div className="card-head"><h3 className="card-title">Insights do mês</h3>{insights.length > 3 && <button className="link-btn" onClick={() => setInsTodos(!insTodos)}>{insTodos ? "ver menos" : `ver todos (${insights.length})`}</button>}</div>
-          <InsightList items={insights} max={insTodos ? 0 : 3} />
-        </div>
-      )}
       <button className="btn btn-ghost" onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>
     </div>
   );
@@ -8871,7 +8869,7 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch, hospitais = [] }) {
   );
 }
 
-function GoalsTab({ valoresPlantao = [], goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0, monthExpenseItems = [], limits = {}, setLimit, viewYear, viewMonth }) {
+function GoalsTab({ onVale = null, valoresPlantao = [], goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0, monthExpenseItems = [], limits = {}, setLimit, viewYear, viewMonth }) {
   const FONTES = [["manual", "Eu informo"], ["carteira", "Meus investimentos"], ["patrimonio", "Meu patrimônio"]];
   const [showForm, setShowForm] = useState(goals.length === 0);
   const [nome, setNome] = useState("");
@@ -8899,6 +8897,7 @@ function GoalsTab({ valoresPlantao = [], goals, addGoal, removeGoal, contributeG
   };
   return (
     <div className="mt">
+      {onVale && <button type="button" className="card mt-vale" id="mt-vale" onClick={onVale}><i aria-hidden="true"><ProIc n="calculo" size={20} /></i><span><b>Vale a pena esse plantão?</b><small>Veja quanto entra, quanto dá por hora e quanto ajuda nas metas</small></span><IconChevronRight size={18} /></button>}
       <TetoGastos monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
 
       <div className="mt-head"><h3>Metas</h3><button type="button" className="link-btn" onClick={() => setShowForm((v) => !v)}>{showForm ? "Fechar" : "+ Nova meta"}</button></div>
@@ -9227,7 +9226,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   );
 }
 
-function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, simples = false, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
+function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, simples = false, history12 = [], chartMonths, setChartMonths, goMonth, goTab, topo = null, rodape = null }) {
   const [editKey, setEditKey] = useState(null);
   const gv = useGv();
   const [showForm, setShowForm] = useState(false);
@@ -9291,12 +9290,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
 
   return (
     <div>
-      <div className="kpi-row">
-        <Kpi label="Total do mês" value={fmtBRL(total)} />
-        <Kpi label="Já pago" value={fmtBRL(paidTotal)} tone="var(--teal)" sub={pct + "% quitado"} />
-        <Kpi label="Falta pagar" value={fmtBRL(totalPending)} tone="var(--brick)" />
-        <Kpi label="Contas no mês" value={monthExpenseItems.length} sub={monthExpenseItems.filter((e) => !e.paid).length + " pendente(s)"} />
-      </div>
+      {topo}
 
       <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr", alignItems: "start" } : null}>
       <div className="card">
@@ -9456,6 +9450,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
         </DGrid>
       ) : conteudo; })()}
 
+      {rodape}
     </div>
   );
 }

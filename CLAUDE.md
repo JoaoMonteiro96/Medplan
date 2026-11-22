@@ -57,14 +57,16 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 
 ## Como o app está organizado (novembro de 2026)
 
-- **Celular:** barra de baixo com Hoje, Plantões (Agenda e Recebimentos), botão +, Contas (Contas e Organizar) e Mais (Investimentos, Metas e Contabilidade). No modo Simples, **Metas** fica no lugar do Mais. **Computador:** barra lateral com as mesmas telas.
-- **Configurações só pela engrenagem** do topo (a bolinha da nuvem é só indicador). **Importar** e **"Vale a pena?"** só pelo botão verde + (e "Novo lançamento" no computador).
-- **Relatórios foi removido** (22/11/2026): os insights ficam na Hoje (no computador, no Início), "Sobra mês a mês" fica em Organizar, o PDF do mês na Hoje. O endereço antigo `visao` leva para a Hoje.
+- **Celular:** barra de baixo com Hoje, Plantões (Agenda e Recebimentos), botão +, Contas e Mais (Investimentos, Metas, Contabilidade, Importar e "Vale a pena?"). No modo Simples, **Metas** fica no lugar do Mais, e "Vale a pena?" fica no topo da tela de Metas. **Computador:** barra lateral com as mesmas telas, incluindo Importar e "Vale a pena?".
+- **Botão verde +:** só lançamentos (plantão, cargo, receitas, despesa). **Configurações só pela engrenagem** do topo (a bolinha da nuvem é só indicador).
+- **Contas** (22/11/2026, junta a antiga aba Organizar): no topo, o raciocínio do mês em 3 passos (`OrganizacaoTab parte="topo"`): 1. você recebe, 2. paga as contas, 3. sobra para investir (com "já investido" e "ainda livre"), botões "Até agora" e "Mês inteiro", e "O que pagar agora". Depois a lista de contas e, no fim, "Sobra mês a mês" (`parte="rodape"`). O endereço antigo `organizacao` leva para Contas.
+- **Relatórios foi removido** (22/11/2026): os insights ficam numa faixa que abre e fecha logo abaixo dos avisos (`InsightsCaixa`), "Sobra mês a mês" fica em Contas, o PDF do mês na Hoje. O endereço antigo `visao` leva para a Hoje.
+- **Contabilidade** (no celular, título "Impostos"): abas Este mês (cartão verde com o imposto do mês e quanto já foi separado, "Guias para pagar" com "Paguei", "Separe do que recebeu", e as gavetas "De onde vem o imposto" e "Ajustar os impostos"), Notas ("Notas do mês" com "Emiti" e o relatório do contador) e IR do ano.
 - **Modo Simples e modo Completo** (`OCULTAS_SIMPLES`, `ModoEscolha`): os dados são os mesmos; o Simples esconde investimentos, contabilidade e importar, e mostra o mês em três números (entra, sai, sobra) mais "Separe R$ X para o imposto". A troca fica só em Configurações → Modo do app.
 - **Guia de abertura** (`BoasVindas`, `BV_PASSOS`): 9 telas com todas as funções (cada uma diz em qual modo existe) e a escolha do modo no fim. Só aparece para quem não tem dados e depois que a nuvem terminou de baixar.
 - **Tela Hoje** (`HojeCard`): Trabalho, Para receber e Para pagar, com Recebi/Paguei; "O que pagar agora" (`PagarAgoraMini`).
 - **Férias** (`FeriasSheet`, `resumoFerias`): botão no calendário. Mostra os plantões para passar, quanto deixa de receber e, pelo mês em que o dinheiro cairia, se as contas continuam pagas. Salva no calendário (dias em azul) e pode tirar os plantões da agenda (com Desfazer).
-- **Vale a pena esse plantão?** (`ValePlantao`): no botão +.
+- **Vale a pena esse plantão?** (`ValePlantao`): no menu Mais (no Simples, na tela de Metas) e na barra lateral do computador.
 - **Metas em plantões** (`MetaEmPlantoes`): quantos plantões em cada hospital pagam a meta.
 
 ## O que o João já recusou (não sugerir de novo)
@@ -95,4 +97,4 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Sem textos explicativos no rodapé das seções.** O João não gosta. Dicas só dentro de formulários, quando ajudam a preencher.
 - Ícones de linha (nada de emoji).
 - Mudou uma tela que aparece na página de apresentação ou no vídeo? Ofereça atualizar os dois (`ferramentas/LEIA-ME.md` explica como).
-- **O vídeo de demonstração ainda mostra o menu Mais antigo** (com Importar, Vale a pena e Ajustes). Para regravar, ajuste `ferramentas/video/captura.cjs` e `cenas.py`: Vale a pena e Importar agora abrem pelo botão +, e Ajustes pela engrenagem.
+- **O vídeo de demonstração ainda mostra o menu Mais antigo** (com Importar, Vale a pena e Ajustes). Para regravar, ajuste `ferramentas/video/captura.cjs` e `cenas.py`: Ajustes agora abre pela engrenagem, Organizar virou o topo de Contas e a Contabilidade tem abas.
