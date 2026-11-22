@@ -1419,7 +1419,7 @@ function DProximos({ incomeItems = [], expenseItems = [], max = 6, onVer }) {
     </div>
   );
 }
-function DSide({ active, onPick, onNovo, ocultar = [] }) {
+function DSide({ active, onPick, onNovo, ocultar = [], modo, onModo }) {
   const grupo = (ids) => ids.filter((id) => !ocultar.includes(id)).map((id) => { const t = NAV_ALL.find((x) => x.id === id); if (!t) return null; const Ic = id === "backup" ? IconGear : t.icon; return (
     <button key={id} type="button" data-tab={id} className={`dsb-i ${active === id ? "on" : ""}`} aria-current={active === id ? "page" : undefined} onClick={() => onPick(id)}><Ic size={18} /><span>{NAV_LABELS[id]}</span></button>
   ); });
@@ -1429,6 +1429,7 @@ function DSide({ active, onPick, onNovo, ocultar = [] }) {
       <button type="button" className="dsb-new" onClick={onNovo}><IconPlus size={16} color="#fff" /> Novo lançamento</button>
       <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "organizacao", "metas", "visao", "contabilidade"])}
         <div className="dsb-g">Ferramentas</div>{grupo(["importar", "backup"])}</nav>
+      {onModo && <ModoTroca valor={modo} onTrocar={onModo} />}
     </aside>
   );
 }
@@ -1439,7 +1440,7 @@ const TITULO_CURTO = { inicio: "Hoje", calendario: "Plantões", faturamento: "Pl
 const DOCK_GRUPOS = [["inicio", "Hoje", ["inicio"]], ["calendario", "Plantões", ["calendario", "faturamento"]], null, ["despesas", "Contas", ["despesas", "organizacao"]]];
 const DOCK_MAIS = ["investimentos", "metas", "visao", "contabilidade", "importar", "backup"];
 const DOCK_NOMES = { investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
-function Dock({ active, onPick, onNovo, onVale, ocultar = [] }) {
+function Dock({ active, onPick, onNovo, onVale, ocultar = [], modo, onModo }) {
   const [mais, setMais] = useState(false);
   useEffect(() => {
     if (!mais) return;
@@ -1463,6 +1464,7 @@ function Dock({ active, onPick, onNovo, onVale, ocultar = [] }) {
               ); })}
               {onVale && <button type="button" className="dk-item" id="dk-vale" onClick={() => { setMais(false); onVale(); }}><span><ProIc n="calculo" size={22} /></span>Vale a pena?</button>}
             </div>
+            {onModo && <ModoTroca valor={modo} onTrocar={onModo} />}
           </div>
         </div>
       )}
@@ -1482,6 +1484,112 @@ function GrupoSeg({ itens, ativo, onPick }) {
   return (
     <div className="grp-seg" role="tablist">
       {itens.map(([id, rot]) => <button key={id} type="button" role="tab" aria-selected={ativo === id} className={ativo === id ? "on" : ""} onClick={() => ativo !== id && onPick(id)}>{rot}</button>)}
+    </div>
+  );
+}
+
+// ---- modo Simples x Completo: os dados são os mesmos, o Simples só esconde as seções avançadas ----
+const OCULTAS_SIMPLES = ["investimentos", "visao", "contabilidade", "importar"];
+const MODOS_APP = [
+  ["simples", "Simples", "O essencial para o dia a dia", ["Plantões e recebimentos", "Contas do mês", "Quanto separar para o imposto"]],
+  ["completo", "Completo", "Para acompanhar tudo", ["Tudo do Simples", "Investimentos e patrimônio", "Impostos, importar e relatórios"]],
+];
+function ModoEscolha({ valor, onEscolher }) {
+  return (
+    <div className="modo-esc" role="radiogroup" aria-label="Modo do app">
+      {MODOS_APP.map(([id, nome, sub, itens]) => (
+        <button key={id} type="button" role="radio" aria-checked={valor === id} data-modo={id} className={`modo-op ${valor === id ? "on" : ""}`} onClick={() => onEscolher(id)}>
+          <span className="modo-top"><b>{nome}</b><i className="modo-r" aria-hidden="true">{valor === id && <IconCheck size={13} color="#fff" />}</i></span>
+          <small>{sub}</small>
+          <span className="modo-lista">{itens.map((t) => <span key={t}><IconCheck size={13} />{t}</span>)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+// troca rápida (menu Mais e barra lateral)
+function ModoTroca({ valor, onTrocar }) {
+  return (
+    <div className="modo-troca">
+      <span>Modo do app</span>
+      <div className="modo-seg" role="radiogroup" aria-label="Modo do app">
+        {MODOS_APP.map(([id, nome]) => <button key={id} type="button" role="radio" aria-checked={valor === id} data-modo={id} className={valor === id ? "on" : ""} onClick={() => valor !== id && onTrocar(id)}>{nome}</button>)}
+      </div>
+    </div>
+  );
+}
+// desenhos do guia de abertura: mini telas do próprio app
+function BvIlu({ tipo }) {
+  if (tipo === "plantao") return (
+    <div className="bvi">
+      <div className="bvi-card">
+        <div className="bvi-tit">Novo plantão</div>
+        <div className="bvi-campo"><span>Onde</span><b>Hospital Central</b></div>
+        <div className="bvi-campo"><span>Quando</span><b>Sábado, 12 horas</b></div>
+        <div className="bvi-campo"><span>Quanto</span><b className="mono">R$ 1.500,00</b></div>
+        <div className="bvi-dias">{["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => <i key={i} className={i === 6 ? "on" : ""}>{d}</i>)}<small>Fixo, todo sábado</small></div>
+      </div>
+      <span className="bvi-mais" aria-hidden="true"><IconPlus size={24} color="#fff" /></span>
+    </div>
+  );
+  if (tipo === "recebi") return (
+    <div className="bvi">
+      <div className="bvi-card">
+        <div className="bvi-tit">Para receber <b className="mono">R$ 2.880,00</b></div>
+        <div className="bvi-it"><i style={{ background: "#2563EB22", color: "#2563EB" }}><IconArrowIn size={16} /></i><span><b>UPA Norte</b><small>plantão de 05/11</small></span><span className="bvi-dir"><b className="mono">R$ 1.380,00</b><em className="ok"><IconCheck size={12} />Recebido</em></span></div>
+        <div className="bvi-it"><i style={{ background: "#16A34A22", color: "#16A34A" }}><IconArrowIn size={16} /></i><span><b>Hospital Central</b><small>plantão de 08/11</small></span><span className="bvi-dir"><b className="mono">R$ 1.500,00</b><em><IconCheck size={12} />Recebi</em></span></div>
+      </div>
+    </div>
+  );
+  return (
+    <div className="bvi">
+      <div className="bvi-card">
+        <div className="bvi-tit">Para pagar <b className="mono">R$ 4.700,00</b></div>
+        <div className="bvi-it"><i style={{ background: "#DC262622", color: "#DC2626" }}><IconArrowOut size={16} /></i><span><b>Aluguel</b><small>vence hoje</small></span><span className="bvi-dir"><b className="mono">R$ 2.800,00</b><em><IconCheck size={12} />Paguei</em></span></div>
+        <div className="bvi-it"><i style={{ background: "#F59E0B22", color: "#B45309" }}><IconArrowOut size={16} /></i><span><b>Escola</b><small>vence dia 15</small></span><span className="bvi-dir"><b className="mono">R$ 1.900,00</b></span></div>
+        <div className="bvi-dica"><IconWallet size={15} />Dá para pagar as 2 com o que já caiu</div>
+      </div>
+    </div>
+  );
+}
+const BV_PASSOS = [
+  ["plantao", "Lance seus plantões", "Toque no + e diga onde, quando e quanto. Se o plantão é fixo, escolha os dias uma vez e o app lança os próximos."],
+  ["recebi", "Marque quando o dinheiro cair", "A tela Hoje mostra o que já devia ter caído na conta. Um toque em Recebi e pronto."],
+  ["contas", "Suas contas do mês", "Cadastre as contas fixas uma vez. Elas voltam todo mês, e o app mostra o que dá para pagar com o que já caiu."],
+];
+function BoasVindas({ onFim }) {
+  const [i, setI] = useState(0);
+  const [modo, setModo] = useState("simples");
+  const ult = i === BV_PASSOS.length;
+  useEffect(() => { const k = (e) => { if (e.key === "ArrowRight" && !ult) setI((x) => x + 1); if (e.key === "ArrowLeft") setI((x) => Math.max(0, x - 1)); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [ult]);
+  const passo = BV_PASSOS[i] || [];
+  return (
+    <div className="bv" role="dialog" aria-modal="true" aria-label="Boas-vindas ao Sallos" id="boas-vindas">
+      <div className={`bv-box ${ult ? "ult" : ""}`}>
+        <div className="bv-arte">
+          <div className="bv-topo">
+            <span className="bv-marca"><span className="bv-logo"><IconLogo size={26} /></span><span className="bv-nome">Sa<span>ll</span>os</span></span>
+            {!ult && <button type="button" className="bv-pular" onClick={() => setI(BV_PASSOS.length)}>Pular</button>}
+          </div>
+          {!ult && <div key={i} className="bv-ilu"><BvIlu tipo={passo[0]} /></div>}
+        </div>
+        <div className="bv-txt">
+          <div className="bv-pontos" aria-hidden="true">{[0, 1, 2, 3].map((n) => <i key={n} className={n === i ? "on" : ""} />)}</div>
+          {ult ? (
+            <div key="ult" className="bv-corpo">
+              <h2>Como você quer usar o app?</h2>
+              <p>Os dados são os mesmos nos dois. Dá para trocar quando quiser, no menu Mais.</p>
+              <ModoEscolha valor={modo} onEscolher={setModo} />
+            </div>
+          ) : (
+            <div key={i} className="bv-corpo"><h2>{passo[1]}</h2><p>{passo[2]}</p></div>
+          )}
+          <div className="bv-acoes">
+            {i > 0 ? <button type="button" className="btn btn-ghost" onClick={() => setI(i - 1)}>Voltar</button> : <span />}
+            <button type="button" className="btn btn-primary bv-seguir" onClick={() => (ult ? onFim(modo) : setI(i + 1))}>{ult ? "Começar" : "Continuar"}</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2518,6 +2626,14 @@ function App() {
     setContab((p) => { const m = { ...((p.pagos || {})[mk] || {}) }; delete m[gid]; return { ...p, pagos: { ...(p.pagos || {}), [mk]: m } }; });
   };
   const contabAba = contab.aba !== false;
+  // modo do app: quem já tem dados e nunca escolheu continua no Completo; quem chega agora vê o guia e escolhe
+  const totalDadosApp = vinculos.length + shifts.length + expenses.length + recurringExpenses.length + investments.length + oneOffIncomes.length;
+  const modoApp = contab.modoApp || (totalDadosApp > 0 ? "completo" : "simples");
+  const simples = modoApp === "simples";
+  const [bvAberto, setBvAberto] = useState(false);
+  useEffect(() => { if (loaded && !contab.modoApp && totalDadosApp === 0) setBvAberto(true); }, [loaded]);
+  const trocarModo = (m) => { setContab((p) => ({ ...p, modoApp: m })); if (m === "simples" && OCULTAS_SIMPLES.includes(activeTab)) goTab("inicio"); };
+  const ocultasNav = [...(contabAba ? [] : ["contabilidade"]), ...(simples ? OCULTAS_SIMPLES : [])];
   useEffect(() => { if (!contabAba && activeTab === "contabilidade") setActiveTab("inicio"); }, [contabAba, activeTab]);
 
   const addRecurringExpense = (data) => setRecurringExpenses((prev) => [...prev, { id: uid(), description: data.description, category: data.category || guessExpCat(data.description), amount: Number(data.amount) || 0,
@@ -4865,6 +4981,87 @@ function App() {
         .vale-meta i { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex: none; }
         .vale-vazio { padding: 18px 0 8px; text-align: center; color: var(--text-dim); font-size: 14px; }
         :root[data-theme="dark"] .vale-tom.bom { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .vale-tom.baixo { background: rgba(245,158,11,.12); color: #FCD34D; }
+        /* modo Simples x Completo */
+        .modo-esc { display: grid; gap: 10px; }
+        @media (min-width: 560px) { .modo-esc { grid-template-columns: 1fr 1fr; } }
+        .modo-op { text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 14px 16px 15px; border: 1.5px solid var(--border); border-radius: 18px; background: var(--surface, #fff); font: inherit; color: var(--text); cursor: pointer; transition: border-color .18s, box-shadow .18s; min-width: 0; }
+        .modo-op.on { border-color: #16A34A; box-shadow: 0 0 0 3px rgba(22,163,74,.14); }
+        .modo-op:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+        .modo-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .modo-top b { font-family: "Manrope", "Inter", sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+        .modo-r { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border); display: grid; place-items: center; flex-shrink: 0; font-style: normal; }
+        .modo-op.on .modo-r { background: #16A34A; border-color: #16A34A; }
+        .modo-op > small { font-size: 13px; color: var(--text-dim); }
+        .modo-lista { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+        .modo-lista span { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 500; }
+        .modo-lista svg { color: #16A34A; flex-shrink: 0; }
+        .modo-troca { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 14px 6px 0; padding-top: 12px; border-top: 1px solid var(--border); }
+        .modo-troca > span { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+        .modo-seg { display: inline-flex; background: var(--surface-3, #F1F5F9); border-radius: 999px; padding: 3px; }
+        .modo-seg button { border: none; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text-dim); padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+        .modo-seg button.on { background: var(--surface, #fff); color: #15803D; box-shadow: 0 1px 3px rgba(15,23,42,.14); }
+        .modo-seg button:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+        :root[data-theme="dark"] .modo-seg button.on { color: #34D399; background: rgba(255,255,255,.08); }
+        .dsb .modo-troca { margin: auto 0 0; flex-direction: column; align-items: stretch; gap: 8px; padding: 14px 4px 0; }
+        .dsb .modo-troca > span { padding-left: 8px; }
+        .dsb .modo-seg { display: grid; grid-template-columns: 1fr 1fr; }
+        .bc-flows.dois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        @media (max-width: 420px) { .bc-flows.dois .flow-ico { display: none !important; } .bc-flows.dois .flow { padding: 11px 13px; } }
+        .bc-imp { display: flex; align-items: center; gap: 9px; margin-top: 12px; padding: 11px 14px; border-radius: 14px; background: var(--surface-2); font-size: 13.5px; color: var(--text); }
+        .bc-imp svg { flex-shrink: 0; color: #B45309; } .bc-imp b { font-weight: 700; }
+        :root:not([data-theme="dark"]) .app .balance-card .bc-imp { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); }
+        :root:not([data-theme="dark"]) .app .balance-card .bc-imp b { color: #fff; } :root:not([data-theme="dark"]) .app .balance-card .bc-imp svg { color: #FCD34D; }
+        .dhero .bc-imp { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); margin-top: 10px; } .dhero .bc-imp b { color: #fff; } .dhero .bc-imp svg { color: #FCD34D; }
+        .add-mini-row.um { grid-template-columns: 1fr; } .add-mini-row.um .add-mini { flex-direction: row; justify-content: center; padding: 10px 12px; } .add-mini-row.um .add-mini i { width: 32px; height: 32px; border-radius: 10px; }
+        /* guia de abertura */
+        .bv { position: fixed; inset: 0; z-index: 90; background: #0B3D2E; display: flex; align-items: stretch; justify-content: center; animation: fadeIn .25s ease; }
+        .bv-box { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--surface, #fff); overflow: hidden; }
+        .bv-arte { position: relative; flex: 0 0 auto; min-height: 58%; padding: calc(14px + env(safe-area-inset-top)) 18px 34px; color: #fff; display: flex; flex-direction: column;
+          background: radial-gradient(90% 80% at 100% 0%, rgba(52,211,153,.24), rgba(52,211,153,0) 60%), linear-gradient(160deg, #0E5640 0%, #0B3D2E 60%, #08291F 100%); }
+        .bv-box.ult .bv-arte { min-height: 0; padding-bottom: 34px; }
+        .bv-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .bv-marca { display: inline-flex; align-items: center; gap: 9px; font-family: "Manrope", "Inter", sans-serif; font-weight: 800; font-size: 19px; letter-spacing: -0.02em; }
+        .bv-nome span { color: #6EE7B7; }
+        .bv-logo { width: 32px; height: 32px; border-radius: 9px; background: #34D399; display: grid; place-items: center; margin-right: 1px; }
+        .bv-pular { border: none; background: rgba(255,255,255,.12); color: #fff; font: inherit; font-size: 13.5px; font-weight: 600; padding: 8px 15px; border-radius: 999px; cursor: pointer; }
+        .bv-pular:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        .bv-ilu { flex: 1; display: grid; place-items: center; padding: 20px 6px 0; animation: bvIn .45s var(--ease) both; }
+        .bvi { position: relative; width: min(100%, 320px); }
+        .bvi-card { background: #fff; color: #0F172A; border-radius: 20px; padding: 14px 15px 12px; box-shadow: 0 24px 48px -20px rgba(0,0,0,.55); }
+        .bvi-tit { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-family: "Manrope", "Inter", sans-serif; font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+        .bvi-tit b { font-size: 14px; }
+        .bvi-campo { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid #EEF0F3; font-size: 13px; }
+        .bvi-campo span { color: #64748B; } .bvi-campo b { font-weight: 700; }
+        .bvi-dias { display: flex; align-items: center; gap: 5px; padding-top: 10px; border-top: 1px solid #EEF0F3; flex-wrap: wrap; }
+        .bvi-dias i { width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 700; background: #F1F5F9; color: #64748B; }
+        .bvi-dias i.on { background: #16A34A; color: #fff; }
+        .bvi-dias small { margin-left: 4px; font-size: 12px; color: #15803D; font-weight: 600; }
+        .bvi-mais { position: absolute; right: -6px; bottom: -20px; width: 52px; height: 52px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; box-shadow: 0 10px 24px -6px rgba(22,163,74,.7), 0 0 0 5px rgba(255,255,255,.14); animation: bvPulso 1.8s ease-in-out infinite; }
+        .bvi-it { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #EEF0F3; }
+        .bvi-it > i { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-style: normal; }
+        .bvi-it > span:nth-child(2) { min-width: 0; } .bvi-it > span:nth-child(2) b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bvi-it small { display: block; font-size: 11.5px; color: #64748B; }
+        .bvi-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; } .bvi-dir b { font-size: 13px; white-space: nowrap; }
+        .bvi-dir em { font-style: normal; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1.5px solid #16A34A; color: #15803D; }
+        .bvi-dir em.ok { background: #16A34A; color: #fff; }
+        .bvi-dica { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 9px 11px; border-radius: 12px; background: #ECFDF3; color: #15803D; font-size: 12.5px; font-weight: 600; }
+        .bv-txt { flex: 1; display: flex; flex-direction: column; padding: 20px 20px calc(18px + env(safe-area-inset-bottom)); background: var(--surface, #fff); border-radius: 24px 24px 0 0; margin-top: -20px; position: relative; overflow-y: auto; }
+        .bv-pontos { display: flex; gap: 6px; margin-bottom: 14px; } .bv-pontos i { width: 7px; height: 7px; border-radius: 999px; background: var(--border); transition: width .25s, background .25s; } .bv-pontos i.on { width: 22px; background: #16A34A; }
+        .bv-corpo { animation: bvIn .35s var(--ease) both; }
+        .bv-corpo h2 { font-family: "Manrope", "Inter", sans-serif; font-size: 24px; font-weight: 800; letter-spacing: -0.025em; margin: 0 0 8px; line-height: 1.2; color: var(--text); }
+        .bv-corpo p { margin: 0 0 16px; font-size: 15px; line-height: 1.55; color: var(--text-dim); max-width: 46ch; }
+        .bv-acoes { margin-top: auto; padding-top: 14px; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+        .bv-acoes .btn { height: 48px; border-radius: 14px; font-size: 15px; justify-content: center; }
+        .bv-seguir { min-width: 150px; }
+        @media (min-width: 700px) {
+          .bv { align-items: center; padding: 24px; background: rgba(8,41,31,.78); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+          .bv-box { width: 560px; height: auto; max-height: calc(100vh - 48px); border-radius: 28px; box-shadow: 0 40px 80px -30px rgba(0,0,0,.6); }
+          .bv-arte { min-height: 340px; padding: 18px 22px 40px; }
+          .bv-txt { padding: 24px 28px 24px; }
+          .bv .modo-esc { grid-template-columns: 1fr 1fr; }
+        }
+        @keyframes bvIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        @keyframes bvPulso { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+        @media (prefers-reduced-motion: reduce) { .bv, .bv-ilu, .bv-corpo, .bvi-mais { animation: none; } }
         .guia { margin-bottom: 16px; border: 1.5px solid color-mix(in srgb, #16A34A 30%, var(--border)); }
         .guia-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
         .guia-top h3 { margin: 0; font-family: "Manrope", "Inter", sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; } .guia-top span { font-size: 13px; color: var(--text-dim); }
@@ -5303,10 +5500,10 @@ function App() {
             <button className="btn btn-primary tb-new" onClick={() => setQuickOpen(true)}><IconPlus size={16} color="#fff" /> Novo</button>
           </div>
         </header>
-        <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup" && (contabAba || t.id !== "contabilidade"))} active={activeTab} onPick={goTab} />
+        <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup" && !ocultasNav.includes(t.id))} active={activeTab} onPick={goTab} />
       </div>
-      <Dock active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} onVale={() => setValeAberto(true)} ocultar={contabAba ? [] : ["contabilidade"]} />
-      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={contabAba ? [] : ["contabilidade"]} />
+      <Dock active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} onVale={() => setValeAberto(true)} ocultar={ocultasNav} modo={modoApp} onModo={trocarModo} />
+      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={ocultasNav} modo={modoApp} onModo={trocarModo} />
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
@@ -5325,7 +5522,7 @@ function App() {
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} quickGo={quickGo}
             setup={{ vinculos: vinculos.length, shifts: shifts.length, expenses: expenses.length + recurringExpenses.length, investments: investments.length }}
             monthExpenseItems={monthExpenseItems} limits={limits} monthShiftsCount={monthShifts.length} insights={insights}
-            desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12} hojeInfo={hojeInfo}
+            desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12} hojeInfo={hojeInfo} simples={simples}
             workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
@@ -5340,7 +5537,7 @@ function App() {
             netByVinculo={netByVinculo} gainScope={gainScope} setGainScope={setGainScope} history12={history12}
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth}
             workCard={<WorkRateCard cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} goMonth={goMonth} />}
-            discreto={discreto} setDiscreto={setDiscreto} desk={desk}
+            discreto={discreto} setDiscreto={setDiscreto} desk={desk} simples={simples}
           />
         )}
         {activeTab === "calendario" && (
@@ -5356,7 +5553,7 @@ function App() {
           <ExpensesTab
             monthExpenseItems={monthExpenseItems} addExpense={addExpense} addRecurringExpense={addRecurringExpense}
             viewYear={viewYear} viewMonth={viewMonth} totalPending={totalPendingExpenses} openSignal={signals.despesas} dedSignal={signals.dedutivel} limits={limits} setLimit={setLimit} updateExpense={updateExpense} updateRecurringExpense={updateRecurringExpense}
-            desk={desk} history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} goTab={goTab}
+            desk={desk} simples={simples} history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} goTab={goTab}
             catAprendida={contab.catAprendida || {}} aprenderCat={(desc, cat) => { const k = chaveLoja(desc); if (k) setContab((p) => ({ ...p, catAprendida: { ...(p.catAprendida || {}), [k]: cat } })); }}
           />
         )}
@@ -5387,7 +5584,7 @@ function App() {
             commitB3={commitB3} portfolio={portfolio} investments={investments} commitPrint={commitPrint} fonteInicial={importSrc} limparFonte={() => setImportSrc(null)} />
         )}
         {activeTab === "backup" && (
-          <BackupTab contabAba={contabAba} setContabAba={(v) => setContab((p) => ({ ...p, aba: v }))} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
+          <BackupTab modo={modoApp} onModo={trocarModo} contabAba={contabAba} setContabAba={(v) => setContab((p) => ({ ...p, aba: v }))} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
             notifCard={<LembretesCard on={notifOn} setOn={setNotifOn} itens={lembretes} />}
             themeCard={<ThemeCard tema={tema} setTema={setTema} />} goTab={goTab} conta={session && session.user ? session.user.email : ""} cloudLabel={cloudLabel} resumo={{ tema, discreto, pinOn: !!pinHash, notifOn }}
             privacyCard={<PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} />}
@@ -5406,7 +5603,7 @@ function App() {
       {quickOpen && (
         <AddSheet inicial={typeof quickOpen === "string" ? quickOpen : null} onClose={() => setQuickOpen(false)} onDespesa={() => quickGo("despesa")} onOutro={(k) => quickGo(k)}
           vinculos={vinculos} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0} monthKey={monthKey}
-          addPlantao={addPlantao} addVinculo={addVinculo} addExtra={addExtraRecurringIncome} addOneOff={addOneOff} />
+          addPlantao={addPlantao} addVinculo={addVinculo} addExtra={addExtraRecurringIncome} addOneOff={addOneOff} simples={simples} />
       )}
 
       {cargoOpen && (
@@ -5414,6 +5611,7 @@ function App() {
       )}
 
       <Aviso />
+      {bvAberto && <BoasVindas onFim={(m) => { trocarModo(m); setBvAberto(false); }} />}
       <input ref={reanexarRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => reanexar(e.target.files && e.target.files[0])} />
       <button className="fab2" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
 
@@ -5476,7 +5674,7 @@ const ADD_OPCOES = [
   ["unica", "Receita única", "Processo, 13º, um Pix de quem te devia, restituição.", "unica", "#DCFCE7"],
   ["despesa", "Despesa", "Conta fixa ou gasto do mês.", "despesa", "#FEE2E2"],
 ];
-function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, monthKey, addPlantao, addVinculo, addExtra, addOneOff }) {
+function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, monthKey, addPlantao, addVinculo, addExtra, addOneOff, simples = false }) {
   const [kind, setKind] = useState(inicial || null);
   const [funcao, setFuncao] = useState("Diarismo");
   const titulo = kind ? (ADD_OPCOES.find((o) => o[0] === kind) || [])[1] : "O que você quer adicionar?";
@@ -5488,14 +5686,14 @@ function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, 
         <div className="add-top">{kind && !inicial && <button type="button" className="link-btn" onClick={() => setKind(null)}>‹ Voltar</button>}<div className="sheet-title" style={{ margin: 0 }}>{titulo}</div></div>
         {!kind && (
           <>
-            {ADD_OPCOES.map(([k, l, d, ic, bg]) => (
+            {(simples ? ["plantao", "despesa", "unica", "cargo", "recorrente"].map((k) => ADD_OPCOES.find((o) => o[0] === k)) : ADD_OPCOES).map(([k, l, d, ic, bg]) => (
               <button key={k} type="button" className="add-op" data-add={k} onClick={() => (k === "despesa" ? onDespesa() : setKind(k))}>
                 <i style={{ background: bg }} aria-hidden="true"><ProIc n={ic} color={IC_TOM[bg]} /></i><span><b>{l}</b><small>{d}</small></span><IconChevronRight size={18} />
               </button>
             ))}
-            <div className="add-mini-row">
-              <button type="button" className="add-mini" onClick={() => onOutro("aporte")}><i aria-hidden="true"><IconTrending size={19} /></i><span>Investimento</span></button>
-              <button type="button" className="add-mini" onClick={() => onOutro("importar")}><i aria-hidden="true"><IconUpload size={19} /></i><span>Importar</span></button>
+            <div className={`add-mini-row ${simples ? "um" : ""}`}>
+              {!simples && <button type="button" className="add-mini" onClick={() => onOutro("aporte")}><i aria-hidden="true"><IconTrending size={19} /></i><span>Investimento</span></button>}
+              {!simples && <button type="button" className="add-mini" onClick={() => onOutro("importar")}><i aria-hidden="true"><IconUpload size={19} /></i><span>Importar</span></button>}
               <button type="button" className="add-mini" id="add-vale" onClick={() => onOutro("vale")}><i aria-hidden="true"><ProIc n="calculo" size={19} /></i><span>Vale a pena?</span></button>
             </div>
           </>
@@ -5973,7 +6171,7 @@ function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
   shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff, addOneOff, onAdd, taxaPadrao,
-  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk
+  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk, simples = false
 }) {
   const gv = useGv();
   const [editKey, setEditKey] = useState(null);
@@ -6047,16 +6245,21 @@ function FaturamentoTab({
   return (
     <div>
       <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
-      <div className="kpi-row">
+      {simples ? (
+      <div className="kpi-row" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+        <Kpi label="Entra no mês" value={fmtBRL(totalNet)} sub="já sem o imposto" />
+        <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do mês" : null} />
+      </div>
+      ) : <div className="kpi-row">
         <Kpi label="Receita bruta" value={fmtBRL(totalGross)} />
         <Kpi label="Impostos" value={fmtBRL(totalGross - totalNet)} tone="var(--brick)" />
         <Kpi label="Receita líquida" value={fmtBRL(totalNet)} sub="entra neste mês" />
         <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do líquido" : null} />
-      </div>
+      </div>}
 
 
       {confirmar}
-      <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr", alignItems: "start" } : null}>
+      <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: simples ? "1fr" : "1.7fr 1fr", alignItems: "start" } : null}>
       <div className="card flush">
         <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3><span className="card-note">toque no status para marcar como recebido</span></div>
         {sorted.length === 0 ? <div className="empty-state">Nenhuma receita neste mês ainda.</div> : (
@@ -6122,7 +6325,7 @@ function FaturamentoTab({
           ))}
         </div>
       </div>
-      {desk && (
+      {desk && !simples && (
         <div className="card">
           <div className="card-head">
             <h3 className="card-title">Por vínculo</h3>
@@ -6133,7 +6336,7 @@ function FaturamentoTab({
 
       )}
       </div>
-      {!desk && (<>
+      {!desk && !simples && (<>
       {workCard}
 
       <div className="grid-2">
@@ -6152,7 +6355,7 @@ function FaturamentoTab({
       </div>
 
       </>)}
-      {desk && (
+      {desk && !simples && (
         <DGrid>
           <DGv id="fat-12m" open icon={<IconTrending size={18} />} title="Receita líquida mês a mês" sub={`últimos ${chartMonths} meses`} val={"média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.value, 0) / history12.length : 0)}>
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
@@ -6652,7 +6855,7 @@ function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioI
   );
 }
 
-function BackupTab({ contabAba = true, setContabAba, taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard, themeCard, goTab, conta, cloudLabel, resumo = {} }) {
+function BackupTab({ modo = "completo", onModo, contabAba = true, setContabAba, taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard, themeCard, goTab, conta, cloudLabel, resumo = {} }) {
   const [sec, setSec] = useState(null);
   const taxa = (
     <div className="day-panel" style={{ marginTop: 0 }}>
@@ -6687,7 +6890,14 @@ function BackupTab({ contabAba = true, setContabAba, taxRateGeral, setTaxRateGer
       <div className="field-hint">A tributação padrão continua em “Imposto padrão”, mesmo com a aba escondida.</div>
     </div>
   );
-  const SECS = { contababa: abaContab, nuvem: cloudCard, aparencia: themeCard, privacidade: privacyCard, lembretes: notifCard, imposto: taxa, carteira: posicaoCard, backup, apagar: wipeCard };
+  const modoSec = (
+    <div className="day-panel" style={{ marginTop: 0 }}>
+      <div className="day-panel-title"><span>Modo do app</span></div>
+      <ModoEscolha valor={modo} onEscolher={(m) => onModo && onModo(m)} />
+      <div className="field-hint" style={{ marginTop: 10 }}>Trocar de modo não apaga nada. O que fica escondido no Simples volta igual no Completo.</div>
+    </div>
+  );
+  const SECS = { modo: modoSec, contababa: abaContab, nuvem: cloudCard, aparencia: themeCard, privacidade: privacyCard, lembretes: notifCard, imposto: taxa, carteira: posicaoCard, backup, apagar: wipeCard };
   if (sec) return (
     <div className="cfg-sub">
       <button type="button" className="cfg-back" onClick={() => setSec(null)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg> Configurações</button>
@@ -6712,24 +6922,25 @@ function BackupTab({ contabAba = true, setContabAba, taxRateGeral, setTaxRateGer
         {saveError && <div className="note-bad" style={{ marginTop: 10 }}>Não foi possível salvar as últimas alterações neste navegador.</div>}
       </div>
       <div className="cfg-group">
+        {onModo && row("modo", "#16A34A", ic(<><rect x="3" y="4" width="18" height="16" rx="3" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="10" y1="10" x2="10" y2="20" /></>), "Modo do app", modo === "simples" ? "Simples" : "Completo")}
         {row("nuvem", "#3B82F6", ic(<path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8.5 4.8 4.8 0 0 1 17.5 18Z" />), "Nuvem e conta", conta ? "Entrar, sair e sincronizar" : "Criar conta ou entrar")}
         {row("aparencia", "#7C5CFC", ic(<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />), "Aparência", temaTxt)}
         {row("privacidade", "#64748B", ic(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>), "Privacidade e trava", (resumo.discreto ? "Valores escondidos" : "Valores à mostra") + (resumo.pinOn ? ", trava ligada" : ", sem trava"))}
         {row("lembretes", "#F59E0B", ic(<><path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7" /><path d="M10 20a2 2 0 0 0 4 0" /></>), "Lembretes no celular", resumo.notifOn ? "Ligados" : "Desligados")}
       </div>
       <div className="cfg-group">
-        {row("contababa", "#0F766E", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /></>), "Aba Contabilidade", contabAba ? "Aparecendo" : "Escondida")}
+        {modo !== "simples" && row("contababa", "#0F766E", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /></>), "Aba Contabilidade", contabAba ? "Aparecendo" : "Escondida")}
         {row("imposto", "#14B8A6", ic(<><line x1="19" y1="5" x2="5" y2="19" /><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" /></>), "Imposto padrão", contabAuto ? "Calculado pela Contabilidade" : (Number(taxRateGeral) || 0).toLocaleString("pt-BR") + "%")}
-        {row("carteira", "#22C55E", ic(<><polyline points="3 17 9 11 13 15 21 7" /><polyline points="15 7 21 7 21 13" /></>), "Posição inicial da carteira", "O que você já tinha investido")}
+        {modo !== "simples" && row("carteira", "#22C55E", ic(<><polyline points="3 17 9 11 13 15 21 7" /><polyline points="15 7 21 7 21 13" /></>), "Posição inicial da carteira", "O que você já tinha investido")}
         {row("backup", "#3B82F6", ic(<><path d="M12 4v11" /><polyline points="7 10 12 15 17 10" /><path d="M5 20h14" /></>), "Backup dos dados", "Baixar ou restaurar uma cópia")}
         {row("apagar", "#EF4444", ic(<><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /></>), "Apagar dados", "Limpar lançamentos deste aparelho")}
       </div>
       {goTab && (
         <div className="cfg-group">
           {row("ir-metas", "#F59E0B", ic(<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></>), "Metas", null, () => goTab("metas"))}
-          {row("ir-relatorios", "#7C5CFC", ic(<><path d="M12 3a9 9 0 1 0 9 9h-9Z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15Z" /></>), "Relatórios", null, () => goTab("visao"))}
-          {contabAba && row("ir-contabilidade", "#14B8A6", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /><line x1="8.5" y1="17" x2="12" y2="17" /></>), "Contabilidade", null, () => goTab("contabilidade"))}
-          {row("ir-importar", "#64748B", ic(<><path d="M12 15V4" /><polyline points="7 9 12 4 17 9" /><path d="M5 20h14" /></>), "Importar nota, carteira ou fatura", null, () => goTab("importar"))}
+          {modo !== "simples" && row("ir-relatorios", "#7C5CFC", ic(<><path d="M12 3a9 9 0 1 0 9 9h-9Z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15Z" /></>), "Relatórios", null, () => goTab("visao"))}
+          {contabAba && modo !== "simples" && row("ir-contabilidade", "#14B8A6", ic(<><rect x="5" y="3" width="14" height="18" rx="2" /><line x1="8.5" y1="8" x2="15.5" y2="8" /><line x1="8.5" y1="13" x2="15.5" y2="13" /><line x1="8.5" y1="17" x2="12" y2="17" /></>), "Contabilidade", null, () => goTab("contabilidade"))}
+          {modo !== "simples" && row("ir-importar", "#64748B", ic(<><path d="M12 15V4" /><polyline points="7 9 12 4 17 9" /><path d="M5 20h14" /></>), "Importar nota, carteira ou fatura", null, () => goTab("importar"))}
         </div>
       )}
     </div>
@@ -7774,7 +7985,7 @@ function ValePlantao({ vinculos = [], netOf, info, onClose }) {
   );
 }
 
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null }) {
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false }) {
   const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
@@ -7808,7 +8019,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
     { done: setup.shifts > 0, label: "Lance seu primeiro plantão", sub: "o hospital é cadastrado junto", go: () => quickGo("plantao"), cta: "Lançar plantão" },
     { done: setup.expenses > 0, label: "Coloque uma conta do mês", sub: "aluguel, escola, cartão…", go: () => quickGo("despesa"), cta: "Adicionar conta" },
     { done: setup.investments > 0, label: "Registre seus investimentos", sub: "ou importe da corretora", go: () => quickGo("aporte"), cta: "Adicionar" },
-  ];
+  ].slice(0, simples ? 2 : 3);
   const feitos = passos.filter((x) => x.done).length, prox = passos.findIndex((x) => !x.done);
   const guia = !guiaOff && perfil !== "antigo" && !(totalDados > 3 && !perfil) && prox >= 0 ? (
     <div className="card guia" id="primeiros-passos">
@@ -7828,6 +8039,58 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   ) : null;
 
   const prevNome = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
+  // modo Simples: só o mês em três números (entra, sai, sobra) e quanto separar para o imposto
+  if (simples) {
+    const brutoMes = monthIncomeItems.reduce((a, i) => a + (Number(i.gross) || 0), 0);
+    const impostoMes = Math.max(0, brutoMes - curStats.net);
+    const sobraMes = curStats.net - curStats.expTotal;
+    const jaCaiu = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + (Number(i.net) || 0), 0);
+    const mesNome = MONTHS_PT[viewMonth].toLowerCase();
+    const separar = impostoMes > 0.5 && <div className="bc-imp" id="separe-imposto"><IconCalc size={16} /><span>Separe <b className="mono">{fmtBRL(impostoMes)}</b> para o imposto</span></div>;
+    if (desk) {
+      const hs = history12.slice(-12);
+      const hoje = ehMesAtual && hojeInfo;
+      return (
+        <div className="desk">
+          <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${mesNome} de ${viewYear}.`}</p></div>
+          {guia}
+          {alerts.length > 0 && <Avisos alerts={alerts} />}
+          <div className="dhero" id="mes-simples">
+            <div className="dhero-s"><span>Sobra em {mesNome}</span><b className="mono" style={sobraMes < 0 ? { color: "#FCA5A5" } : null}><CountUp value={sobraMes} /></b><small>Já caiu <strong className="mono">{fmtBRL(jaCaiu)}</strong> de <strong className="mono">{fmtBRL(curStats.net)}</strong></small>{separar}</div>
+            <div className="dkpis">
+              <DKpi label="Entra no mês" value={fmtBRL(curStats.net)} sub={deltaTxt(curStats.net, prevStats.net, prevNome)} spark={hs.map((h) => h.value)} sparkColor="#6EE7B7" />
+              <DKpi label="Sai no mês" value={fmtBRL(curStats.expTotal)} sub={deltaTxt(curStats.expTotal, prevStats.expTotal, prevNome)} spark={hs.map((h) => h.expenses)} sparkColor="#FCD34D" />
+              <DKpi label="Falta receber" value={fmtBRL(Math.max(0, curStats.net - jaCaiu))} sub={monthIncomeItems.filter((i) => !i.recebido).length + " a receber"} />
+              <DKpi label="Falta pagar" value={fmtBRL(totalPendingExpenses)} sub={monthExpenseItems.filter((e) => !e.paid).length + " conta(s) abertas"} />
+            </div>
+          </div>
+          <div className="dgrid" style={{ gridTemplateColumns: hoje ? "1fr 1fr" : "1fr", alignItems: "start" }}>
+            {hoje && <div>{hoje && <HojeCard itens={hojeInfo.itens} />}<PagarAgoraMini p={hojeInfo.pagar} onVer={() => setActiveTab("organizacao")} /></div>}
+            <div className="card"><div className="card-head"><h3 className="card-title">Próximos lançamentos</h3></div><DProximos incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} max={8} onVer={() => setActiveTab("despesas")} /></div>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div>
+        <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${mesNome} de ${viewYear}.`}</p></div>
+        {guia}
+        {ehMesAtual && hojeInfo && <HojeCard itens={hojeInfo.itens} />}
+        {alerts.length > 0 && <Avisos alerts={alerts} />}
+        <div className="balance-card" id="mes-simples">
+          <div className="bc-top">Sobra em {mesNome}</div>
+          <div className="bc-value mono" style={sobraMes < 0 ? { color: "var(--brick)" } : null}><CountUp value={sobraMes} /></div>
+          <div className="bc-sub">Já caiu <b className="mono">{fmtBRL(jaCaiu)}</b> de <b className="mono">{fmtBRL(curStats.net)}</b></div>
+          <div className="bc-flows dois">
+            <div className="flow"><span className="flow-ico in"><IconArrowIn size={18} /></span><div><span>Entra no mês</span><b className="mono">{fmtBRL(curStats.net)}</b></div></div>
+            <div className="flow"><span className="flow-ico out"><IconArrowOut size={18} /></span><div><span>Sai no mês</span><b className="mono">{fmtBRL(curStats.expTotal)}</b></div></div>
+          </div>
+          {separar}
+        </div>
+        {ehMesAtual && hojeInfo && <PagarAgoraMini p={hojeInfo.pagar} onVer={() => setActiveTab("organizacao")} />}
+      </div>
+    );
+  }
   if (desk) {
     const sobra = curStats.net - curStats.expTotal;
     const hs = history12.slice(-12);
@@ -8708,7 +8971,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   );
 }
 
-function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
+function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseItems, addExpense, addRecurringExpense, viewYear, viewMonth, totalPending, openSignal, limits, setLimit, updateExpense, updateRecurringExpense, desk, simples = false, history12 = [], chartMonths, setChartMonths, goMonth, goTab }) {
   const [editKey, setEditKey] = useState(null);
   const gv = useGv();
   const [showForm, setShowForm] = useState(false);
@@ -8881,7 +9144,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
           <div className="card-head"><h3 className="card-title">{showForm ? "Nova despesa" : "Adicionar despesa"}</h3>{showForm && <button className="btn-icon" onClick={() => setShowForm(false)}><IconX size={16} /></button>}</div>
           {!showForm ? (
             <div>
-              <p className="line-sub" style={{ marginTop: 0 }}>Cadastre contas fixas uma vez só e elas aparecem todo mês. A fatura do cartão pode ser importada.</p>
+              <p className="line-sub" style={{ marginTop: 0 }}>Cadastre contas fixas uma vez só e elas aparecem todo mês.{simples ? "" : " A fatura do cartão pode ser importada."}</p>
               <button className="btn btn-primary" onClick={() => setShowForm(true)}><IconPlus size={16} color="#fff" /> Nova despesa</button>
             </div>
           ) : (
@@ -8909,10 +9172,10 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
                   ))}
                 </div>
               </div>
-              <label className="ct-check" style={{ marginTop: 0 }}>
+              {!simples && <label className="ct-check" style={{ marginTop: 0 }}>
                 <input type="checkbox" checked={dedFinal} onChange={(e) => setDedut(e.target.checked)} />
                 <span>Dedutível no imposto de renda<small>Saúde e escola já vêm marcadas. Marque também cursos, congressos e anuidade do conselho, para o relatório do contador.</small></span>
-              </label>
+              </label>}
               <div className="field" style={{ marginBottom: 14 }}><label>Nota fiscal ou recibo (opcional)</label><AnexosField value={anexosNovos} onChange={setAnexosNovos} /></div>
               <button className="btn btn-primary" onClick={submit}><IconPlus size={15} color="#fff" /> Salvar despesa</button>
             </div>
@@ -8923,17 +9186,17 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
       ); return desk ? (
         <DGrid>
           <DGv id="desp-add" wide open icon={<IconPlus size={18} />} title="Adicionar despesa" sub="conta fixa ou só deste mês" val="">{conteudo}</DGv>
-          <DGv id="desp-12m" icon={<IconTrending size={18} />} tone="#F59E0B" title="Despesas mês a mês" sub={`últimos ${chartMonths} meses`} val={"média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.expenses, 0) / history12.length : 0)}>
+          {!simples && <DGv id="desp-12m" icon={<IconTrending size={18} />} tone="#F59E0B" title="Despesas mês a mês" sub={`últimos ${chartMonths} meses`} val={"média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.expenses, 0) / history12.length : 0)}>
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
             <SvgAreaChart data={history12} height={200} color="#F59E0B" valueKey="expenses" onOpen={(d) => goMonth && goMonth(d.y, d.m)} />
-          </DGv>
+          </DGv>}
           <DGv id="desp-venc" icon={<IconCalendar size={18} />} tone="#B91C1C" title="Próximos vencimentos" sub={monthExpenseItems.filter((e) => !e.paid).length + " conta(s) a pagar"} val={fmtBRL(totalPending)}>
             <DProximos incomeItems={[]} expenseItems={monthExpenseItems} max={10} />
           </DGv>
-          <DGv id="desp-imp" icon={<IconUpload size={18} />} tone="#334155" title="Importar fatura do cartão" sub="PDF, OFX ou CSV" val="">
+          {!simples && <DGv id="desp-imp" icon={<IconUpload size={18} />} tone="#334155" title="Importar fatura do cartão" sub="PDF, OFX ou CSV" val="">
             <p className="line-sub" style={{ marginTop: 0 }}>Traga as despesas do banco ou do cartão de uma vez.</p>
             <button className="btn btn-ghost" onClick={() => goTab && goTab("importar")}>Abrir Importar</button>
-          </DGv>
+          </DGv>}
         </DGrid>
       ) : conteudo; })()}
 
