@@ -80,7 +80,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - Tarefas automáticas (pg_cron): `sallos-cotacoes` (11h, 13h e 15h de Brasília, dias úteis) e `sallos-cotacoes-fechamento` (18h30).
 - Pasta privada `notas`: cada pessoa só vê os próprios arquivos (a regra usa a pasta com o id do usuário). O SQL está no `schema.sql`. Confira se foi rodado no projeto.
 - Contagem de uso: tabela `uso_telas` e função `registrar_uso` (só grava, ninguém de fora lê). O João consulta o resumo pelo painel do Supabase (SQL salvo "resumo de uso").
-- **Pendente:** o João pediu um relatório de uso em PDF a cada 72 horas. Falta criar no Supabase uma função só de totais (`resumo_uso(dias)`, sem dados pessoais) e depois uma tarefa agendada que monte o PDF e mande para ele.
+- Relatório de uso em PDF (`ferramentas/relatorio/relatorio.py`): usa a função `resumo_uso(dias)` (só totais, no fim do `schema.sql`). Uma tarefa agendada do Claude ("Relatório de uso do Sallos", ambiente "medplan") gera e manda para o João a cada 3 dias, às 7h45. **Pendente:** confirmar que o João rodou o bloco `resumo_uso` no SQL Editor.
 
 ## Visual (padrão atual)
 
