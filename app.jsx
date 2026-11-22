@@ -1427,8 +1427,7 @@ function DSide({ active, onPick, onNovo, ocultar = [], modo, onModo }) {
     <aside className="dsb" aria-label="Páginas">
       <div className="dsb-brand"><span className="tb-logo"><IconLogo size={32} /></span><span className="brand-nm">Sa<span>ll</span>os</span></div>
       <button type="button" className="dsb-new" onClick={onNovo}><IconPlus size={16} color="#fff" /> Novo lançamento</button>
-      <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "organizacao", "metas", "visao", "contabilidade"])}
-        <div className="dsb-g">Ferramentas</div>{grupo(["importar", "backup"])}</nav>
+      <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "organizacao", "metas", "contabilidade"])}</nav>
       {onModo && <ModoTroca valor={modo} onTrocar={onModo} />}
     </aside>
   );
@@ -1438,9 +1437,9 @@ function DSide({ active, onPick, onNovo, ocultar = [], modo, onModo }) {
 // barra de baixo do celular: Hoje, Plantões, +, Contas e Mais
 const TITULO_CURTO = { inicio: "Hoje", calendario: "Plantões", faturamento: "Plantões", despesas: "Contas", organizacao: "Contas", investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
 const DOCK_GRUPOS = [["inicio", "Hoje", ["inicio"]], ["calendario", "Plantões", ["calendario", "faturamento"]], null, ["despesas", "Contas", ["despesas", "organizacao"]]];
-const DOCK_MAIS = ["investimentos", "metas", "visao", "contabilidade", "importar", "backup"];
+const DOCK_MAIS = ["investimentos", "metas", "contabilidade"]; // Ajustes só pela engrenagem; Importar e "Vale a pena?" só pelo botão +
 const DOCK_NOMES = { investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
-function Dock({ active, onPick, onNovo, onVale, ocultar = [], modo, onModo }) {
+function Dock({ active, onPick, onNovo, onVale, ocultar = [], modo, onModo, semMais = false }) {
   const [mais, setMais] = useState(false);
   useEffect(() => {
     if (!mais) return;
@@ -1474,7 +1473,9 @@ function Dock({ active, onPick, onNovo, onVale, ocultar = [], modo, onModo }) {
           const [id, rot, grupo] = g; const on = grupo.includes(active) && !mais; const Ic = icone[id];
           return <button key={id} type="button" data-tab={id} className={`dk-btn ${on ? "on" : ""}`} aria-current={on ? "page" : undefined} onClick={() => ir(grupo.includes(active) ? active : id)}><i className="dk-ic"><Ic size={21} /></i><span className="dk-rot">{rot}</span></button>;
         })}
-        <button type="button" className={`dk-btn ${mais || emMais ? "on" : ""}`} aria-label="Mais seções" aria-expanded={mais} onClick={() => setMais((v) => !v)}><i className="dk-ic"><IconMore size={21} /></i><span className="dk-rot">Mais</span></button>
+        {semMais
+          ? <button type="button" data-tab="metas" className={`dk-btn ${active === "metas" ? "on" : ""}`} aria-current={active === "metas" ? "page" : undefined} onClick={() => ir("metas")}><i className="dk-ic"><IconTarget size={21} /></i><span className="dk-rot">Metas</span></button>
+          : <button type="button" className={`dk-btn ${mais || emMais ? "on" : ""}`} aria-label="Mais seções" aria-expanded={mais} onClick={() => setMais((v) => !v)}><i className="dk-ic"><IconMore size={21} /></i><span className="dk-rot">Mais</span></button>}
       </nav>
     </>
   );
@@ -1492,7 +1493,7 @@ function GrupoSeg({ itens, ativo, onPick }) {
 const OCULTAS_SIMPLES = ["investimentos", "visao", "contabilidade", "importar"];
 const MODOS_APP = [
   ["simples", "Simples", "Para organizar o dia a dia", ["Plantões, recebimentos e contas", "Calendário, férias e metas", "Quanto separar para o imposto"], "Bom para quem quer saber o que entra, o que sai e o que sobra no mês."],
-  ["completo", "Completo", "Para quem também investe ou tem empresa", ["Tudo do Simples", "Investimentos com cotação automática", "Guias, imposto de renda, importar e relatórios"], "Bom para quem investe, emite nota como PJ ou gosta de gráficos e relatórios."],
+  ["completo", "Completo", "Para quem também investe ou tem empresa", ["Tudo do Simples", "Investimentos com cotação automática", "Guias, imposto de renda e importação"], "Bom para quem investe, emite nota como PJ ou gosta de acompanhar tudo em gráficos."],
 ];
 function ModoEscolha({ valor, onEscolher }) {
   return (
@@ -1642,7 +1643,7 @@ function BoasVindas({ onFim }) {
               <h2>Qual modo combina com você?</h2>
               <p>Comece pelo Simples se quer só organizar plantões e contas. Escolha o Completo se também investe ou cuida dos impostos da sua empresa.</p>
               <ModoEscolha valor={modo} onEscolher={setModo} />
-              <div className="bv-troca"><i aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg></i><span><b>Dá para trocar quando quiser.</b> No celular, em Mais. No computador, no pé da barra lateral. Nenhum dado se perde.</span></div>
+              <div className="bv-troca"><i aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg></i><span><b>Dá para trocar quando quiser.</b> Toque na engrenagem, em Modo do app. Nenhum dado se perde.</span></div>
             </div>
           ) : (
             <div key={i} className="bv-corpo"><span className={`bv-tag ${passo[3]}`}>{passo[3] === "completo" ? "Só no modo Completo" : "Nos modos Simples e Completo"}</span><h2>{passo[1]}</h2><p>{passo[2]}</p></div>
@@ -2162,7 +2163,8 @@ function App() {
     document.addEventListener("visibilitychange", sair);
     return () => { clearTimeout(t0); clearInterval(t); document.removeEventListener("visibilitychange", sair); };
   }, []);
-  const goTab = (id) => {
+  const goTab = (id0) => {
+    const id = id0 === "visao" ? "inicio" : id0; // Relatórios foi dissolvido nas outras telas
     const from = NAV_ALL.findIndex((x) => x.id === activeTab), to = NAV_ALL.findIndex((x) => x.id === id);
     setNavDir(to >= from ? "fwd" : "back");
     setActiveTab(id);
@@ -5717,7 +5719,7 @@ function App() {
           <div className="tb-left">
             <div className="tb-logo"><IconLogo size={28} /></div>
             <div>
-              <h1 className="tb-title"><span className="tb-t-longo">{(PAGE_TITLES[activeTab] || [""])[0]}</span><span className="tb-t-curto">{TITULO_CURTO[activeTab] || (PAGE_TITLES[activeTab] || [""])[0]}</span><button className={`cloud-dot ${cloud.status}`} title={cloudLabel} aria-label={cloudLabel} onClick={() => goTab("backup")} /></h1>
+              <h1 className="tb-title"><span className="tb-t-longo">{(PAGE_TITLES[activeTab] || [""])[0]}</span><span className="tb-t-curto">{TITULO_CURTO[activeTab] || (PAGE_TITLES[activeTab] || [""])[0]}</span><span className={`cloud-dot ${cloud.status}`} title={cloudLabel} role="img" aria-label={cloudLabel} /></h1>
               <p className="tb-sub">{(PAGE_TITLES[activeTab] || ["", ""])[1]}</p>
             </div>
           </div>
@@ -5731,17 +5733,18 @@ function App() {
             <button className="btn btn-primary tb-new" onClick={() => setQuickOpen(true)}><IconPlus size={16} color="#fff" /> Novo</button>
           </div>
         </header>
-        <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup" && !ocultasNav.includes(t.id))} active={activeTab} onPick={goTab} />
+        <NavStrip items={NAV_ALL.filter((t) => !["backup", "importar", "visao"].includes(t.id) && !ocultasNav.includes(t.id))} active={activeTab} onPick={goTab} />
       </div>
-      <Dock active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} onVale={() => setValeAberto(true)} ocultar={ocultasNav} modo={modoApp} onModo={trocarModo} />
-      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={ocultasNav} modo={modoApp} onModo={trocarModo} />
+      <Dock active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={ocultasNav} semMais={simples} />
+      <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={ocultasNav} />
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
         {!desk && (activeTab === "calendario" || activeTab === "faturamento") && <GrupoSeg itens={[["calendario", "Agenda"], ["faturamento", "Recebimentos"]]} ativo={activeTab} onPick={goTab} />}
         {!desk && (activeTab === "despesas" || activeTab === "organizacao") && <GrupoSeg itens={[["despesas", "Contas"], ["organizacao", "Organizar"]]} ativo={activeTab} onPick={goTab} />}
         {activeTab === "organizacao" && (
-          <OrganizacaoTab viewYear={viewYear} viewMonth={viewMonth} incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} invItems={monthInvestments.filter((i) => i.tipo !== "ajuste")} goTab={goTab} />
+          <OrganizacaoTab viewYear={viewYear} viewMonth={viewMonth} incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} invItems={monthInvestments.filter((i) => i.tipo !== "ajuste")} goTab={goTab}
+            history12={history12} chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} />
         )}
         {activeTab === "inicio" && (
           <DashboardTab
@@ -6872,7 +6875,7 @@ function PinGate({ hash, bioId, onOk, onForget }) {
 }
 
 // ---- Organização financeira (modelo "caminho do dinheiro"): entra − contas − investido = livre para gastos extras ----
-function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invItems, goTab }) {
+function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invItems, goTab, history12 = [], chartMonths, setChartMonths, goMonth }) {
   const gv = useGv();
   const [prev, setPrevState] = useState(() => lsGet("mediplan-org-previstos") !== "0");
   const setPrev = (v) => { lsSet("mediplan-org-previstos", v ? "1" : "0"); setPrevState(v); };
@@ -7024,6 +7027,11 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
           </div>
         ); }, `Nenhuma conta em aberto em ${mes}.`, "despesas", "Ver todas as contas")}
       </div>
+
+      <div className="card" id="oa-sobra-meses">
+        <div className="card-head"><h3 className="card-title">Sobra mês a mês</h3>{setChartMonths && <RangeTabs value={chartMonths} onChange={setChartMonths} />}</div>
+        <SvgBarChart data={history12} height={200} color={TEAL} negativeColor={BRICK} signed valueKey="leftover" onOpen={(d) => goMonth && goMonth(d.y, d.m)} />
+      </div>
     </div>
   );
 }
@@ -7168,7 +7176,7 @@ function BackupTab({ modo = "completo", onModo, contabAba = true, setContabAba, 
         {row("backup", "#3B82F6", ic(<><path d="M12 4v11" /><polyline points="7 10 12 15 17 10" /><path d="M5 20h14" /></>), "Backup dos dados", "Baixar ou restaurar uma cópia")}
         {row("apagar", "#EF4444", ic(<><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /></>), "Apagar dados", "Limpar lançamentos deste aparelho")}
       </div>
-      {goTab && (
+      {false && (
         <div className="cfg-group">
           {row("ir-metas", "#F59E0B", ic(<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></>), "Metas", null, () => goTab("metas"))}
           {modo !== "simples" && row("ir-relatorios", "#7C5CFC", ic(<><path d="M12 3a9 9 0 1 0 9 9h-9Z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15Z" /></>), "Relatórios", null, () => goTab("visao"))}
@@ -8244,6 +8252,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   ];
   const pending = steps.filter((x) => !x.done);
   const [guiaOff, setGuiaOff] = useState(() => lsGet("mediplan-guia-off") === "1");
+  const [insTodos, setInsTodos] = useState(false);
   // só para quem começou agora: quem já chega com dados (ou recebe tudo da nuvem de uma vez) não vê
   const totalDados = (setup.shifts || 0) + (setup.expenses || 0) + (setup.investments || 0) + (setup.vinculos || 0);
   const [perfil, setPerfil] = useState(() => lsGet("mediplan-guia"));
@@ -8424,7 +8433,12 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
           )}
         </div>
 
-      <button type="button" className="link-btn ini-rel" onClick={() => setActiveTab("visao")}>Ver gráficos e relatórios do mês</button>
+      {insights.length > 0 && (
+        <div className="card" id="hoje-insights">
+          <div className="card-head"><h3 className="card-title">Insights do mês</h3>{insights.length > 3 && <button className="link-btn" onClick={() => setInsTodos(!insTodos)}>{insTodos ? "ver menos" : `ver todos (${insights.length})`}</button>}</div>
+          <InsightList items={insights} max={insTodos ? 0 : 3} />
+        </div>
+      )}
       <button className="btn btn-ghost" onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>
     </div>
   );
@@ -9386,7 +9400,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
           <div className="card-head"><h3 className="card-title">{showForm ? "Nova despesa" : "Adicionar despesa"}</h3>{showForm && <button className="btn-icon" onClick={() => setShowForm(false)}><IconX size={16} /></button>}</div>
           {!showForm ? (
             <div>
-              <p className="line-sub" style={{ marginTop: 0 }}>Cadastre contas fixas uma vez só e elas aparecem todo mês.{simples ? "" : " A fatura do cartão pode ser importada."}</p>
+              <p className="line-sub" style={{ marginTop: 0 }}>Cadastre contas fixas uma vez só e elas aparecem todo mês.{simples ? "" : " A fatura do cartão pode ser importada pelo botão +."}</p>
               <button className="btn btn-primary" onClick={() => setShowForm(true)}><IconPlus size={16} color="#fff" /> Nova despesa</button>
             </div>
           ) : (
@@ -9435,7 +9449,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
           <DGv id="desp-venc" icon={<IconCalendar size={18} />} tone="#B91C1C" title="Próximos vencimentos" sub={monthExpenseItems.filter((e) => !e.paid).length + " conta(s) a pagar"} val={fmtBRL(totalPending)}>
             <DProximos incomeItems={[]} expenseItems={monthExpenseItems} max={10} />
           </DGv>
-          {!simples && <DGv id="desp-imp" icon={<IconUpload size={18} />} tone="#334155" title="Importar fatura do cartão" sub="PDF, OFX ou CSV" val="">
+          {false && <DGv id="desp-imp" icon={<IconUpload size={18} />} tone="#334155" title="Importar fatura do cartão" sub="PDF, OFX ou CSV" val="">
             <p className="line-sub" style={{ marginTop: 0 }}>Traga as despesas do banco ou do cartão de uma vez.</p>
             <button className="btn btn-ghost" onClick={() => goTab && goTab("importar")}>Abrir Importar</button>
           </DGv>}

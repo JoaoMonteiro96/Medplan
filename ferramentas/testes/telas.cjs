@@ -18,7 +18,7 @@ const SAIDA = path.join(__dirname, '..', 'saida'); fs.mkdirSync(SAIDA, { recursi
       await irPara(p, 'calendario'); await p.click('#cal-ferias'); await p.waitForTimeout(400);
       await p.fill('#fer-ini', isoDaqui(2)); await p.fill('#fer-fim', isoDaqui(16)); await p.waitForTimeout(300); await foto('ferias');
       await p.keyboard.press('Escape'); await p.waitForTimeout(300);
-      if (largura < 721) { await p.click('button[aria-label="Mais seções"]'); await p.waitForTimeout(400); await foto('mais'); }
+      if (largura < 721 && (await p.$('button[aria-label="Mais seções"]'))) { await p.click('button[aria-label="Mais seções"]'); await p.waitForTimeout(400); await foto('mais'); }
     }
     await ctx.close();
   }
