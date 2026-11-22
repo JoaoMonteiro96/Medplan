@@ -1,2 +1,13 @@
 node_modules/
 .DS_Store
+# saídas das ferramentas (geradas de novo a cada uso)
+ferramentas/saida/
+ferramentas/video/cap/
+ferramentas/video/parts/
+ferramentas/video/*.mp4
+ferramentas/video/*.wav
+ferramentas/video/pontos.json
+ferramentas/video/cliques.json
+ferramentas/video/duracao.txt
+ferramentas/video/lista.txt
+__pycache__/

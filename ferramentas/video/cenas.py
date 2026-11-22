@@ -1,0 +1,83 @@
+from motor import T
+def c(k):  # centro de um elemento (css)
+    x, y, w, h = T[k]; return (x + w / 2, y + h / 2)
+DK = 1340 / 1440
+def wd(x, y): return (520 + x * DK, 140 + y * DK)      # css do computador -> mundo
+CK = 900 * 3 / 2664
+def wc(x, y): return (1092.4 + x * CK, 134.6 + y * CK)  # css do celular -> mundo
+nav = lambda t: c('d-nav-' + t)
+def cam(*l): return [(t, *p, z) for t, p, z in l]
+C0 = (960, 540)
+Y_PAGAR = max(0, T['m-hoje3-pagar'] - 330)
+Y_ORG = max(0, T['m-org-sug'] - 150)
+Y_META = max(0, T['m-metas2-chart'] - 190)
+
+CENAS = [
+ dict(nome='abertura', dur=6, tipo='titulo'),
+ dict(nome='duo', dur=8, tipo='duo', leg=[(0.9, 7.4, 'No computador e no celular, com os mesmos dados')],
+      cam=cam((0, C0, 1.0), (8, (960, 520), 1.045))),
+ dict(nome='guia', dur=14, tipo='cel', texto=('Do seu jeito: Simples ou Completo', 'Na primeira vez, um guia rápido mostra o app todo. No fim, você escolhe o modo e pode trocar quando quiser, sem perder nada.'),
+      est=[(0, ('vp', 'm-guia1')), (3.2, ('vp', 'm-guia5')), (6.2, ('vp', 'm-guia9')), (9.0, ('vp', 'm-guia10')), (11.6, ('vp', 'm-guia10c'))],
+      toques=[(2.9, *c('m-bv-seguir')), (5.9, *c('m-bv-seguir')), (8.7, *c('m-bv-seguir')), (11.3, *c('m-bv-completo'))],
+      cam=cam((0, C0, 1.0), (14, C0, 1.03)),
+      leg=[(0.8, 2.8, 'Na primeira vez, um guia rápido mostra o app todo'), (3.5, 5.8, 'Inclusive o novo modo Férias'), (6.5, 8.6, 'Cada tela diz em qual modo a função está'), (9.3, 13.6, 'No fim, escolha Simples ou Completo. Dá para trocar depois')]),
+ dict(nome='hoje', dur=15, tipo='cel', texto=('Seu dia em uma tela', 'Abra o app e veja o plantão do dia, o dinheiro que cai e a conta que vence. Um toque resolve.'),
+      est=[(0, ('vp', 'm-inicio-vp')), (6.3, ('vp', 'm-hoje2')), (9.6, ('full', 'm-hoje3', [(0, 0), (10.2, 0), (12.4, Y_PAGAR)]))],
+      toques=[(6.0, *c('m-hoje-recebi'))],
+      cam=cam((0, C0, 1.0), (15, C0, 1.03)),
+      leg=[(1.0, 5.6, 'Plantão de hoje, o que cai e as contas que vencem'), (6.6, 9.4, 'Um toque em Recebi e pronto'), (11.0, 14.4, 'E quais contas dá para pagar com o que já caiu')]),
+ dict(nome='plantao', dur=16, tipo='cel', texto=('Lançar um plantão leva segundos', 'Diga onde, quando e quanto. Se for fixo, escolha os dias uma vez e o app lança os próximos sozinho.'),
+      est=[(0, ('vp', 'm-hoje3-vp')), (1.5, ('vp', 'm-add')), (3.9, ('vp', 'm-plantao')), (6.7, ('vp', 'm-fixo')), (9.1, ('vp', 'm-dia')), (11.6, ('vp', 'm-forma'))],
+      toques=[(1.2, *c('mnovo')), (3.6, *c('m-add-plantao')), (6.4, *c('m-fixo')), (8.8, *c('m-dia'))], arrastos=[(10.6, 11.5, 200, 640, 200, 380)],
+      cam=cam((0, C0, 1.0), (16, C0, 1.03)),
+      leg=[(4.2, 6.2, 'Plantão avulso ou fixo'), (9.4, 11.2, 'Escolha os dias da semana'), (12.0, 15.4, 'Diga como o dinheiro chega: o app calcula o imposto')]),
+ dict(nome='calendario', dur=18, tipo='desk', texto=('O mês inteiro no calendário', 'Cada dia mostra plantões, recebimentos e contas. Verde: entrou mais. Vermelho: saiu mais.'),
+      est=[(0, ('vp', 'd-inicio-vp')), (1.6, ('vp', 'd-cal')), (11.0, ('vp', 'd-cal-dia'))],
+      cur=[(0, 700, 520), (1.3, *nav('calendario')), (3.2, 760, 560), (4.6, *c('d-cal-saldo')), (9.4, *c('d-cal-saldo')), (10.6, *c('d-cal-14')), (12.4, 1000, 640), (18, 1000, 640)], cliques=[1.4, 10.8],
+      cam=cam((0, C0, 1.0), (4.4, C0, 1.0), (5.8, wd(1090, 190), 2.0), (8.8, wd(1090, 190), 2.0), (10.0, C0, 1.0), (11.6, C0, 1.0), (13.0, wd(727, 420), 1.42), (16.4, wd(727, 420), 1.42), (17.6, C0, 1.0)),
+      leg=[(2.0, 4.4, 'Plantões, horas e dias trabalhados no mês'), (6.0, 8.8, 'Saldo do mês: tudo que entrou menos o que saiu'), (13.2, 16.4, 'Clique num dia para ver o que entrou e lançar algo nele')]),
+ dict(nome='ferias', dur=16, tipo='cel', texto=('Férias sem susto', 'Escolha o período. O app mostra os plantões para passar, quanto você deixa de receber e se as contas continuam pagas.'),
+      est=[(0, ('vp', 'm-hoje3-vp')), (1.5, ('vp', 'm-cal')), (3.6, ('vp', 'm-fer0')), (5.6, ('vp', 'm-fer1')), (9.4, ('vp', 'm-fer2')), (13.0, ('vp', 'm-cal2'))],
+      toques=[(1.2, *c('m-dock-calendario')), (3.3, *c('m-cal-ferias')), (5.3, *c('m-fer-ini')), (12.7, *c('m-fer-salvar'))], arrastos=[(8.6, 9.4, 200, 640, 200, 360)],
+      cam=cam((0, C0, 1.0), (16, C0, 1.03)),
+      leg=[(3.8, 5.4, 'No calendário, toque em Férias'), (5.9, 8.4, 'Escolha o período e veja quanto deixa de receber'), (9.7, 12.5, 'E se as contas do mês continuam pagas'), (13.3, 15.6, 'Os dias de férias ficam marcados no calendário')]),
+ dict(nome='faturamento', dur=15, tipo='desk', texto=('Recebimentos com um toque', 'O que já devia ter caído na conta aparece no topo. Toque em Recebi e pronto. Cada hospital tem sua caixa.'),
+      est=[(0, ('vp', 'd-cal')), (1.6, ('vp', 'd-fatA')), (4.6, ('vp', 'd-fatB')), (6.6, ('vp', 'd-fatC')), (9.0, ('vp', 'd-fatD'))],
+      cur=[(0, 900, 600), (1.3, *nav('faturamento')), (2.8, 1000, 420), (4.2, *c('fA-ok1')), (6.0, *c('fB-todos')), (7.6, 700, 420), (8.6, *c('fC-g1')), (10.0, 900, 760), (15, 900, 760)], cliques=[1.4, 4.5, 6.5, 8.9],
+      cam=cam((0, C0, 1.0), (1.8, C0, 1.0), (3.0, wd(830, 400), 1.32), (7.8, wd(830, 400), 1.32), (9.4, C0, 1.0), (10.0, C0, 1.0), (11.2, wd(620, 520), 1.42), (13.8, wd(620, 520), 1.42), (14.8, C0, 1.0)),
+      leg=[(3.0, 6.0, 'O que já devia ter caído aparece aqui, com um botão'), (6.8, 9.0, 'Recebi todos: confirma tudo de uma vez'), (11.3, 13.8, 'Cada hospital numa caixa, com todos os plantões do mês')]),
+ dict(nome='vale', dur=14, tipo='cel', texto=('Vale a pena esse plantão?', 'Digite o valor oferecido e as horas. O app mostra quanto entra, quanto dá por hora e o que isso faz pela sua meta.'),
+      est=[(0, ('vp', 'm-hoje3-vp')), (1.5, ('vp', 'm-maismenu')), (3.3, ('vp', 'm-vale0')), (5.4, ('vp', 'm-vale1')), (6.6, ('vp', 'm-vale'))],
+      toques=[(1.2, *c('m-mais')), (3.0, *c('m-item-vale')), (5.1, *c('m-vale-upa')), (6.3, *c('m-vale-valor'))],
+      cam=cam((0, C0, 1.0), (14, C0, 1.03)),
+      leg=[(7.2, 10.4, 'Quanto entra e quanto dá por hora, comparado com a sua média'), (10.7, 13.6, 'E quantos plantões como esse pagam a sua meta')]),
+ dict(nome='contas', dur=13, tipo='cel', texto=('Contas do mês sob controle', 'Cadastre as contas fixas uma vez. Elas aparecem todo mês, e o app sugere o que pagar primeiro.'),
+      est=[(0, ('vp', 'm-hoje3-vp')), (1.5, ('full', 'm-desp', [(0, 0), (4.4, 0), (6.6, 360)])), (8.4, ('full', 'm-org', [(0, 0), (9.0, 0), (10.6, Y_ORG)]))],
+      toques=[(1.2, *c('m-dock-despesas')), (8.1, *c('m-seg2'))], arrastos=[(4.0, 4.9, 200, 640, 200, 380)],
+      cam=cam((0, C0, 1.0), (13, C0, 1.03)),
+      leg=[(5.0, 8.0, 'Saúde e escola ficam separadas para o imposto de renda'), (10.8, 12.8, 'O que dá para pagar com o que já caiu')]),
+ dict(nome='investimentos', dur=13, tipo='desk', texto=('Investimentos com cotação automática', 'Ações, fundos, renda fixa e exterior. Os preços se atualizam sozinhos, sem você configurar nada.'),
+      est=[(0, ('vp', 'd-inicio-vp')), (1.6, ('full', 'd-inv', [(0, 0), (8.4, 0), (10.8, 520)]))],
+      cur=[(0, 900, 600), (1.3, *nav('investimentos')), (3.2, 700, 260), (4.8, 1000, 220), (7.8, 1300, 190), (9.6, 760, 640), (13, 760, 640)], cliques=[1.4],
+      cam=cam((0, C0, 1.0), (3.2, C0, 1.0), (4.6, wd(830, 210), 1.4), (7.6, wd(830, 210), 1.4), (8.8, C0, 1.0)),
+      leg=[(4.8, 7.6, 'A evolução do patrimônio, como numa corretora'), (10.6, 12.6, 'Rentabilidade no ano e no total')]),
+ dict(nome='impostos', dur=13, tipo='desk', texto=('Impostos sem susto', 'O app calcula as guias, avisa o vencimento e estima o imposto de renda com seus gastos de saúde e escola.'),
+      est=[(0, ('vp', 'd-inv-vp')), (1.6, ('full', 'd-contab', [(0, 0), (8.0, 0), (10.4, 500)]))],
+      cur=[(0, 900, 600), (1.3, *nav('contabilidade')), (3.0, 1270, 150), (7.6, 1270, 150), (9.4, 900, 700), (13, 900, 700)], cliques=[1.4],
+      cam=cam((0, C0, 1.0), (3.0, C0, 1.0), (4.4, wd(1090, 190), 2.0), (7.4, wd(1090, 190), 2.0), (8.6, C0, 1.0)),
+      leg=[(4.6, 7.4, 'Estimativa do IR: quanto você deve receber de volta'), (10.4, 12.6, 'Agenda de guias e quanto separar de cada recebimento')]),
+ dict(nome='metas', dur=14, tipo='cel', texto=('Metas contadas em plantões', 'Diga quanto quer juntar. O app mostra quantos plantões em cada hospital pagam a meta e quantos por mês até o prazo.'),
+      est=[(0, ('vp', 'm-hoje3-vp')), (1.4, ('vp', 'm-maismenu')), (3.2, ('full', 'm-metas', [(0, 0)])), (5.4, ('full', 'm-metas2', [(0, 0), (6.6, 0), (8.6, Y_META)]))],
+      toques=[(1.1, *c('m-mais')), (2.9, *c('m-item-metas')), (5.1, *c('m-meta1'))],
+      cam=cam((0, C0, 1.0), (14, C0, 1.03)),
+      leg=[(6.0, 8.4, 'A projeção mostra quando você chega lá'), (9.2, 13.4, 'E quantos plantões em cada hospital pagam o que falta')]),
+ dict(nome='importar', dur=11, tipo='cel', texto=('Importe em vez de digitar', 'Nota de corretagem, print da carteira, planilha da B3 ou fatura do cartão. O app lê e organiza.'),
+      est=[(0, ('vp', 'm-hoje3-vp')), (1.4, ('vp', 'm-maismenu')), (3.2, ('vp', 'm-imp')), (5.6, ('full', 'm-imp2', [(0, 0), (7.0, 0), (9.4, 640)]))],
+      toques=[(1.1, *c('m-mais')), (2.9, *c('m-item-importar')), (5.3, *c('m-imp-cart'))], arrastos=[(6.6, 7.5, 200, 650, 200, 360)],
+      cam=cam((0, C0, 1.0), (11, C0, 1.03)), leg=[(7.8, 10.6, 'Serve para qualquer corretora, no Brasil e no exterior')]),
+ dict(nome='privacidade', dur=10, tipo='cel', texto=('Seus dados são seus', 'Tudo fica salvo no seu aparelho. Se quiser, ligue a nuvem para usar no celular e no computador.'),
+      est=[(0, ('vp', 'm-hoje3-vp')), (1.4, ('vp', 'm-maismenu')), (3.2, ('full', 'm-backup', [(0, 0), (5.6, 0), (8.6, 380)]))],
+      toques=[(1.1, *c('m-mais')), (2.9, *c('m-item-backup'))], arrastos=[(5.0, 5.9, 200, 640, 200, 380)],
+      cam=cam((0, C0, 1.0), (10, C0, 1.03)), leg=[(3.8, 9.4, 'Nuvem opcional, trava com senha e cópia de segurança')]),
+ dict(nome='convite', dur=9, tipo='fim'),
+]

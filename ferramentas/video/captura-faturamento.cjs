@@ -1,0 +1,23 @@
+const { chromium } = require('playwright'); const http = require('http'), fs = require('fs'), path = require('path');
+const V = __dirname, DIST = path.resolve(V, '..', '..'), O = path.join(V, 'cap'); fs.mkdirSync(O, { recursive: true });
+const { dadosDeTeste, isoDaqui } = require('../comum.cjs');
+const srv = http.createServer((q, r) => { let p = q.url.split('?')[0]; if (p === '/') p = '/index.html'; fs.readFile(path.join(DIST, p), (e, d) => { if (e) { r.writeHead(404); r.end(); } else { r.writeHead(200, { 'Content-Type': /\.js$/.test(p) ? 'text/javascript' : /\.html$/.test(p) ? 'text/html' : /\.png$/.test(p) ? 'image/png' : 'application/json' }); r.end(d); } }); });
+// alguns plantões ainda sem receber, para a cena do botão Recebi
+const seed = dadosDeTeste(null, (b) => { const pend = { v3: ['2026-11-16'], v4: ['2026-11-12', '2026-11-18'], v5: ['2026-11-17'] }; b.shifts.forEach((s) => { if ((pend[s.vinculoId] || []).includes(s.date)) s.recebido = false; }); });
+const T = JSON.parse(fs.readFileSync(path.join(V, 'pontos.json'), 'utf8'));
+const bb = async (l) => l.evaluate((el) => { const b = el.getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; });
+(async () => { await new Promise((r) => srv.listen(0, r));
+  const b = await chromium.launch({ args: ['--lang=pt-BR'], env: { ...process.env, LANG: 'pt_BR.UTF-8', LC_ALL: 'pt_BR.UTF-8' } });
+  const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Bahia', serviceWorkers: 'block' });
+  await ctx.addInitScript((d) => { if (!sessionStorage.getItem('x')) { sessionStorage.setItem('x', '1'); localStorage.setItem('mediplan-cloud-skip', '1'); localStorage.setItem('mediplan-guia', 'antigo'); localStorage.setItem('mediplan-uso-off', '1'); localStorage.setItem('mediplan-data-v2', JSON.stringify(d)); } }, seed);
+  const d = await ctx.newPage(); await d.route(/^https?:\/\/(?!localhost)/, (r) => r.abort()); await d.goto(`http://localhost:${srv.address().port}/`); await d.waitForTimeout(1800);
+  await d.addStyleTag({ content: '*{animation:none!important;transition:none!important;caret-color:transparent!important} .aviso,#splash{display:none!important}' });
+  const shot = async (n) => { await d.mouse.move(5, 895); await d.waitForTimeout(350); await d.screenshot({ path: path.join(O, n + '.jpg'), type: 'jpeg', quality: 92 }); };
+  await d.click('.dsb-i[data-tab="faturamento"]'); await d.waitForTimeout(800); await d.evaluate(() => window.scrollTo(0, 0));
+  await shot('d-fatA'); T['fA-ok1'] = await bb(d.locator('.conf-ok').first()); T['fA-todos'] = await bb(d.locator('.conf-todos')); T['fA-card'] = await bb(d.locator('.conf-card'));
+  await d.locator('.conf-ok').first().click(); await d.waitForTimeout(400); await shot('d-fatB'); T['fB-todos'] = await bb(d.locator('.conf-todos'));
+  await d.locator('.conf-todos').click(); await d.waitForTimeout(400); await shot('d-fatC');
+  const g = d.locator('.fg', { hasText: 'Hospital Central' }).first(); T['fC-g1'] = await bb(g.locator('.fg-h'));
+  await g.locator('.fg-h').click(); await d.waitForTimeout(400); await shot('d-fatD'); T['fD-list'] = await bb(d.locator('.fg-list'));
+  fs.writeFileSync(path.join(V, 'pontos.json'), JSON.stringify(T)); console.log(['fA-ok1', 'fA-todos', 'fB-todos', 'fC-g1', 'fD-list', 'fA-card'].map((k) => k + ' ' + T[k].map(Math.round)).join('\n'));
+  await b.close(); srv.close(); })().catch((e) => { console.error(e); process.exit(1); });
