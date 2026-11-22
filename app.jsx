@@ -1781,6 +1781,30 @@ function CobrarSheet({ vinculo, itens = [], onSalvarNumero, onClose }) {
   );
 }
 
+function ApagarPlantoesSheet({ vinculo, shifts = [], onApagar, onClose }) {
+  const hoje = todayStr();
+  const meus = shifts.filter((x) => x.vinculoId === vinculo.id);
+  const futuros = meus.filter((x) => x.date >= hoje).length, todos = meus.length, recebidos = meus.filter((x) => x.date < hoje && x.recebido).length;
+  const [modo, setModo] = useState(futuros > 0 ? "futuro" : "todos");
+  useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
+  const n = modo === "todos" ? todos : futuros;
+  const pl = (k) => k === 1 ? "1 plantão" : `${k} plantões`;
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet apl" role="dialog" aria-label={"Apagar plantões de " + vinculo.nome} id="apagar-pl" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="cob-h"><span className="legend-dot" style={{ background: vinculo.cor }} /><div className="sheet-title" style={{ margin: 0 }}>Apagar plantões de {vinculo.nome}</div></div>
+        <div className="apl-ops" role="radiogroup">
+          <button type="button" role="radio" aria-checked={modo === "futuro"} className={`apl-op ${modo === "futuro" ? "on" : ""}`} data-modo="futuro" disabled={futuros === 0} onClick={() => setModo("futuro")}><i /><span><b>De hoje em diante</b><small>{futuros ? pl(futuros) : "Nenhum plantão daqui para frente"}. Os que já passaram continuam.</small></span></button>
+          <button type="button" role="radio" aria-checked={modo === "todos"} className={`apl-op ${modo === "todos" ? "on" : ""}`} data-modo="todos" onClick={() => setModo("todos")}><i /><span><b>Todos</b><small>{pl(todos)}, inclusive os que já passaram{recebidos ? ` (${recebidos} já recebidos)` : ""}.</small></span></button>
+        </div>
+        {(vinculo.fixos || []).some((f) => !f.fim) && <div className="field-hint">O plantão fixo para de se repetir.</div>}
+        <button type="button" className="btn apl-btn" id="apl-ok" disabled={n === 0} onClick={() => { onApagar(modo); onClose(); }}><IconTrash size={15} />{n ? `Apagar ${pl(n)}` : "Nada para apagar"}</button>
+      </div>
+    </div>
+  );
+}
+
 function ResumoMes({ r, simples, onFechar }) {
   if (!r) return null;
   return (
@@ -2245,6 +2269,7 @@ function App() {
   const [valeAberto, setValeAberto] = useState(false);
   const [cobrarId, setCobrarId] = useState(null);
   const [feriasAberto, setFeriasAberto] = useState(false);
+  const [apagarPlId, setApagarPlId] = useState(null); // hospital cujos plantões a pessoa quer apagar
   const [pickerYear, setPickerYear] = useState(null);
   const [signals, setSignals] = useState({ despesas: 0, investimentos: 0, dedutivel: 0 });
   const [chartScope, setChartScope] = useState("month");
@@ -3145,6 +3170,19 @@ function App() {
   const salvarFerias = (f) => { setContab((p) => ({ ...p, ferias: [...(p.ferias || []).filter((x) => x.id !== f.id), f].sort((a, b) => a.ini.localeCompare(b.ini)) })); avisar("Férias marcadas no calendário"); };
   const apagarFerias = (id) => { const antes = contab.ferias || []; setContab((p) => ({ ...p, ferias: (p.ferias || []).filter((x) => x.id !== id) })); avisar("Férias apagadas", () => setContab((p) => ({ ...p, ferias: antes }))); };
   const tirarPlantoes = (ids) => { const tirados = shifts.filter((s) => ids.includes(s.id)); setShifts((p) => p.filter((s) => !ids.includes(s.id))); avisar(tirados.length === 1 ? "Plantão tirado da agenda" : `${tirados.length} plantões tirados da agenda`, () => setShifts((p) => [...p, ...tirados])); };
+  // eventos do calendário (fora dos plantões): { id, data: AAAA-MM-DD, titulo, hora, nota }
+  const eventosLista = contab.eventos || [];
+  const salvarEvento = (ev) => { const novo = !eventosLista.some((x) => x.id === ev.id); setContab((p) => ({ ...p, eventos: [...(p.eventos || []).filter((x) => x.id !== ev.id), ev].sort((a, b) => (a.data + (a.hora || "")).localeCompare(b.data + (b.hora || ""))) })); avisar(novo ? "Evento salvo no calendário" : "Evento atualizado"); };
+  const apagarEvento = (id) => { const antes = contab.eventos || []; setContab((p) => ({ ...p, eventos: (p.eventos || []).filter((x) => x.id !== id) })); avisar("Evento apagado", () => setContab((p) => ({ ...p, eventos: antes }))); };
+  // apagar os plantões de um hospital: de hoje em diante (saiu da escala) ou todos
+  const apagarPlantoesDe = (vid, modo) => {
+    const hoje = todayStr(), sai = shifts.filter((x) => x.vinculoId === vid && (modo === "todos" || x.date >= hoje)), ids = new Set(sai.map((x) => x.id));
+    const v0 = vinculos.find((v) => v.id === vid), fixosAntes = v0 ? v0.fixos : undefined;
+    setShifts((p) => p.filter((x) => !ids.has(x.id)));
+    if (v0 && (v0.fixos || []).some((f) => !f.fim)) setVinculos((p) => p.map((v) => v.id === vid ? { ...v, fixos: (v.fixos || []).map((f) => f.fim ? f : { ...f, fim: hoje }) } : v));
+    vibrar([8, 40, 12]);
+    avisar(sai.length === 1 ? "1 plantão apagado" : `${sai.length} plantões apagados`, () => { setShifts((p) => { const ja = new Set(p.map((x) => x.id)); return [...p, ...sai.filter((x) => !ja.has(x.id))]; }); if (fixosAntes) setVinculos((p) => p.map((v) => v.id === vid ? { ...v, fixos: fixosAntes } : v)); });
+  };
   const monthStats = (y, m) => {
     const inc = buildIncomeItems(y, m);
     const exp = buildExpenseItems(y, m);
@@ -5339,6 +5377,32 @@ function App() {
         .cfg-legal { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; } .cfg-legal a { font-size: 13.5px; font-weight: 600; color: var(--accent, #15803D); }
         .cc-excluir { display: block; margin-top: 14px; padding: 6px 0; border: none; background: none; color: #B91C1C; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
         :root[data-theme="dark"] .cc-excluir { color: #FCA5A5; }
+        /* calendário: troca de mês arrastando, eventos */
+        .calendar-grid { touch-action: pan-y; }
+        .calendar-grid.cal-vai { animation: calVai .3s cubic-bezier(.2,.8,.2,1); } .calendar-grid.cal-volta { animation: calVolta .3s cubic-bezier(.2,.8,.2,1); }
+        @keyframes calVai { from { transform: translateX(28px); opacity: .35; } to { transform: none; opacity: 1; } }
+        @keyframes calVolta { from { transform: translateX(-28px); opacity: .35; } to { transform: none; opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .calendar-grid.cal-vai, .calendar-grid.cal-volta { animation: none; } }
+        .app .cal-cell .cal-ev { display: block; width: 100%; margin-top: auto; padding: 1px 4px; border-radius: 5px; background: #EDE9FE; color: #5B21B6; font-size: 9.5px; font-weight: 700; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+        :root[data-theme="dark"] .app .cal-cell .cal-ev { background: rgba(167,139,250,.22); color: #DDD6FE; }
+        @media (max-width: 380px) { .app .cal-cell .cal-ev { font-size: 0; height: 5px; padding: 0; border-radius: 3px; background: #8B5CF6; } :root[data-theme="dark"] .app .cal-cell .cal-ev { background: #A78BFA; } }
+        .cal-lines .cl-ev { color: #6D28D9; font-weight: 700; } :root[data-theme="dark"] .cal-lines .cl-ev { color: #C4B5FD; }
+        .cal-leg .lg-ev { background: #8B5CF6; }
+        .dia-dot.ev { background: #8B5CF6; border-radius: 3px; }
+        .dia-it.ev { display: flex; align-items: center; gap: 8px; } .dia-it.ev .dia-row { flex: 1; min-width: 0; }
+        .ev-bts { display: flex; gap: 8px; flex-wrap: wrap; }
+        .dia-acoes { display: flex; align-items: center; gap: 8px; } .dia-acoes .dia-apl { margin-right: auto; font-size: 13px; color: #B91C1C; }
+        /* apagar plantões de um hospital */
+        .fg-apagar { display: inline-flex; align-items: center; gap: 6px; margin: 10px 14px 12px; color: #B91C1C; font-size: 13.5px; }
+        :root[data-theme="dark"] .fg-apagar, :root[data-theme="dark"] .dia-acoes .dia-apl { color: #FCA5A5; }
+        .apl-ops { display: grid; gap: 8px; margin: 14px 0 10px; }
+        .apl-op { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+        .apl-op i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; margin-top: 2px; box-sizing: border-box; }
+        .apl-op.on { border-color: #DC2626; background: color-mix(in srgb, #DC2626 6%, var(--surface)); } .apl-op.on i { border: 5px solid #DC2626; }
+        .apl-op:disabled { opacity: .5; cursor: default; }
+        .apl-op b { display: block; font-size: 15px; } .apl-op small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+        .apl-btn { width: 100%; margin-top: 12px; background: #DC2626; color: #fff; border: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+        .apl-btn:disabled { background: var(--surface-3); color: var(--text-dim); }
         /* resumo do mês que passou */
         .desk .rm { margin-bottom: 18px; }
         .rm { border: 1.5px solid color-mix(in srgb, #16A34A 26%, var(--border)); }
@@ -5977,7 +6041,7 @@ function App() {
           />
         )}
         {activeTab === "faturamento" && (
-          <FaturamentoTab onCobrar={setCobrarId} onAdd={() => setQuickOpen(true)} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0}
+          <FaturamentoTab onCobrar={setCobrarId} onApagarPlantoes={setApagarPlId} onAdd={() => setQuickOpen(true)} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0}
             expanded={expanded} toggleSection={toggleSection} viewMonth={viewMonth} monthKey={monthKey}
             monthIncomeItems={monthIncomeItems}
             totalGross={totalGross} totalNet={totalNet}
@@ -5998,6 +6062,7 @@ function App() {
             addPresenca={addPresenca} removePresenca={removePresenca} toggleEscalaOff={toggleEscalaOff} toggleEscalaFeito={toggleEscalaFeito}
             vinculoMap={vinculoMap} netOf={netOf} setActiveTab={goTab} fluxoDia={fluxoDia} desk={desk}
             ferias={feriasLista} onFerias={() => setFeriasAberto(true)}
+            eventos={eventosLista} onSalvarEvento={salvarEvento} onApagarEvento={apagarEvento} goMonth={goMonth} onApagarPlantoes={setApagarPlId}
           />
         )}
         {activeTab === "despesas" && (
@@ -6052,6 +6117,7 @@ function App() {
         <MonthPicker year={pickerYear} setYear={setPickerYear} viewYear={viewYear} viewMonth={viewMonth} statsOf={monthStats}
           onPick={(y, m) => { setPickerYear(null); goMonth(y, m); }} onClose={() => setPickerYear(null)} />
       )}
+      {apagarPlId && vinculos.some((v) => v.id === apagarPlId) && <ApagarPlantoesSheet vinculo={vinculos.find((v) => v.id === apagarPlId)} shifts={shifts} onApagar={(modo) => apagarPlantoesDe(apagarPlId, modo)} onClose={() => setApagarPlId(null)} />}
       {feriasAberto && <FeriasSheet lista={contab.ferias || []} calcular={resumoFerias} onSalvar={salvarFerias} onApagar={apagarFerias} onTirar={tirarPlantoes} onClose={() => setFeriasAberto(false)} />}
       {cobrarId && (() => { const v = vinculos.find((x) => x.id === cobrarId); const l = v ? atrasadosDe(v.id) : []; return v ? <CobrarSheet vinculo={v} itens={l} onSalvarNumero={salvarNumeroCobranca} onClose={() => setCobrarId(null)} /> : null; })()}
       {valeAberto && <ValePlantao vinculos={vinculos} netOf={netOf} info={valeInfo} onClose={() => setValeAberto(false)} />}
@@ -6621,7 +6687,7 @@ function FaturamentoTab({
   expanded, toggleSection, viewMonth, monthKey, monthIncomeItems, totalGross, totalNet,
   vinculos, addVinculo, removeVinculo, updateVinculoTax, updateVinculoPrazo, updateVinculoEscala, extraRecurringIncomes, addExtraRecurringIncome, removeExtraRecurringIncome, updateExtraPrazo,
   shifts = [], oneOffIncomes = [], updateVinculo, updateExtra, updateShift, updateOneOff, addOneOff, onAdd, taxaPadrao,
-  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk, simples = false, onCobrar
+  netByVinculo, gainScope, setGainScope, history12, chartMonths, setChartMonths, goMonth, workCard, discreto, setDiscreto, desk, simples = false, onCobrar, onApagarPlantoes
 }) {
   const gv = useGv();
   const [editKey, setEditKey] = useState(null);
@@ -6748,6 +6814,7 @@ function FaturamentoTab({
                           ))}
                         </tbody>
                       </table>
+                      {g.plantoes > 0 && g.key.startsWith("v-") && onApagarPlantoes && <button type="button" className="link-btn fg-apagar" data-apagar-pl={g.nome} onClick={() => onApagarPlantoes(g.key.slice(2))}><IconTrash size={14} />Apagar plantões de {g.nome}</button>}
                     </div>
                   )}
                 </div>
@@ -9177,8 +9244,19 @@ function GoalsTab({ onVale = null, valoresPlantao = [], goals, addGoal, removeGo
 }
 
 function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYear, viewMonth, vinculos, addVinculo,
-  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, toggleEscalaFeito, fluxoDia = {}, desk, ferias = [], onFerias }) {
+  addShift, addPlantao, removeShiftSerie, shifts, removeShift, toggleShiftReceived, updateShiftPrazo, addPresenca, removePresenca, vinculoMap, netOf, setActiveTab, toggleEscalaOff, toggleEscalaFeito, fluxoDia = {}, desk, ferias = [], onFerias,
+  eventos = [], onSalvarEvento, onApagarEvento, goMonth, onApagarPlantoes }) {
   const [modo, setModo] = useState("plantao");
+  // arrastar o calendário para o lado troca o mês
+  const toque = useRef(null);
+  const [desliza, setDesliza] = useState("");
+  const trocarMes = (d) => { if (!goMonth) return; const n = new Date(viewYear, viewMonth + d, 1); setDesliza(d > 0 ? "vai" : "volta"); goMonth(n.getFullYear(), n.getMonth()); setTimeout(() => setDesliza(""), 320); };
+  const onTS = (e) => { const t = e.touches[0]; toque.current = { x: t.clientX, y: t.clientY, t: Date.now() }; };
+  const onTE = (e) => { const a = toque.current; toque.current = null; if (!a) return; const t = e.changedTouches[0], dx = t.clientX - a.x, dy = t.clientY - a.y; if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.6 && Date.now() - a.t < 800) trocarMes(dx < 0 ? 1 : -1); };
+  // eventos
+  const evDoDia = (iso) => eventos.filter((x) => x.data === iso);
+  const [evId, setEvId] = useState(null); // evento sendo editado
+  const [evTit, setEvTit] = useState(""), [evHora, setEvHora] = useState(""), [evNota, setEvNota] = useState("");
   const emFerias = (iso) => ferias.some((f) => iso >= f.ini && iso <= f.fim);
   const iniMes = dateStr(viewYear, viewMonth, 1), fimMes = dateStr(viewYear, viewMonth, new Date(viewYear, viewMonth + 1, 0).getDate());
   const feriasMes = ferias.filter((f) => f.fim >= iniMes && f.ini <= fimMes);
@@ -9203,7 +9281,9 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
   const [showNewVinculo, setShowNewVinculo] = useState(false);
   const [prazoDias, setPrazoDias] = useState(0);
   const [erro, setErro] = useState("");
-  useEffect(() => { setErro(""); setShowNewVinculo(false); setRep("nao"); }, [selectedDay]);
+  useEffect(() => { setErro(""); setShowNewVinculo(false); setRep("nao"); setEvId(null); setEvTit(""); setEvHora(""); setEvNota(""); if (modo === "evento") setModo("plantao"); }, [selectedDay]);
+  const abrirEvento = (ev) => { setEvId(ev ? ev.id : null); setEvTit(ev ? ev.titulo : ""); setEvHora(ev ? ev.hora || "" : ""); setEvNota(ev ? ev.nota || "" : ""); setModo("evento"); setAddAberto(true); setErro(""); };
+  const salvarEv = () => { if (!evTit.trim()) { setErro("Dê um nome ao evento."); return; } onSalvarEvento({ id: evId || uid(), data: diaIso, titulo: evTit.trim(), hora: evHora || "", nota: evNota.trim() }); setEvId(null); setEvTit(""); setEvHora(""); setEvNota(""); setAddAberto(false); setErro(""); };
   const today = todayStr();
   const dayEntries = selectedDay ? (entriesByDay[selectedDay] || []) : [];
   const allEntries = Object.values(entriesByDay).flat();
@@ -9239,13 +9319,13 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
           <button type="button" className="cal-fer-btn" id="cal-ferias" onClick={onFerias}><IconSol size={16} />Férias</button>
         </div>
       )}
-      <div className={`calendar-grid cal-m-a ${desk ? "cal-desk" : ""}`}>
+      <div className={`calendar-grid cal-m-a ${desk ? "cal-desk" : ""} ${desliza ? "cal-" + desliza : ""}`} onTouchStart={onTS} onTouchEnd={onTE}>
         {WEEKDAYS_PT.map((w, i) => <div key={i} className="weekday-label">{w}</div>)}
         {cells.map((day, idx) => {
           if (!day) return <div key={idx} className="cal-cell empty" />;
           const iso = dateStr(viewYear, viewMonth, day);
           const dEntries = entriesByDay[day] || [];
-          const isToday = iso === today, isSelected = selectedDay === day;
+          const isToday = iso === today, isSelected = selectedDay === day, evs = evDoDia(iso);
           return (
             <div key={idx} className={`cal-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""} ${fxClasse(day)} ${iso > today ? "fut" : ""} ${emFerias(iso) ? "ferias" : ""}`} onClick={() => setSelectedDay(day)}>
               <span className="cal-day-num mono">{day}</span>
@@ -9254,9 +9334,11 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                 <div className="cal-dots">{dEntries.slice(0, 4).map((e) => { const v = vinculoMap[e.vinculoId]; return <span key={e.id} className={`cal-dot ${e._kind === "escala" ? "esc" : ""} ${e.off ? "off" : ""}`} style={{ background: v ? v.cor : GOLD }} />; })}</div>
               )}
               {dEntries.some((e) => !e.off) && <span className="cal-hours">{fmtHoras(dEntries.reduce((a, e) => a + Number(e.hours || 0), 0))}</span>}
+              {evs.length > 0 && !desk && <span className="cal-ev" title={evs.map((x) => x.titulo).join(", ")}>{evs.length > 1 ? evs.length + " eventos" : evs[0].titulo}</span>}
               {desk && (() => { const f = fluxoDia[day]; const pl = dEntries.filter((e) => e._kind === "plantao" && !e.off).length; const its = f ? f.itens : [];
-                return (pl > 0 || its.length > 0) ? (
+                return (pl > 0 || its.length > 0 || evs.length > 0) ? (
                   <div className="cal-lines">
+                    {evs.slice(0, 2).map((x) => <span key={x.id} className="cl-ev">{x.hora ? x.hora + " " : ""}{x.titulo}</span>)}
                     {pl > 0 && <span className="cl-pl">{pl} {pl === 1 ? "plantão" : "plantões"}</span>}
                     {its.slice(0, 3).map((x) => <span key={x.k} className={x.in ? "cl-in" : "cl-out"}>{x.in ? "+" : "−"} {x.nome}</span>)}
                     {its.length > 3 && <span className="cl-more">+{its.length - 3}</span>}
@@ -9267,7 +9349,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
       </div>
 
       <div className="cal-leg">
-        <span><i className="lg-in" />entrou mais</span><span><i className="lg-out" />saiu mais</span><span><i className="lg-prev" />previsto</span>{feriasMes.length > 0 && <span><i className="lg-fer" />férias</span>}
+        <span><i className="lg-in" />entrou mais</span><span><i className="lg-out" />saiu mais</span><span><i className="lg-prev" />previsto</span>{feriasMes.length > 0 && <span><i className="lg-fer" />férias</span>}{eventos.some((x) => x.data >= iniMes && x.data <= fimMes) && <span><i className="lg-ev" />evento</span>}
       </div>
       {usedVinc.length > 0 && (
         <div className="legend inline" style={{ marginTop: 10 }}>{usedVinc.map((v) => <span key={v.id}><i style={{ background: v.cor }} />{v.nome}</span>)}</div>
@@ -9280,7 +9362,22 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
             {fxSel && <b className={`dia-tot mono ${fxSel.entra - fxSel.sai >= 0 ? "in" : "out"}`}>{fxSel.entra - fxSel.sai >= 0 ? "+ " : "− "}{fmtBRL(Math.abs(fxSel.entra - fxSel.sai))}</b>}
             <button className="btn-icon" aria-label="Fechar" onClick={() => setSelectedDay(null)}><IconX size={16} /></button></div>
 
-          {!fxSel && dayEntries.length === 0 && <div className="empty-state">Nada neste dia.</div>}
+          {!fxSel && dayEntries.length === 0 && evDoDia(diaIso).length === 0 && <div className="empty-state">Nada neste dia.</div>}
+
+          {evDoDia(diaIso).length > 0 && (
+            <div className="dia-lista" id="dia-eventos">
+              <div className="dia-sec">Eventos</div>
+              {evDoDia(diaIso).map((ev) => (
+                <div key={ev.id} className="dia-it ev">
+                  <button type="button" className="dia-row" onClick={() => abrirEvento(ev)} aria-label={"Editar " + ev.titulo}>
+                    <i className="dia-dot ev" />
+                    <span className="dia-n"><b>{ev.titulo}</b><small>{[ev.hora, ev.nota].filter(Boolean).join(" · ") || "dia todo"}</small></span>
+                  </button>
+                  <button className="btn-icon" aria-label={"Apagar " + ev.titulo} onClick={() => onApagarEvento(ev.id)}><IconTrash size={15} /></button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {fxSel && fxSel.itens.length > 0 && (
             <div className="dia-lista">
@@ -9319,7 +9416,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
                       {prazoOptions("dias", e.prazoDias || 0).map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
                     </select></div>
                           {e.serie && (() => { const n = (shifts || []).filter((x) => x.serie === e.serie && x.date > e.date).length; return n > 0 ? <div className="stub-row"><span className="k">Plantão que se repete</span><button type="button" className="link-btn" data-serie-del onClick={() => removeShiftSerie(e.serie, e.date)}>Apagar este e os {n} seguintes</button></div> : null; })()}
-                          <div className="dia-acoes"><button className="btn-icon" aria-label="Apagar este plantão" onClick={() => removeShift(e.id)}><IconTrash size={15} /></button></div>
+                          <div className="dia-acoes">{onApagarPlantoes && <button type="button" className="link-btn dia-apl" onClick={() => { setSelectedDay(null); onApagarPlantoes(e.vinculoId); }}>Apagar vários de {nome}</button>}<button className="btn-icon" aria-label="Apagar este plantão" onClick={() => removeShift(e.id)}><IconTrash size={15} /></button></div>
                         </div>
                       )}
                     </div>
@@ -9350,9 +9447,26 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
             <div className="add-head"><b>Adicionar neste dia</b></div>
             <div className="segmented" id="day-modo" role="tablist">
               <button type="button" role="tab" aria-selected={modo === "plantao"} className={`seg-btn ${modo === "plantao" ? "active" : ""}`} data-modo="plantao" onClick={() => { setModo("plantao"); setErro(""); setShowNewVinculo(false); }}>Plantão</button>
-              <button type="button" role="tab" aria-selected={modo === "fixo"} className={`seg-btn ${modo === "fixo" ? "active" : ""}`} data-modo="fixo" onClick={() => { setModo("fixo"); setErro(""); }}>Cargo fixo (diarista)</button>
+              <button type="button" role="tab" aria-selected={modo === "fixo"} className={`seg-btn ${modo === "fixo" ? "active" : ""}`} data-modo="fixo" onClick={() => { setModo("fixo"); setErro(""); }}>Cargo fixo</button>
+              {onSalvarEvento && <button type="button" role="tab" aria-selected={modo === "evento"} className={`seg-btn ${modo === "evento" ? "active" : ""}`} data-modo="evento" onClick={() => { setModo("evento"); setErro(""); }}>Evento</button>}
             </div>
-            {modo === "plantao" ? (
+            {modo === "evento" ? (
+              <>
+                <div className="field" style={{ marginTop: 12 }}>
+                  <label htmlFor="ev-tit">Nome do evento *</label>
+                  <input id="ev-tit" value={evTit} onChange={(e) => { setEvTit(e.target.value); setErro(""); }} placeholder="Ex.: dentista, aniversário, congresso" autoComplete="off" />
+                </div>
+                <div className="form-grid" style={{ marginTop: 10 }}>
+                  <div className="field"><label htmlFor="ev-hora">Horário (opcional)</label><input id="ev-hora" type="time" value={evHora} onChange={(e) => setEvHora(e.target.value)} /></div>
+                  <div className="field"><label htmlFor="ev-nota">Observação (opcional)</label><input id="ev-nota" value={evNota} onChange={(e) => setEvNota(e.target.value)} placeholder="Ex.: levar exames" autoComplete="off" /></div>
+                </div>
+                {erro && <div className="note-bad" style={{ marginBottom: 10 }}>{erro}</div>}
+                <div className="ev-bts">
+                  <button className="btn btn-primary" id="ev-salvar" onClick={salvarEv}>{evId ? "Salvar alterações" : <><IconPlus size={15} /> Salvar evento</>}</button>
+                  {evId && <button type="button" className="btn btn-ghost" onClick={() => { setEvId(null); setEvTit(""); setEvHora(""); setEvNota(""); setAddAberto(false); }}>Cancelar</button>}
+                </div>
+              </>
+            ) : modo === "plantao" ? (
               <>
                 <div className="field" style={{ marginTop: 12 }}>
                   <label htmlFor="pl-local">Onde foi o plantão?</label>

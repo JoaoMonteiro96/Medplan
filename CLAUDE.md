@@ -54,6 +54,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - `contab.catAprendida`: categoria que a pessoa escolheu para cada loja da fatura do cartão.
 - `contab.modoApp`: `"simples"` ou `"completo"`. Sem valor: quem já tem dados fica no Completo; quem não tem vê o guia de abertura.
 - `contab.ferias`: lista de férias salvas (`{ id, ini, fim }`, datas `AAAA-MM-DD`).
+- `contab.eventos`: eventos do calendário fora dos plantões (`{ id, data, titulo, hora, nota }`, data `AAAA-MM-DD`, hora `HH:MM` ou vazia).
 - `mediplan-guia` (`novo`/`antigo`) e `mediplan-guia-off`: cartão "Primeiros passos", só para quem começou agora.
 - `mediplan-sync-cursor`: até quando o aparelho já baixou da nuvem (`{ u: conta, t: data }`). Com ele, o app baixa só o que mudou (`pullChanges`); sem ele, baixa tudo (`pullFromCloud`).
 - `mediplan-resumo-visto`: mês (`AAAA-MM`) cujo resumo a pessoa já fechou.
@@ -73,6 +74,8 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Resumo do mês que passou** (`ResumoMes`): na Hoje, do dia 1 ao 7, com entrou, contas, investiu (só no Completo), sobrou, ganho por hora e o hospital que pagou melhor. Fecha no X.
 - **Cobrar pelo WhatsApp** (`CobrarSheet`): botão nos recebimentos atrasados (Hoje e Plantões › Recebimentos). Lista o que está atrasado no hospital, guarda o WhatsApp do financeiro e abre a conversa com a mensagem pronta (`wa.me`).
 - **Excluir minha conta e meus dados** (`cloudActions.excluirConta`): em Configurações › Nuvem e conta. Apaga as notas na pasta `notas`, as linhas de `records`, chama `excluir_minha_conta()` e limpa o aparelho.
+- **Calendário:** no celular, arrastar o dedo para o lado troca o mês. **Eventos** (`contab.eventos`): "Adicionar neste dia" › Evento; aparecem em roxo no calendário e no dia, com editar e apagar.
+- **Apagar plantões de um hospital** (`ApagarPlantoesSheet`, `apagarPlantoesDe`): em Recebimentos, no grupo do hospital, ou no plantão aberto no calendário ("Apagar vários de..."). Opções: de hoje em diante ou todos; encerra o plantão fixo; tem Desfazer.
 - **Férias** (`FeriasSheet`, `resumoFerias`): botão no calendário. Mostra os plantões para passar, quanto deixa de receber e, pelo mês em que o dinheiro cairia, se as contas continuam pagas. Salva no calendário (dias em azul) e pode tirar os plantões da agenda (com Desfazer).
 - **Vale a pena esse plantão?** (`ValePlantao`): no menu Mais (no Simples, na tela de Metas) e na barra lateral do computador.
 - **Metas em plantões** (`MetaEmPlantoes`): quantos plantões em cada hospital pagam a meta.
