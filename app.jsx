@@ -1624,7 +1624,7 @@ const BV_PASSOS = [
   ["recebi", "Marque quando o dinheiro cair", "A tela Hoje mostra o que já devia ter caído na conta. Caiu? Toque em Recebi. Atrasou? Toque em Cobrar e a mensagem vai pronta pelo WhatsApp para o financeiro do hospital.", "dois"],
   ["contas", "Recebe, paga e sobra", "Cadastre as contas fixas uma vez; elas voltam todo mês. A tela Contas mostra o mês em 3 passos: o que você recebe, o que paga e quanto sobra para investir.", "dois"],
   ["resumo", "Como foi o mês", "Nos primeiros dias de cada mês, a tela Hoje mostra quanto entrou, quanto saiu, quanto sobrou e qual hospital pagou melhor por hora.", "dois"],
-  ["calendario", "O mês inteiro no calendário", "Cada dia mostra plantões, recebimentos e contas. Verde: entrou mais. Vermelho: saiu mais.", "dois"],
+  ["calendario", "O mês inteiro no calendário", "Cada dia mostra plantões, recebimentos e contas. Verde: entrou mais. Vermelho: saiu mais. Anote também seus eventos, e arraste para o lado para trocar de mês.", "dois"],
   ["ferias", "Planeje suas férias", "No calendário, toque em Férias e escolha o período. O app mostra os plantões para passar, quanto você deixa de receber e se as contas continuam pagas.", "dois"],
   ["vale", "Vale a pena esse plantão?", "Digite o valor oferecido e as horas. O app mostra quanto entra, quanto dá por hora e compara com a sua média.", "dois"],
   ["metas", "Metas contadas em plantões", "Diga quanto quer juntar e até quando. O app mostra quantos plantões em cada hospital pagam a meta.", "dois"],
