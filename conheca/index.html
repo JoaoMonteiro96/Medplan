@@ -171,9 +171,9 @@
         <p class="sub">Abra o app e veja o que pede atenção hoje: o plantão do dia, o dinheiro que cai e a conta que vence. Plantões, hospitais, contas, impostos e investimentos num lugar só.</p>
         <div class="acoes">
           <a class="btn btn-cheio" href="/">Começar agora</a>
-          <a class="btn btn-linha" href="#video">Ver o vídeo de 3 minutos</a>
+          <a class="btn btn-linha" href="#video">Ver o vídeo</a>
         </div>
-        <p class="nota">Funciona no celular e no computador. Não precisa baixar nada na loja.</p>
+        <p class="nota">Funciona no celular e no computador. Comece no modo Simples e passe para o Completo quando quiser.</p>
       </div>
       <div class="telas" aria-hidden="true">
         <div class="cel a"><img src="img/cel-hoje.jpg" alt="" /></div>
@@ -204,6 +204,19 @@
 
       <div class="linha inv aparece">
         <div class="txt">
+          <h3>Do seu jeito: Simples ou Completo</h3>
+          <p>Na primeira vez, um guia rápido mostra o app todo. No fim, você escolhe como quer usar. Dá para trocar quando quiser, sem perder nada.</p>
+          <ul>
+            <li>Simples: plantões, recebimentos, contas e quanto separar para o imposto</li>
+            <li>Completo: tudo isso, mais investimentos, guias, imposto de renda e relatórios</li>
+            <li>Os mesmos dados nos dois modos</li>
+          </ul>
+        </div>
+        <div class="foto"><div class="cel"><img src="img/cel-modos.jpg" alt="Escolha entre o modo Simples e o modo Completo" loading="lazy" /></div></div>
+      </div>
+
+      <div class="linha aparece">
+        <div class="txt">
           <h3>Seus plantões e quanto falta cair</h3>
           <p>Lance o plantão em segundos. Se for fixo, escolha os dias uma vez e o app lança os próximos sozinho.</p>
           <ul>
@@ -215,17 +228,30 @@
         <div class="foto"><div class="cel"><img src="img/cel-faturamento.jpg" alt="Recebimentos do mês com o botão Recebi" loading="lazy" /></div></div>
       </div>
 
-      <div class="linha aparece">
+      <div class="linha inv aparece">
         <div class="txt">
           <h3>O mês inteiro no calendário</h3>
           <p>Cada dia mostra os plantões, os recebimentos e as contas. Toque num dia para ver tudo e marcar o que já aconteceu.</p>
           <ul>
             <li>Horas e dias trabalhados no mês</li>
             <li>Barra verde quando entrou mais, vermelha quando saiu mais</li>
-            <li>Dias previstos marcados à parte</li>
+            <li>Dias de férias marcados em azul</li>
           </ul>
         </div>
         <div class="foto"><div class="cel"><img src="img/cel-calendario.jpg" alt="Calendário do mês com os plantões marcados" loading="lazy" /></div></div>
+      </div>
+
+      <div class="linha aparece">
+        <div class="txt">
+          <h3>Férias sem susto</h3>
+          <p>No calendário, toque em Férias e escolha o período. Antes de sair, você já sabe o que muda no seu mês.</p>
+          <ul>
+            <li>Quais plantões você precisa passar</li>
+            <li>Quanto deixa de receber</li>
+            <li>Se as contas do mês continuam pagas</li>
+          </ul>
+        </div>
+        <div class="foto"><div class="cel"><img src="img/cel-ferias.jpg" alt="Resumo das férias com os plantões para passar e como ficam as contas" loading="lazy" /></div></div>
       </div>
 
       <div class="linha inv aparece">
@@ -294,12 +320,12 @@
       </div>
 
       <div class="mais aparece">
+        <div><b>Guia de abertura</b><span>Na primeira vez, um passo a passo mostra o app todo.</span></div>
         <div><b>Organizar o mês</b><span>Quanto entrou, as contas, o investido e quanto sobra para gastos extras.</span></div>
         <div><b>Relatório do mês em PDF</b><span>Para guardar ou mandar para o contador.</span></div>
         <div><b>Pix como sócio</b><span>Informe o imposto que a empresa já pagou e veja bruto e líquido.</span></div>
         <div><b>Celular e computador</b><span>Com a nuvem ligada, os dados aparecem nos dois.</span></div>
-        <div><b>Trava com senha</b><span>Senha ou digital para abrir o app no celular.</span></div>
-        <div><b>Modo escuro</b><span>Claro, escuro ou igual ao celular.</span></div>
+        <div><b>Trava e modo escuro</b><span>Senha ou digital para abrir o app. Tema claro, escuro ou igual ao celular.</span></div>
       </div>
     </div>
   </section>
@@ -308,7 +334,7 @@
     <div class="wrap">
       <div class="titulo aparece">
         <h2>Veja o Sallos funcionando</h2>
-        <p>Três minutos mostrando o dia a dia: ver o que fazer hoje, lançar plantão, conferir o mês, decidir se um plantão vale a pena, pagar e investir.</p>
+        <p>Pouco mais de três minutos mostrando o dia a dia: escolher o modo, ver o que fazer hoje, lançar plantão, conferir o mês, planejar as férias, decidir se um plantão vale a pena, pagar e investir.</p>
       </div>
       <video class="aparece" controls preload="none" playsinline poster="img/video-capa.jpg">
         <source src="sallos-demonstracao.mp4" type="video/mp4" />
@@ -362,6 +388,8 @@
       <div class="titulo aparece"><h2>Perguntas frequentes</h2></div>
       <div class="faq aparece">
         <details><summary>Preciso entender de contabilidade?</summary><p>Não. O app usa palavras do dia a dia: quanto entrou, quanto saiu, quanto separar para o imposto. As contas ficam por conta dele.</p></details>
+        <details><summary>Achei o app completo demais. Tem um jeito mais simples?</summary><p>Tem. No modo Simples, o app mostra só plantões, recebimentos, contas e quanto separar para o imposto. Quando quiser mais, troque para o Completo em Mais, no celular, ou no pé da barra lateral, no computador. Nenhum dado se perde.</p></details>
+        <details><summary>Como funciona o modo Férias?</summary><p>No calendário, toque em Férias e escolha o primeiro e o último dia. O app mostra os plantões que caem no período, quanto você deixa de receber e se as contas dos meses seguintes continuam pagas. Se quiser, salve as férias no calendário e tire da agenda os plantões que vai passar.</p></details>
         <details><summary>Funciona no iPhone e no Android?</summary><p>Sim. Abra sallos.com.br no navegador e coloque na tela inicial. No computador, é só abrir o mesmo endereço.</p></details>
         <details><summary>Substitui o meu contador?</summary><p>Não. O Sallos organiza seus números e estima os impostos para você não ter surpresa. Ele também gera um relatório para mandar ao contador.</p></details>
         <details><summary>Ajuda a decidir se aceito um plantão?</summary><p>Sim. Em "Vale a pena?", digite o valor e as horas. O app mostra quanto entra já sem o imposto, quanto dá por hora comparado com a sua média e quantos plantões como esse pagam a sua meta.</p></details>
