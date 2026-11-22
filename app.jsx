@@ -2630,8 +2630,9 @@ function App() {
   const totalDadosApp = vinculos.length + shifts.length + expenses.length + recurringExpenses.length + investments.length + oneOffIncomes.length;
   const modoApp = contab.modoApp || (totalDadosApp > 0 ? "completo" : "simples");
   const simples = modoApp === "simples";
-  const [bvAberto, setBvAberto] = useState(false);
-  useEffect(() => { if (loaded && !contab.modoApp && totalDadosApp === 0) setBvAberto(true); }, [loaded]);
+  // o guia só aparece depois de a nuvem terminar de baixar: quem entra numa conta que já tem dados não vê
+  const [bvFeito, setBvFeito] = useState(false);
+  const bvAberto = loaded && !bvFeito && !contab.modoApp && totalDadosApp === 0 && !["loading", "auth", "saving"].includes(cloud.status);
   const trocarModo = (m) => { setContab((p) => ({ ...p, modoApp: m })); if (m === "simples" && OCULTAS_SIMPLES.includes(activeTab)) goTab("inicio"); };
   const ocultasNav = [...(contabAba ? [] : ["contabilidade"]), ...(simples ? OCULTAS_SIMPLES : [])];
   useEffect(() => { if (!contabAba && activeTab === "contabilidade") setActiveTab("inicio"); }, [contabAba, activeTab]);
@@ -5611,7 +5612,7 @@ function App() {
       )}
 
       <Aviso />
-      {bvAberto && <BoasVindas onFim={(m) => { trocarModo(m); setBvAberto(false); }} />}
+      {bvAberto && <BoasVindas onFim={(m) => { trocarModo(m); setBvFeito(true); }} />}
       <input ref={reanexarRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => reanexar(e.target.files && e.target.files[0])} />
       <button className="fab2" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
 
