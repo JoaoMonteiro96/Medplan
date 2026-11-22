@@ -1434,10 +1434,12 @@ function DSide({ active, onPick, onNovo, ocultar = [] }) {
 }
 
 // barra de ações suspensa (celular): 5 seções + "Mais", que abre as outras numa folha
-const DOCK_IDS = ["inicio", "faturamento", "calendario", "despesas", "investimentos"];
-const DOCK_MAIS = ["organizacao", "metas", "visao", "contabilidade", "importar", "backup"];
-const DOCK_NOMES = { organizacao: "Organização", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
-function Dock({ active, onPick, ocultar = [] }) {
+// barra de baixo do celular: Hoje, Plantões, +, Contas e Mais
+const TITULO_CURTO = { inicio: "Hoje", calendario: "Plantões", faturamento: "Plantões", despesas: "Contas", organizacao: "Contas", investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
+const DOCK_GRUPOS = [["inicio", "Hoje", ["inicio"]], ["calendario", "Plantões", ["calendario", "faturamento"]], null, ["despesas", "Contas", ["despesas", "organizacao"]]];
+const DOCK_MAIS = ["investimentos", "metas", "visao", "contabilidade", "importar", "backup"];
+const DOCK_NOMES = { investimentos: "Investimentos", metas: "Metas", visao: "Relatórios", contabilidade: "Contabilidade", importar: "Importar", backup: "Ajustes" };
+function Dock({ active, onPick, onNovo, onVale, ocultar = [] }) {
   const [mais, setMais] = useState(false);
   useEffect(() => {
     if (!mais) return;
@@ -1446,29 +1448,41 @@ function Dock({ active, onPick, ocultar = [] }) {
   }, [mais]);
   const ir = (id) => { setMais(false); onPick(id); };
   const emMais = DOCK_MAIS.includes(active);
+  const icone = { inicio: IconHome, calendario: IconCalendar, despesas: IconWallet };
   return (
     <>
       {mais && (
         <div className="dk-scrim" onClick={() => setMais(false)}>
           <div className="dk-sheet" role="dialog" aria-label="Todas as seções" onClick={(e) => e.stopPropagation()}>
-            <h4>Todas as seções</h4>
+            <h4>Mais</h4>
             <div className="dk-grid">
               {DOCK_MAIS.filter((id) => !ocultar.includes(id)).map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = id === "backup" ? IconGear : t.icon; return (
                 <button key={id} type="button" data-tab={id} className={`dk-item ${active === id ? "on" : ""}`} aria-current={active === id ? "page" : undefined} onClick={() => ir(id)}>
                   <span><Ic size={22} /></span>{DOCK_NOMES[id]}
                 </button>
               ); })}
+              {onVale && <button type="button" className="dk-item" id="dk-vale" onClick={() => { setMais(false); onVale(); }}><span><ProIc n="calculo" size={22} /></span>Vale a pena?</button>}
             </div>
           </div>
         </div>
       )}
-      <nav className="dock" aria-label="Páginas">
-        {DOCK_IDS.map((id) => { const t = NAV_ALL.find((x) => x.id === id); const Ic = t.icon; return (
-          <button key={id} type="button" data-tab={id} className={`dk-btn ${active === id ? "on" : ""}`} aria-label={NAV_LABELS[id]} title={NAV_LABELS[id]} aria-current={active === id ? "page" : undefined} onClick={() => ir(id)}><Ic size={22} /></button>
-        ); })}
-        <button type="button" className={`dk-btn ${mais || emMais ? "on" : ""}`} aria-label="Mais seções" aria-expanded={mais} onClick={() => setMais((v) => !v)}><IconMore size={22} /></button>
+      <nav className="dock v2" aria-label="Páginas">
+        {DOCK_GRUPOS.map((g, i) => {
+          if (!g) return <button key="novo" type="button" className="dk-novo" aria-label="Novo lançamento" onClick={() => { setMais(false); onNovo && onNovo(); }}><IconPlus size={24} color="#fff" /></button>;
+          const [id, rot, grupo] = g; const on = grupo.includes(active) && !mais; const Ic = icone[id];
+          return <button key={id} type="button" data-tab={id} className={`dk-btn ${on ? "on" : ""}`} aria-current={on ? "page" : undefined} onClick={() => ir(grupo.includes(active) ? active : id)}><i className="dk-ic"><Ic size={21} /></i><span className="dk-rot">{rot}</span></button>;
+        })}
+        <button type="button" className={`dk-btn ${mais || emMais ? "on" : ""}`} aria-label="Mais seções" aria-expanded={mais} onClick={() => setMais((v) => !v)}><i className="dk-ic"><IconMore size={21} /></i><span className="dk-rot">Mais</span></button>
       </nav>
     </>
+  );
+}
+// alternar entre as duas telas de um mesmo grupo (Plantões: Agenda e Recebimentos; Contas: Contas e Organizar)
+function GrupoSeg({ itens, ativo, onPick }) {
+  return (
+    <div className="grp-seg" role="tablist">
+      {itens.map(([id, rot]) => <button key={id} type="button" role="tab" aria-selected={ativo === id} className={ativo === id ? "on" : ""} onClick={() => ativo !== id && onPick(id)}>{rot}</button>)}
+    </div>
   );
 }
 
@@ -1908,6 +1922,7 @@ function App() {
   };
   const [chartMonths, setChartMonths] = useState(12);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [valeAberto, setValeAberto] = useState(false);
   const [pickerYear, setPickerYear] = useState(null);
   const [signals, setSignals] = useState({ despesas: 0, investimentos: 0, dedutivel: 0 });
   const [chartScope, setChartScope] = useState("month");
@@ -2351,6 +2366,7 @@ function App() {
   const quickGo = (kind) => {
     setQuickOpen(false);
     if (kind === "cargo") { setCargoOpen(true); return; }
+    if (kind === "vale") { setValeAberto(true); return; }
     if (kind === "plantao") {
       const t = new Date(); setViewYear(t.getFullYear()); setViewMonth(t.getMonth()); setSelectedDay(t.getDate()); goTab("calendario");
     } else if (kind === "despesa") { setSignals((x) => ({ ...x, despesas: x.despesas + 1 })); goTab("despesas"); }
@@ -2711,6 +2727,45 @@ function App() {
   })();
 
   const curStats = monthStats(viewYear, viewMonth);
+  // ---- tela Hoje: o que pede ação hoje (plantão de hoje e amanhã, o que cai e o que vence) ----
+  const hojeInfo = (() => {
+    const t = new Date(), ty = t.getFullYear(), tm = t.getMonth(), hoje = todayStr(), amanha = addDaysIso(hoje, 1);
+    const ehMesAtual = ty === viewYear && tm === viewMonth;
+    const [py, pm] = tm === 0 ? [ty - 1, 11] : [ty, tm - 1];
+    const incCur = ehMesAtual ? monthIncomeItems : buildIncomeItems(ty, tm), expCur = ehMesAtual ? monthExpenseItems : buildExpenseItems(ty, tm);
+    // do mês passado, só o que ficou para trás há pouco tempo (o resto já aparece nos avisos)
+    const recente = addDaysIso(hoje, -10);
+    const inc = incCur.concat(buildIncomeItems(py, pm).filter((i) => !i.recebido && i.dateIso >= recente)), exp = expCur.concat(buildExpenseItems(py, pm).filter((e) => !e.paid && e.dateIso >= recente));
+    const dm = (iso) => fmtDatePt(iso).slice(0, 5);
+    const dias = (iso) => Math.round((new Date(hoje + "T12:00:00") - new Date(iso + "T12:00:00")) / 86400000);
+    const rotDia = (iso) => { const d = dias(iso); return d === 0 ? "Hoje" : d === 1 ? "Ontem" : d === -1 ? "Amanhã" : (new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long" }).replace(/^./, (c) => c.toUpperCase()) + ", " + dm(iso)); };
+    const itens = [];
+    shifts.filter((x) => x.date === hoje || x.date === amanha).sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach((x) => {
+      const v = vinculoMap[x.vinculoId];
+      itens.push({ key: "pl-" + x.id, tipo: "plantao", ordem: 1, titulo: v ? v.nome : "Plantão", sub: `${x.date === hoje ? "Plantão hoje" : "Plantão amanhã"} · ${fmtHoras(x.hours || 0)}`, cor: v ? v.cor : GOLD, valor: liquidoVinc(v, x.gross) });
+    });
+    vinculos.filter((v) => v.tipo === "mensal").forEach((v) => escalaDoMes(v, ty, tm).filter((e) => e.date === hoje && !e.off).forEach((e) => {
+      itens.push({ key: "esc-" + e.id, tipo: "escala", ordem: 1, titulo: v.nome, sub: `Hoje · ${TURNOS[e.turno] || "Escala"} · ${fmtHoras(e.hours)}`, cor: v.cor, acao: e.feito ? null : "Fiz", ok: e.feito, fazer: () => toggleEscalaFeito(v.id, e.date) });
+    }));
+    inc.filter((i) => !i.recebido && i.dateIso && i.dateIso <= hoje && i.net > 0).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso))).forEach((i) => {
+      const d = dias(i.dateIso);
+      itens.push({ key: "rec-" + i.key, tipo: "receber", ordem: 2, titulo: i.nome, sub: d === 0 ? "cai hoje" : `devia ter caído em ${dm(i.dateIso)}`, late: d > 0, valor: i.net, acao: typeof i.toggle === "function" ? "Recebi" : null, fazer: i.toggle });
+    });
+    exp.filter((e) => !e.paid && e.amount > 0 && e.dateIso <= amanha).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso))).forEach((e) => {
+      const d = dias(e.dateIso);
+      itens.push({ key: "pag-" + e.key, tipo: "pagar", ordem: 3, titulo: e.description, sub: d > 1 ? `atrasada há ${d} dias` : d === 1 ? "venceu ontem" : d === 0 ? "vence hoje" : "vence amanhã", late: d > 0, valor: e.amount, acao: "Paguei", fazer: e.toggle });
+    });
+    itens.sort((a, b) => a.ordem - b.ordem);
+    // o que dá para pagar com o que já caiu no mês
+    const recebido = incCur.filter((i) => i.recebido).reduce((a, i) => a + (Number(i.net) || 0), 0);
+    const pagas = expCur.filter((e) => e.paid).reduce((a, e) => a + (Number(e.amount) || 0), 0);
+    const investido = investments.filter((i) => !i.posicaoInicial && i.tipo !== "ajuste" && inMonth(i.date, ty, tm)).reduce((a, i) => a + (Number(i.amount) || 0), 0);
+    const caixa = Math.max(0, recebido - pagas - Math.max(0, investido));
+    let resta = caixa, n = 0, total = 0;
+    expCur.filter((e) => !e.paid && e.amount > 0).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso))).forEach((e) => { if (e.amount <= resta + 0.005) { resta -= e.amount; n++; total += e.amount; } });
+    const abertas = expCur.filter((e) => !e.paid && e.amount > 0).length;
+    return { itens, pagar: abertas ? { caixa, n, total, resta, abertas } : null };
+  })();
   const prevStats = (() => { let m = viewMonth - 1, y = viewYear; if (m < 0) { m = 11; y -= 1; } return monthStats(y, m); })();
   const monthBack = (k) => { let m = viewMonth - k, y = viewYear; while (m < 0) { m += 12; y -= 1; } return [y, m]; };
   const workCur = workStats(viewYear, viewMonth);
@@ -2802,6 +2857,14 @@ function App() {
   // ---- patrimônio total (recebido - pago, independente de estar em caixa ou investido) ----
   const patrimonioTotal = totalRecebidoAllTime - totalPagoAllTime + posicaoInicialTotal + portfolio.unrealized;
   const valorDaMeta = (g) => (g.fonte === "carteira" ? (portfolio.totalValue || 0) : g.fonte === "patrimonio" ? Math.max(0, patrimonioTotal) : Number(g.valorAtual) || 0);
+  // ---- "Vale a pena esse plantão?": média por hora dos últimos 3 meses e o hospital que paga melhor ----
+  const valeInfo = (() => {
+    const t = new Date(); let horas = 0, liq = 0; const por = {};
+    for (let k = 0; k < 3; k++) { const d = new Date(t.getFullYear(), t.getMonth() - k, 1); const w = workStats(d.getFullYear(), d.getMonth()); horas += w.hours; liq += w.net; w.byVinculo.forEach((o) => { const x = (por[o.id] = por[o.id] || { id: o.id, nome: o.nome, cor: o.cor, hours: 0, net: 0 }); x.hours += o.hours; x.net += o.net; }); }
+    const lista = Object.values(por).filter((o) => o.hours >= 12).map((o) => ({ ...o, hourly: o.net / o.hours })).sort((a, b) => b.hourly - a.hourly);
+    const meta = goals.map((g) => ({ g, falta: (Number(g.valorAlvo) || 0) - valorDaMeta(g) })).find((x) => x.falta > 0);
+    return { media: horas > 0 ? liq / horas : 0, melhor: lista[0] || null, meta: meta ? { nome: meta.g.nome, cor: meta.g.cor, falta: meta.falta } : null };
+  })();
   const setGoalFonte = (id, fonte) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, fonte } : g)));
   const setGoalPatch = (id, patch) => setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
   // média do que você investiu por mês nos últimos 6 meses fechados (ou desde o primeiro aporte, se faz menos tempo)
@@ -4728,6 +4791,69 @@ function App() {
         .oa-res-v { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; color: #15803D; margin: 2px 0 4px; }
         .oa-res-sub { font-size: 13.5px; line-height: 1.45; color: #166534; }
         .oa-res.neg { background: #FEF2F2; border-color: #FCA5A5; } .oa-res.neg .oa-res-lb, .oa-res.neg .oa-res-sub { color: #991B1B; } .oa-res.neg .oa-res-v { color: #B91C1C; }
+        /* ---- barra de baixo: Hoje, Plantões, +, Contas, Mais ---- */
+        .dk-ic { font-style: normal; }
+        .tb-t-curto { display: none; }
+        @media (max-width: 720px) { .tb-t-longo { display: none; } .tb-t-curto { display: inline; } }
+        @media (max-width: 720px) {
+          .dock.v2 { left: 10px; right: 10px; height: 66px; border-radius: 26px; padding: 0 6px; justify-content: space-between; gap: 2px; }
+          .dock.v2 .dk-btn { flex: 1 1 0; width: auto; min-width: 0; height: 58px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none !important; color: #64748B; }
+          .dock.v2 .dk-ic { display: grid; place-items: center; width: 46px; height: 28px; border-radius: 14px; transition: background .25s var(--ease, ease), color .25s; }
+          .dock.v2 .dk-btn.on { color: #15803D; } .dock.v2 .dk-btn.on .dk-ic { background: #E6F4EC; }
+          .dk-rot { font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap; } .dock.v2 .dk-btn.on .dk-rot { font-weight: 700; }
+          .dk-novo { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 18px; border: none; background: linear-gradient(160deg, #22C55E, #15803D); box-shadow: 0 10px 22px -8px rgba(22,163,74,.75); display: grid; place-items: center; cursor: pointer; margin: 0 2px; transition: transform .15s; }
+          .dk-novo:active { transform: scale(.92); } .dk-novo:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+          .fab2 { display: none !important; }
+          .dk-sheet { bottom: calc(92px + env(safe-area-inset-bottom)); }
+          .main { padding-bottom: 118px; }
+          :root[data-theme="dark"] .dock.v2 .dk-btn { color: #94A3B8; } :root[data-theme="dark"] .dock.v2 .dk-btn.on { color: #34D399; } :root[data-theme="dark"] .dock.v2 .dk-btn.on .dk-ic { background: rgba(52,211,153,.16); }
+        }
+        /* alternar telas do mesmo grupo */
+        .grp-seg { display: flex; gap: 4px; padding: 4px; margin: 0 0 14px; border-radius: 14px; background: var(--surface-3); }
+        .grp-seg button { flex: 1; height: 38px; border: none; border-radius: 11px; background: none; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-dim); cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+        .grp-seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(15,26,22,.14); }
+        .grp-seg button:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+        :root[data-theme="dark"] .grp-seg button.on { background: #22302B; }
+        /* ---- tela Hoje ---- */
+        .hoje { margin-bottom: 14px; }
+        .hoje-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+        .hoje-h h3 { margin: 0; font-family: "Manrope", "Inter", sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; } .hoje-h span { font-size: 13px; color: var(--text-dim); }
+        .hoje-vazio { display: flex; align-items: center; gap: 10px; padding: 10px 0 2px; font-size: 14px; color: var(--text-dim); }
+        .hoje-vazio i { width: 24px; height: 24px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; flex: none; }
+        .hoje-it { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 11px 0; }
+        .hoje-it + .hoje-it { border-top: 1px solid var(--hair, var(--border)); }
+        .hoje-ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-3); color: var(--text-dim); }
+        .hoje-it.t-receber .hoje-ic { background: #DCFCE7; color: #15803D; } .hoje-it.t-pagar .hoje-ic { background: #F1F5F9; color: #475569; } .hoje-it.t-pagar.late .hoje-ic { background: #FEE2E2; color: #B91C1C; }
+        .hoje-n { min-width: 0; } .hoje-n b { display: block; font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hoje-n small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 1px; } .hoje-it.late .hoje-n small { color: #B91C1C; font-weight: 600; }
+        .hoje-r { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; } .hoje-r > b { font-size: 14.5px; font-weight: 700; white-space: nowrap; } .hoje-r > b.in { color: #15803D; }
+        .hoje-r .dia-chk { padding: 5px 11px 5px 9px; font-size: 12.5px; }
+        :root[data-theme="dark"] .hoje-it.t-receber .hoje-ic { background: rgba(34,197,94,.14); color: #4ADE80; } :root[data-theme="dark"] .hoje-it.t-pagar .hoje-ic { background: rgba(148,163,184,.14); color: #CBD5E1; }
+        :root[data-theme="dark"] .hoje-it.t-pagar.late .hoje-ic { background: rgba(248,113,113,.14); color: #F87171; } :root[data-theme="dark"] .hoje-it.late .hoje-n small { color: #F87171; } :root[data-theme="dark"] .hoje-r > b.in { color: #4ADE80; }
+        .pag-mini { width: 100%; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; font: inherit; color: inherit; cursor: pointer; margin-bottom: 14px; }
+        .pag-mini-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: #DCFCE7; color: #15803D; }
+        .pag-mini-t { min-width: 0; } .pag-mini-t b { display: block; font-size: 14.5px; font-weight: 700; } .pag-mini-t small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+        .pag-mini-v { display: flex; align-items: center; gap: 4px; color: var(--text-dim); } .pag-mini-v b { color: var(--text); font-size: 15px; font-weight: 800; font-family: "Manrope", "Inter", sans-serif; white-space: nowrap; }
+        :root[data-theme="dark"] .pag-mini-ic { background: rgba(34,197,94,.14); color: #4ADE80; }
+        .ini-rel { display: block; margin: 2px auto 16px; font-weight: 600; }
+        /* ---- vale a pena esse plantão? ---- */
+        .sheet.vale { max-height: 92vh; overflow: auto; }
+        .vale-res { display: grid; grid-template-columns: 1fr 1fr; margin: 12px 0 10px; border-radius: 18px; overflow: hidden; background: linear-gradient(160deg, #0E5640, #0B3D2E); color: #fff; }
+        .vale-res > div { padding: 14px 16px; min-width: 0; } .vale-res > div + div { border-left: 1px solid rgba(255,255,255,.12); }
+        .vale-res > div > span { display: block; font-size: 12.5px; color: rgba(255,255,255,.72); }
+        .vale-res b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 23px; font-weight: 800; letter-spacing: -0.02em; margin: 4px 0 2px; white-space: nowrap; }
+        .vale-res small { font-size: 12px; color: rgba(255,255,255,.68); }
+        .vale-tom { padding: 9px 12px; border-radius: 10px; font-size: 13.5px; font-weight: 600; margin-bottom: 12px; }
+        .vale-tom.bom { background: #F0FDF4; color: #166534; } .vale-tom.baixo { background: #FFFBEB; color: #92400E; } .vale-tom.medio { background: var(--surface-3); color: var(--text); }
+        .vale-barras { display: grid; gap: 10px; margin: 2px 0 14px; }
+        .vale-b { display: grid; grid-template-columns: minmax(0, 118px) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+        .vale-b-n { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .vale-b-n small { display: block; font-size: 11px; opacity: .8; }
+        .vale-b-t { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; } .vale-b-t i { display: block; height: 100%; border-radius: 99px; transition: width .4s var(--ease, ease); }
+        .vale-b b { font-size: 13px; font-weight: 700; white-space: nowrap; }
+        .vale-meta { display: flex; gap: 10px; align-items: flex-start; padding: 11px 12px; border-radius: 12px; background: var(--surface-3); font-size: 13.5px; line-height: 1.45; }
+        .vale-meta i { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex: none; }
+        .vale-vazio { padding: 18px 0 8px; text-align: center; color: var(--text-dim); font-size: 14px; }
+        :root[data-theme="dark"] .vale-tom.bom { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .vale-tom.baixo { background: rgba(245,158,11,.12); color: #FCD34D; }
         .guia { margin-bottom: 16px; border: 1.5px solid color-mix(in srgb, #16A34A 30%, var(--border)); }
         .guia-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
         .guia-top h3 { margin: 0; font-family: "Manrope", "Inter", sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; } .guia-top span { font-size: 13px; color: var(--text-dim); }
@@ -5152,7 +5278,7 @@ function App() {
           <div className="tb-left">
             <div className="tb-logo"><IconLogo size={28} /></div>
             <div>
-              <h1 className="tb-title">{(PAGE_TITLES[activeTab] || [""])[0]}<button className={`cloud-dot ${cloud.status}`} title={cloudLabel} aria-label={cloudLabel} onClick={() => goTab("backup")} /></h1>
+              <h1 className="tb-title"><span className="tb-t-longo">{(PAGE_TITLES[activeTab] || [""])[0]}</span><span className="tb-t-curto">{TITULO_CURTO[activeTab] || (PAGE_TITLES[activeTab] || [""])[0]}</span><button className={`cloud-dot ${cloud.status}`} title={cloudLabel} aria-label={cloudLabel} onClick={() => goTab("backup")} /></h1>
               <p className="tb-sub">{(PAGE_TITLES[activeTab] || ["", ""])[1]}</p>
             </div>
           </div>
@@ -5168,11 +5294,13 @@ function App() {
         </header>
         <NavStrip items={NAV_ALL.filter((t) => t.id !== "backup" && (contabAba || t.id !== "contabilidade"))} active={activeTab} onPick={goTab} />
       </div>
-      <Dock active={activeTab} onPick={goTab} ocultar={contabAba ? [] : ["contabilidade"]} />
+      <Dock active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} onVale={() => setValeAberto(true)} ocultar={contabAba ? [] : ["contabilidade"]} />
       <DSide active={activeTab} onPick={goTab} onNovo={() => setQuickOpen(true)} ocultar={contabAba ? [] : ["contabilidade"]} />
 
       <div className="page">
       <div key={activeTab} className={`panel pg pg-${navDir}`}>
+        {!desk && (activeTab === "calendario" || activeTab === "faturamento") && <GrupoSeg itens={[["calendario", "Agenda"], ["faturamento", "Recebimentos"]]} ativo={activeTab} onPick={goTab} />}
+        {!desk && (activeTab === "despesas" || activeTab === "organizacao") && <GrupoSeg itens={[["despesas", "Contas"], ["organizacao", "Organizar"]]} ativo={activeTab} onPick={goTab} />}
         {activeTab === "organizacao" && (
           <OrganizacaoTab viewYear={viewYear} viewMonth={viewMonth} incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} invItems={monthInvestments.filter((i) => i.tipo !== "ajuste")} goTab={goTab} />
         )}
@@ -5186,7 +5314,7 @@ function App() {
             chartMonths={chartMonths} setChartMonths={setChartMonths} goMonth={goMonth} quickGo={quickGo}
             setup={{ vinculos: vinculos.length, shifts: shifts.length, expenses: expenses.length + recurringExpenses.length, investments: investments.length }}
             monthExpenseItems={monthExpenseItems} limits={limits} monthShiftsCount={monthShifts.length} insights={insights}
-            desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12}
+            desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12} hojeInfo={hojeInfo}
             workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
@@ -5263,6 +5391,7 @@ function App() {
         <MonthPicker year={pickerYear} setYear={setPickerYear} viewYear={viewYear} viewMonth={viewMonth} statsOf={monthStats}
           onPick={(y, m) => { setPickerYear(null); goMonth(y, m); }} onClose={() => setPickerYear(null)} />
       )}
+      {valeAberto && <ValePlantao vinculos={vinculos} netOf={netOf} info={valeInfo} onClose={() => setValeAberto(false)} />}
       {quickOpen && (
         <AddSheet inicial={typeof quickOpen === "string" ? quickOpen : null} onClose={() => setQuickOpen(false)} onDespesa={() => quickGo("despesa")} onOutro={(k) => quickGo(k)}
           vinculos={vinculos} taxaPadrao={contabCarga !== null ? contabCarga : Number(taxRateGeral) || 0} monthKey={monthKey}
@@ -5356,6 +5485,7 @@ function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, 
             <div className="add-mais">
               <button type="button" className="link-btn" onClick={() => onOutro("aporte")}>Investimento</button>
               <button type="button" className="link-btn" onClick={() => onOutro("importar")}>Importar</button>
+              <button type="button" className="link-btn" id="add-vale" onClick={() => onOutro("vale")}>Vale a pena esse plantão?</button>
             </div>
           </>
         )}
@@ -7530,11 +7660,110 @@ function Avisos({ alerts = [] }) {
     </div>
   );
 }
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [] }) {
+// ---- tela Hoje: lista do que pede ação hoje, com um toque para resolver ----
+function HojeCard({ itens = [] }) {
+  const [todos, setTodos] = useState(false);
+  const vis = todos ? itens : itens.slice(0, 5);
+  const ic = (x) => x.tipo === "receber" ? <IconArrowIn size={18} /> : x.tipo === "pagar" ? <IconArrowOut size={18} /> : <ProIc n="plantao" size={18} />;
+  return (
+    <div className="card hoje" id="hoje-card">
+      <div className="hoje-h"><h3>Para hoje</h3>{itens.length > 0 && <span>{itens.length} {itens.length === 1 ? "item" : "itens"}</span>}</div>
+      {itens.length === 0 && <div className="hoje-vazio"><i><IconCheck size={14} color="#fff" /></i>Tudo em dia. Nada pendente para hoje.</div>}
+      {vis.map((x) => (
+        <div key={x.key} className={`hoje-it t-${x.tipo} ${x.late ? "late" : ""}`}>
+          <span className="hoje-ic" style={x.cor ? { background: x.cor + "22", color: x.cor } : null}>{ic(x)}</span>
+          <span className="hoje-n"><b>{x.titulo}</b><small>{x.sub}</small></span>
+          <span className="hoje-r">
+            {x.valor > 0 && <b className={`mono ${x.tipo === "receber" ? "in" : ""}`}>{fmtBRL(x.valor)}</b>}
+            {x.acao && <button type="button" className="dia-chk" onClick={x.fazer}><IconCheck size={14} />{x.acao}</button>}
+            {x.ok && <span className="dia-chk on" aria-label="feito"><IconCheck size={14} />Feito</span>}
+          </span>
+        </div>
+      ))}
+      {itens.length > 5 && <button type="button" className="oa-mais" onClick={() => setTodos((v) => !v)}>{todos ? "Mostrar menos" : `Mostrar mais ${itens.length - 5}`}</button>}
+    </div>
+  );
+}
+function PagarAgoraMini({ p, onVer }) {
+  if (!p) return null;
+  return (
+    <button type="button" className="card pag-mini" id="pagar-agora-mini" onClick={onVer}>
+      <span className="pag-mini-ic"><IconWallet size={19} /></span>
+      <span className="pag-mini-t">
+        {p.n > 0 ? <><b>Dá para pagar {p.n === p.abertas ? (p.n === 1 ? "a conta aberta" : `as ${p.n} contas abertas`) : `${p.n} de ${p.abertas} contas`}</b><small>com o que já caiu · sobra <span className="mono">{fmtBRL(p.resta)}</span></small></>
+          : <><b>Espere cair mais dinheiro</b><small>o que já caiu ainda não paga a próxima conta</small></>}
+      </span>
+      <span className="pag-mini-v">{p.n > 0 && <b className="mono">{fmtBRL(p.total)}</b>}<IconChevronRight size={18} /></span>
+    </button>
+  );
+}
+// ---- "Vale a pena esse plantão?": quanto entra, quanto dá por hora e como fica perto da média e da meta ----
+function ValePlantao({ vinculos = [], netOf, info, onClose }) {
+  const locais = vinculos.filter((v) => v.tipo === "plantao");
+  const [vid, setVid] = useState(locais[0] ? locais[0].id : "");
+  const [valor, setValor] = useState("");
+  const [horas, setHoras] = useState(12);
+  useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
+  const v = locais.find((x) => x.id === vid) || null;
+  const bruto = Number(valor) || 0, h = Number(horas) || 0;
+  const liq = bruto > 0 ? liquidoDeVinc(v, bruto, netOf) : 0;
+  const porHora = h > 0 ? liq / h : 0;
+  const media = info.media || 0, melhor = info.melhor;
+  const dif = media > 0 && porHora > 0 ? porHora / media - 1 : null;
+  const tom = dif === null ? "" : dif >= 0.05 ? "bom" : dif <= -0.05 ? "baixo" : "medio";
+  const barras = [["Este plantão", porHora, "#16A34A"], ["Sua média", media, "#94A3B8"]].concat(melhor && melhor.hourly > 0 ? [[melhor.nome, melhor.hourly, melhor.cor || "#2563EB"]] : []);
+  const maxB = Math.max(1, ...barras.map((b) => b[1]));
+  const meta = info.meta;
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet vale" role="dialog" aria-label="Vale a pena esse plantão?" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="sheet-title" style={{ marginTop: 0 }}>Vale a pena esse plantão?</div>
+        {locais.length > 0 && (
+          <div className="field"><label>Onde</label>
+            <div className="chip-row">
+              {locais.map((x) => <button key={x.id} type="button" className={`chip sm ${vid === x.id ? "active" : ""}`} aria-pressed={vid === x.id} onClick={() => setVid(x.id)}>{x.nome}</button>)}
+              <button type="button" className={`chip sm ${vid === "" ? "active" : ""}`} aria-pressed={vid === ""} onClick={() => setVid("")}>Outro lugar</button>
+            </div>
+          </div>
+        )}
+        <div className="vale-campos">
+          <div className="field"><label htmlFor="vale-valor">Valor oferecido (R$)</label><MoneyInput id="vale-valor" value={valor} onChange={setValor} placeholder="Ex.: 1.600,00" /></div>
+          <div className="field"><label>Horas</label>
+            <div className="chip-row">{[6, 12, 24].map((x) => <button key={x} type="button" className={`chip sm ${Number(horas) === x ? "active" : ""}`} aria-pressed={Number(horas) === x} onClick={() => setHoras(x)}>{x}h</button>)}</div>
+          </div>
+        </div>
+        {bruto > 0 && h > 0 ? (
+          <>
+            <div className="vale-res">
+              <div><span>Entra na sua conta</span><b className="mono">{comCentavos(fmtBRL(liq))}</b><small>{bruto - liq > 0.5 ? <>imposto <span className="mono">{fmtBRL(bruto - liq)}</span></> : "sem imposto"}</small></div>
+              <div><span>Por hora</span><b className="mono">{comCentavos(fmtBRL(porHora))}</b><small>em {h} horas</small></div>
+            </div>
+            {dif !== null && <div className={`vale-tom ${tom}`}>{tom === "bom" ? `Paga ${Math.round(dif * 100)}% a mais por hora que a sua média` : tom === "baixo" ? `Paga ${Math.round(-dif * 100)}% a menos por hora que a sua média` : "Fica na sua média por hora"}</div>}
+            <div className="vale-barras">
+              {barras.map(([n, val, cor], i) => (
+                <div key={i} className="vale-b"><span className="vale-b-n">{n}{i === 2 && <small>seu melhor lugar</small>}</span><span className="vale-b-t"><i style={{ width: `${Math.max(3, (val / maxB) * 100)}%`, background: cor }} /></span><b className="mono">{fmtBRL(val)}/h</b></div>
+              ))}
+            </div>
+            {meta && liq > 0 && (
+              <div className="vale-meta"><i style={{ background: meta.cor || "#16A34A" }} />
+                <span>Para a meta <b>{meta.nome}</b>: <b className="mono">{Math.ceil(meta.falta / liq - 1e-9)}</b> plantões como este pagam o que falta.</span>
+              </div>
+            )}
+          </>
+        ) : <div className="vale-vazio">Digite o valor oferecido para ver a conta.</div>}
+      </div>
+    </div>
+  );
+}
+
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null }) {
   const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
   const hello = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  const agoraD = new Date(), ehMesAtual = agoraD.getFullYear() === viewYear && agoraD.getMonth() === viewMonth;
+  const dataHoje = agoraD.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }).replace(/^./, (c) => c.toUpperCase());
   const byCat = useMemo(() => {
     const map = {};
     monthExpenseItems.forEach((e) => { map[e.category] = (map[e.category] || 0) + e.amount; });
@@ -7641,8 +7870,10 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   }
   return (
     <div>
-      <div className="greet"><h2>{hello}!</h2><p>Este é o resumo de {MONTHS_PT[viewMonth].toLowerCase()} de {viewYear}.</p></div>
+      <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${MONTHS_PT[viewMonth].toLowerCase()} de ${viewYear}.`}</p></div>
       {guia}
+
+      {ehMesAtual && hojeInfo && <HojeCard itens={hojeInfo.itens} />}
 
       {alerts.length > 0 && (
         <Avisos alerts={alerts} />
@@ -7659,57 +7890,11 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         </div>
       </div>
 
+      {ehMesAtual && hojeInfo && <PagarAgoraMini p={hojeInfo.pagar} onVer={() => setActiveTab("organizacao")} />}
+
       {workCard}
 
-      <div className={"card " + gv.c("insights")}>
-        <div className="card-head"><h3 className="card-title gv-t" {...gv.t("insights")}>Insights do mês</h3>{insights.length > 4 && <button className="link-btn" onClick={() => setActiveTab("visao")}>ver todos ({insights.length})</button>}</div>
-        <InsightList items={insights} max={4} />
-      </div>
-
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-head"><h3 className="card-title">Receitas x despesas</h3><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
-          <SvgDualBarChart data={history12} height={210} onOpen={(d) => goMonth(d.y, d.m)} />
-        </div>
-        <div className="card">
-          <div className="card-head"><h3 className="card-title">Gastos por categoria</h3><button className="link-btn" onClick={() => setActiveTab("despesas")}>ver despesas</button></div>
-          {byCat.length === 0 ? <div className="empty-state">Nenhuma despesa neste mês ainda.</div> : <InteractiveDonut data={byCat} size={160} stroke={22} centerLabel="gasto no mês" />}
-        </div>
-      </div>
-
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-head"><h3 className="card-title">Teto de gastos</h3><button className="link-btn" onClick={() => setActiveTab("metas")}>{Object.keys(limits).length ? "gerenciar" : "definir"}</button></div>
-          {limits.__total > 0 && <LimitRow label="Limite geral do mês" spent={spentAll} limit={limits.__total} color={TEAL} />}
-          {limited.map((x) => <LimitRow key={x.id} label={x.m.label} spent={x.sp} limit={x.lim} color={x.m.color} icon={<ExpIcon id={x.id} size={17} color={x.m.color} />} />)}
-          {Object.keys(limits).length === 0 && <div className="empty-state" style={{ padding: "10px 0" }}>Defina quanto quer gastar por categoria. O app avisa quando chegar a 80% e quando passar do limite.</div>}
-        </div>
-        <div className="card">
-          <div className="card-head"><h3 className="card-title">Próximas contas</h3><button className="link-btn" onClick={() => setActiveTab("despesas")}>ver todas</button></div>
-          {upcoming.length === 0 ? <div className="empty-state" style={{ padding: "10px 0" }}>Nenhuma conta pendente neste mês.</div> : upcoming.map((e) => {
-            const m = EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros; const di = dueInfo(e.dateIso, todayIso, e.paid);
-            return (
-              <div key={e.key} className="tx-row">
-                <span className="tx-ico" style={{ background: m.color + "1a" }}><ExpIcon id={m.id} size={18} color={m.color} /></span>
-                <div className="tx-main"><div className="tx-title">{e.description}</div><div className="tx-sub"><span className={`due ${di.cls}`}>{di.text}</span></div></div>
-                <div className="tx-right"><span className="tx-amt mono">{fmtBRL(e.amount)}</span><button className="tx-status open" onClick={e.toggle}>Pagar</button></div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-head"><h3 className="card-title">Seu mês de trabalho</h3><button className="link-btn" onClick={() => setActiveTab("calendario")}>abrir agenda</button></div>
-          <div className="work-grid">
-            <div><span>Plantões</span><b className="mono">{monthShiftsCount}</b></div>
-            <div><span>Dias trabalhados</span><b className="mono">{workCur.dias}</b></div>
-            <div><span>Horas por semana</span><b className="mono">{fmtHoras(curStats.hours / (new Date(viewYear, viewMonth + 1, 0).getDate() / 7))}</b></div>
-            <div><span>A receber</span><b className="mono">{fmtBRL(totalNet)}</b></div>
-          </div>
-        </div>
-        <div className="card">
+      <div className="card">
           <div className="card-head"><h3 className="card-title">Metas</h3><button className="link-btn" onClick={() => setActiveTab("metas")}>{goals.length ? "ver todas" : "criar meta"}</button></div>
           {goals.length === 0 ? <div className="empty-state" style={{ padding: "8px 0" }}>Defina uma meta para acompanhar o progresso aqui.</div> : (
             [...goals].slice(0, 3).map((g) => {
@@ -7725,8 +7910,8 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
             })
           )}
         </div>
-      </div>
 
+      <button type="button" className="link-btn ini-rel" onClick={() => setActiveTab("visao")}>Ver gráficos e relatórios do mês</button>
       <button className="btn btn-ghost" onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>
     </div>
   );
