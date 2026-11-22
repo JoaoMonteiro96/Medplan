@@ -1541,15 +1541,25 @@ function BvIlu({ tipo }) {
     <div className="bvi"><div className="bvi-card">
       <div className="bvi-tit">Para receber <b className="mono">R$ 2.880,00</b></div>
       {it("#2563EB", <IconArrowIn size={16} />, "UPA Norte", "plantão de 05/11", "R$ 1.380,00", "Recebido", true)}
-      {it("#16A34A", <IconArrowIn size={16} />, "Hospital Central", "plantão de 08/11", "R$ 1.500,00", "Recebi")}
+      <div className="bvi-it"><i style={{ background: "#16A34A22", color: "#16A34A" }}><IconArrowIn size={16} /></i><span><b>Hospital Central</b><small className="bvi-atr">atrasado desde 08/11</small></span><span className="bvi-dir"><b className="mono">R$ 1.500,00</b></span></div>
+      <div className="bvi-bts"><em className="cob">Cobrar no WhatsApp</em><em><IconCheck size={12} />Recebi</em></div>
     </div></div>
   );
   if (tipo === "contas") return (
     <div className="bvi"><div className="bvi-card">
-      <div className="bvi-tit">Para pagar <b className="mono">R$ 4.700,00</b></div>
-      {it("#DC2626", <IconArrowOut size={16} />, "Aluguel", "vence hoje", "R$ 2.800,00", "Paguei")}
-      {it("#B45309", <IconArrowOut size={16} />, "Escola", "vence dia 15", "R$ 1.900,00")}
-      <div className="bvi-dica"><IconWallet size={15} />Dá para pagar as 2 com o que já caiu</div>
+      <div className="bvi-tit">Novembro</div>
+      <div className="bvi-passo"><i>1</i><span>Você recebe</span><b className="mono" style={{ color: "#15803D" }}>R$ 32.400,00</b></div>
+      <div className="bvi-passo"><i>2</i><span>Paga as contas</span><b className="mono">R$ 14.700,00</b></div>
+      <div className="bvi-passo fim"><i>3</i><span>Sobra para investir</span><b className="mono">R$ 17.700,00</b></div>
+      <div className="bvi-dica"><IconWallet size={15} />Dá para pagar o aluguel com o que já caiu</div>
+    </div></div>
+  );
+  if (tipo === "resumo") return (
+    <div className="bvi"><div className="bvi-card">
+      <div className="bvi-tit">Como foi <b>outubro</b></div>
+      <div className="bvi-dois"><div><small>Entrou</small><b className="mono" style={{ color: "#15803D" }}>R$ 31.800</b></div><div><small>Contas</small><b className="mono">R$ 14.200</b></div></div>
+      <div className="bvi-dois"><div><small>Investiu</small><b className="mono">R$ 9.000</b></div><div><small>Sobrou</small><b className="mono" style={{ color: "#15803D" }}>R$ 8.600</b></div></div>
+      <div className="bvi-dica"><IconTrending size={15} />Hospital Central pagou melhor: R$ 125/h</div>
     </div></div>
   );
   if (tipo === "calendario") {
@@ -1611,13 +1621,14 @@ function BvIlu({ tipo }) {
 }
 const BV_PASSOS = [
   ["plantao", "Lance seus plantões", "Toque no + e diga onde, quando e quanto. Plantão fixo você lança uma vez e o app repete nos próximos.", "dois"],
-  ["recebi", "Marque quando o dinheiro cair", "A tela Hoje mostra o que já devia ter caído na conta. Um toque em Recebi e pronto.", "dois"],
-  ["contas", "Suas contas do mês", "Cadastre as contas fixas uma vez. Elas voltam todo mês, e o app mostra o que dá para pagar com o que já caiu.", "dois"],
+  ["recebi", "Marque quando o dinheiro cair", "A tela Hoje mostra o que já devia ter caído na conta. Caiu? Toque em Recebi. Atrasou? Toque em Cobrar e a mensagem vai pronta pelo WhatsApp para o financeiro do hospital.", "dois"],
+  ["contas", "Recebe, paga e sobra", "Cadastre as contas fixas uma vez; elas voltam todo mês. A tela Contas mostra o mês em 3 passos: o que você recebe, o que paga e quanto sobra para investir.", "dois"],
+  ["resumo", "Como foi o mês", "Nos primeiros dias de cada mês, a tela Hoje mostra quanto entrou, quanto saiu, quanto sobrou e qual hospital pagou melhor por hora.", "dois"],
   ["calendario", "O mês inteiro no calendário", "Cada dia mostra plantões, recebimentos e contas. Verde: entrou mais. Vermelho: saiu mais.", "dois"],
   ["ferias", "Planeje suas férias", "No calendário, toque em Férias e escolha o período. O app mostra os plantões para passar, quanto você deixa de receber e se as contas continuam pagas.", "dois"],
   ["vale", "Vale a pena esse plantão?", "Digite o valor oferecido e as horas. O app mostra quanto entra, quanto dá por hora e compara com a sua média.", "dois"],
   ["metas", "Metas contadas em plantões", "Diga quanto quer juntar e até quando. O app mostra quantos plantões em cada hospital pagam a meta.", "dois"],
-  ["impostos", "Impostos sem susto", "No Simples, o app mostra quanto separar de cada recebimento. No Completo, também avisa as guias e estima o imposto de renda.", "dois"],
+  ["impostos", "Impostos sem susto", "No Simples, o app mostra quanto separar de cada recebimento. No Completo, também avisa as guias, lembra das notas para emitir e estima o imposto de renda.", "dois"],
   ["invest", "Investimentos e importação", "Ações, fundos, renda fixa e exterior com preço atualizado sozinho. Importe a nota da corretora ou a fatura do cartão em vez de digitar.", "completo"],
 ];
 function BoasVindas({ onFim }) {
@@ -5474,6 +5485,14 @@ function App() {
         .bvi-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; } .bvi-dir b { font-size: 13px; white-space: nowrap; }
         .bvi-dir em { font-style: normal; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1.5px solid #16A34A; color: #15803D; }
         .bvi-dir em.ok { background: #16A34A; color: #fff; }
+        .bvi-atr { color: #B91C1C !important; }
+        .bvi-bts { display: flex; justify-content: flex-end; gap: 6px; margin: -2px 0 4px; }
+        .bvi-bts em { font-style: normal; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1.5px solid #16A34A; color: #15803D; }
+        .bvi-bts em.cob { border-color: #FCD34D; background: #FFFBEB; color: #92400E; }
+        .bvi-passo { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #EEF0F3; font-size: 13px; }
+        .bvi-passo i { width: 22px; height: 22px; border-radius: 50%; background: #ECFDF3; color: #15803D; font-style: normal; font-weight: 800; font-size: 12px; display: grid; place-items: center; }
+        .bvi-passo span { color: #334155; } .bvi-passo b { font-weight: 800; white-space: nowrap; }
+        .bvi-passo.fim { background: #0B3D2E; color: #fff; border-radius: 12px; padding: 10px; margin: 4px 0 8px; border: none; } .bvi-passo.fim span, .bvi-passo.fim b { color: #fff; } .bvi-passo.fim i { background: #6EE7B7; color: #0B3D2E; }
         .bvi-dica { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 9px 11px; border-radius: 12px; background: #ECFDF3; color: #15803D; font-size: 12.5px; font-weight: 600; }
         .bv-txt { flex: 1; display: flex; flex-direction: column; padding: 20px 20px calc(18px + env(safe-area-inset-bottom)); background: var(--surface, #fff); border-radius: 24px 24px 0 0; margin-top: -20px; position: relative; overflow-y: auto; }
         .bv-pontos { display: flex; gap: 6px; margin-bottom: 14px; } .bv-pontos i { width: 7px; height: 7px; border-radius: 999px; background: var(--border); transition: width .25s, background .25s; } .bv-pontos i.on { width: 22px; background: #16A34A; }

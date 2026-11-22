@@ -68,7 +68,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Relatórios foi removido** (22/11/2026): os insights ficam numa faixa que abre e fecha logo abaixo dos avisos (`InsightsCaixa`), "Sobra mês a mês" fica em Contas, o PDF do mês na Hoje. O endereço antigo `visao` leva para a Hoje.
 - **Contabilidade** (no celular, título "Impostos"): abas Este mês (cartão verde com o imposto do mês e quanto já foi separado, "Guias para pagar" com "Paguei", "Separe do que recebeu", e as gavetas "De onde vem o imposto" e "Ajustar os impostos"), Notas ("Notas do mês" com "Emiti" e o relatório do contador) e IR do ano.
 - **Modo Simples e modo Completo** (`OCULTAS_SIMPLES`, `ModoEscolha`): os dados são os mesmos; o Simples esconde investimentos, contabilidade e importar, e mostra o mês em três números (entra, sai, sobra) mais "Separe R$ X para o imposto". A troca fica só em Configurações → Modo do app.
-- **Guia de abertura** (`BoasVindas`, `BV_PASSOS`): 9 telas com todas as funções (cada uma diz em qual modo existe) e a escolha do modo no fim. Só aparece para quem não tem dados e depois que a nuvem terminou de baixar.
+- **Guia de abertura** (`BoasVindas`, `BV_PASSOS`): 10 telas com todas as funções (inclusive Cobrar, Contas em 3 passos e o resumo do mês) (cada uma diz em qual modo existe) e a escolha do modo no fim. Só aparece para quem não tem dados e depois que a nuvem terminou de baixar.
 - **Tela Hoje** (`HojeCard`): Trabalho, Para receber e Para pagar, com Recebi/Paguei; "O que pagar agora" (`PagarAgoraMini`).
 - **Resumo do mês que passou** (`ResumoMes`): na Hoje, do dia 1 ao 7, com entrou, contas, investiu (só no Completo), sobrou, ganho por hora e o hospital que pagou melhor. Fecha no X.
 - **Cobrar pelo WhatsApp** (`CobrarSheet`): botão nos recebimentos atrasados (Hoje e Plantões › Recebimentos). Lista o que está atrasado no hospital, guarda o WhatsApp do financeiro e abre a conversa com a mensagem pronta (`wa.me`).
@@ -111,4 +111,4 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Sem textos explicativos no rodapé das seções.** O João não gosta. Dicas só dentro de formulários, quando ajudam a preencher.
 - Ícones de linha (nada de emoji).
 - Mudou uma tela que aparece na página de apresentação ou no vídeo? Ofereça atualizar os dois (`ferramentas/LEIA-ME.md` explica como).
-- **O vídeo de demonstração ainda mostra o menu Mais antigo** (com Importar, Vale a pena e Ajustes). Para regravar, ajuste `ferramentas/video/captura.cjs` e `cenas.py`: Ajustes agora abre pela engrenagem, Organizar virou o topo de Contas e a Contabilidade tem abas.
+- O vídeo de demonstração (22/11/2026, 18 cenas, cerca de 3 min 47 s) já mostra Cobrar, Contas em 3 passos, o resumo do mês, a Contabilidade em abas e Ajustes pela engrenagem. Para gravar de novo, veja `ferramentas/LEIA-ME.md` (são 18 partes: `seq 0 17`).

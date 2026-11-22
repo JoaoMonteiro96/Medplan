@@ -2,7 +2,8 @@ const { chromium } = require('playwright'); const http = require('http'), fs = r
 const V = __dirname, DIST = path.resolve(V, '..', '..'), O = path.join(V, 'cap'); fs.mkdirSync(O, { recursive: true });
 const { dadosDeTeste, isoDaqui } = require('../comum.cjs');
 const srv = http.createServer((q, r) => { let p = q.url.split('?')[0]; if (p === '/') p = '/index.html'; fs.readFile(path.join(DIST, p), (e, d) => { if (e) { r.writeHead(404); r.end(); } else { r.writeHead(200, { 'Content-Type': /\.js$/.test(p) ? 'text/javascript' : /\.html$/.test(p) ? 'text/html' : /\.png$/.test(p) ? 'image/png' : 'application/json' }); r.end(d); } }); });
-const seed = dadosDeTeste();
+// dois plantões da UPA Norte ainda sem cair, para a cena do botão Cobrar
+const seed = dadosDeTeste(null, (x) => x.shifts.forEach((s) => { if (s.id === 'up1' || s.id === 'up2') s.recebido = false; }));
 const T = {};
 const bb = async (p, sel, page) => { const l = typeof sel === 'string' ? p.locator(sel).first() : sel; const r = await l.evaluate((el) => { const b = el.getBoundingClientRect(); return [b.x, b.y + (window.scrollY || 0), b.width, b.height, window.scrollY || 0]; }); return page ? r.slice(0, 4) : [r[0], r[1] - r[4], r[2], r[3]]; };
 const CSS = '*{animation:none!important;transition:none!important;scroll-behavior:auto!important;caret-color:transparent!important} #splash{display:none!important}';
@@ -49,6 +50,11 @@ const CSS = '*{animation:none!important;transition:none!important;scroll-behavio
   const rec = m.locator('#hoje-card .hoje-it.t-receber .dia-chk').first(); T['m-hoje-recebi'] = await bb(m, rec);
   await aviso(m, true); await rec.click(); await m.waitForTimeout(500); await vpM('m-hoje2'); await aviso(m, false);
   await fullM('m-hoje3'); T['m-hoje3-pagar'] = await yPag(m, '#pagar-agora-mini');
+  // Cobrar pelo WhatsApp
+  const cob = m.locator('#hoje-card .hoje-cob').first(); T['m-hoje-cob'] = await bb(m, cob);
+  await cob.click(); await m.waitForTimeout(500); await vpM('m-cob0'); T['m-cob-num'] = await bb(m, '#cob-num');
+  await m.fill('#cob-num', '(11) 90000-0000'); await m.locator('#cob-num').blur(); await m.waitForTimeout(300); await vpM('m-cob1'); T['m-cob-enviar'] = await bb(m, '#cob-enviar');
+  await fechar(m); await top(m);
   // + Plantão
   await m.click('.dk-novo'); await m.waitForTimeout(500); await vpM('m-add'); T['m-add-plantao'] = await bb(m, '.add-op[data-add="plantao"]');
   await m.click('.add-op[data-add="plantao"]'); await m.waitForTimeout(400); await vpM('m-plantao'); T['m-fixo'] = await bb(m, 'button:has-text("Fixo, se repete")');
@@ -56,14 +62,13 @@ const CSS = '*{animation:none!important;transition:none!important;scroll-behavio
   await m.locator('.add-sheet button:text-is("T")').first().click(); await m.waitForTimeout(300); await vpM('m-dia');
   await m.locator('.add-sheet .fm-op').first().evaluate((el) => el.scrollIntoView({ block: 'center' })); await m.waitForTimeout(300); await vpM('m-forma');
   await fechar(m); await top(m);
-  // Contas e Organizar
+  // Contas: recebe, paga e sobra; depois a lista
   await m.click('.dock .dk-btn[data-tab="despesas"]'); await m.waitForTimeout(700); await fullM('m-desp');
-  T['m-seg2'] = await bb(m, '.grp-seg button:nth-child(2)');
-  await m.click('.grp-seg button:nth-child(2)'); await m.waitForTimeout(700); await fullM('m-org'); T['m-org-sug'] = await yPag(m, '#oa-sugestao');
+  T['m-desp-sug'] = await yPag(m, '#oa-sugestao'); T['m-desp-lista'] = await yPag(m, '#exp-cats');
   // Mais (aberto sobre a tela Hoje)
   await m.click('.dock .dk-btn[data-tab="inicio"]'); await m.waitForTimeout(700); await top(m);
   await m.click('.dk-btn[aria-label="Mais seções"]'); await m.waitForTimeout(400); await vpM('m-maismenu');
-  for (const t of ['investimentos', 'metas', 'visao', 'contabilidade', 'importar', 'backup']) T['m-item-' + t] = await bb(m, `.dk-item[data-tab="${t}"]`);
+  for (const t of ['investimentos', 'metas', 'contabilidade', 'importar']) T['m-item-' + t] = await bb(m, `.dk-item[data-tab="${t}"]`);
   T['m-item-vale'] = await bb(m, '#dk-vale');
   // Vale a pena?
   await m.click('#dk-vale'); await m.waitForTimeout(500); await vpM('m-vale0');
@@ -79,8 +84,8 @@ const CSS = '*{animation:none!important;transition:none!important;scroll-behavio
   // Metas
   await mais('metas'); await fullM('m-metas'); T['m-meta1'] = await bb(m, '.mt-meta .mt-row');
   await m.click('.mt-meta .mt-row'); await m.waitForTimeout(600); await fullM('m-metas2'); T['m-metas2-chart'] = await yPag(m, '.gp-chart'); T['m-metas2-pl'] = await yPag(m, '.gpl');
-  // Ajustes
-  await mais('backup'); await fullM('m-backup');
+  // Ajustes: pela engrenagem
+  T['m-gear'] = await bb(m, '.topbar2 .tb-gear'); await m.click('.topbar2 .tb-gear'); await m.waitForTimeout(800); await top(m); await fullM('m-backup');
   // Férias (celular)
   await m.click('.dock .dk-btn[data-tab="calendario"]'); await m.waitForTimeout(800); await top(m); await vpM('m-cal'); T['m-cal-ferias'] = await bb(m, '#cal-ferias');
   await m.click('#cal-ferias'); await m.waitForTimeout(500); await vpM('m-fer0'); T['m-fer-ini'] = await bb(m, '#fer-ini');
@@ -92,9 +97,19 @@ const CSS = '*{animation:none!important;transition:none!important;scroll-behavio
   await gc.addInitScript(() => { if (!sessionStorage.getItem('x')) { sessionStorage.setItem('x', '1'); localStorage.setItem('mediplan-cloud-skip', '1'); localStorage.setItem('mediplan-uso-off', '1'); } });
   const g = await gc.newPage(); await g.route(/^https?:\/\/(?!localhost)/, (r) => r.abort()); await g.goto(url); await g.waitForTimeout(2200); await g.addStyleTag({ content: CSS }); await aviso(g, false);
   await shot(g, 'm-guia1'); T['m-bv-seguir'] = await bb(g, '.bv-seguir');
-  for (let i = 1; i < 10; i++) { await g.click('.bv-seguir'); await g.waitForTimeout(350); if ([4, 8, 9].includes(i)) await shot(g, 'm-guia' + (i + 1)); }
+  // m-guia5: Férias; m-guia9: investimentos (só no Completo); m-guia10: escolha do modo
+  const NOMES = { 5: 'm-guia5', 9: 'm-guia9', 10: 'm-guia10' };
+  for (let i = 1; i <= 10; i++) { await g.click('.bv-seguir'); await g.waitForTimeout(350); if (NOMES[i]) await shot(g, NOMES[i]); }
   T['m-bv-completo'] = await bb(g, '.modo-op[data-modo="completo"]'); T['m-bv-comecar'] = await bb(g, '.bv-seguir');
   await g.click('.modo-op[data-modo="completo"]'); await g.waitForTimeout(300); await shot(g, 'm-guia10c');
+  // Resumo do mês que passou: o app aberto no dia 2 do mês seguinte
+  const rc = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'pt-BR', timezoneId: 'America/Bahia', serviceWorkers: 'block' });
+  await rc.addInitScript((d) => { if (!sessionStorage.getItem('x')) { sessionStorage.setItem('x', '1'); localStorage.setItem('mediplan-cloud-skip', '1'); localStorage.setItem('mediplan-guia', 'antigo'); localStorage.setItem('mediplan-uso-off', '1'); localStorage.setItem('mediplan-data-v2', JSON.stringify(d)); } }, seed);
+  const r2 = await rc.newPage(); const h = new Date(); await r2.clock.install({ time: new Date(h.getFullYear(), h.getMonth() + 1, 2, 9, 0) });
+  await r2.route(/^https?:\/\/(?!localhost)/, (r) => r.abort()); await r2.goto(url); await r2.waitForTimeout(2200); await r2.addStyleTag({ content: CSS }); await aviso(r2, false);
+  await shot(r2, 'm-resumo-vp'); await hide(r2, '.dock,.topbar2'); await shot(r2, 'm-resumo-full', { fullPage: true }); await hide(r2, '');
+  await r2.locator('.topbar2').first().screenshot({ path: path.join(O, 'm-resumo-top.png') }); T['m-resumo-h'] = await r2.evaluate(() => document.documentElement.scrollHeight);
+  T['m-resumo-y'] = await yPag(r2, '#resumo-mes');
   fs.writeFileSync(path.join(V, 'pontos.json'), JSON.stringify(T)); console.log(Object.keys(T).join(' '));
   await b.close(); srv.close();
 })().catch((e) => { console.error(e); process.exit(1); });
