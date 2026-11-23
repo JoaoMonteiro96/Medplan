@@ -867,17 +867,17 @@ function useArrasto(n, indice, setActive) {
     style: { display: "block", touchAction: "pan-y" },
   };
 }
-function GradeEixo({ W, top, h, min, max, padX, padL, ticks = 3, zero = true }) {
+function GradeEixo({ W, top, h, min, max, padX, padL, ticks = 3, zero = true, fmt = fmtEixo }) {
   const x0 = padL !== undefined ? padL : padX;
   const linhas = [];
   for (let k = 0; k <= ticks; k++) { const v = min + ((max - min) * k) / ticks; linhas.push({ v, y: top + h - (h * k) / ticks }); }
-  return <g className="grade">{linhas.map((l, k) => (<g key={k}><line x1={x0} x2={W - padX} y1={l.y} y2={l.y} className={zero && Math.abs(l.v) < 1e-9 ? "grade-zero" : "grade-l"} />{(k > 0 || l.v < 0) && <text x={x0 - 8} y={l.y + 4} textAnchor="end" className="grade-t">{fmtEixo(l.v)}</text>}</g>))}</g>;
+  return <g className="grade">{linhas.map((l, k) => (<g key={k}><line x1={x0} x2={W - padX} y1={l.y} y2={l.y} className={zero && Math.abs(l.v) < 1e-9 ? "grade-zero" : "grade-l"} />{(k > 0 || l.v < 0) && <text x={x0 - 8} y={l.y + 4} textAnchor="end" className="grade-t">{fmt(l.v)}</text>}</g>))}</g>;
 }
 function ChartTip({ x, children }) {
   return <div className="chart-tip" style={{ left: `${Math.max(16, Math.min(84, x))}%` }}>{children}</div>;
 }
 
-function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, signed = false, valueKey = "value", labelKey = "label", onOpen }) {
+function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, signed = false, valueKey = "value", labelKey = "label", onOpen, fmt = fmtBRL, fmtTick }) {
   const [active, setActive] = useState(null);
   const tapped = useRef(null);
   const [boxRef, W] = useLargura(600); const padTop = 14, padBottom = 28, padX = 6, padL = 74;
@@ -885,7 +885,7 @@ function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, 
   const values = data.map((d) => Number(d[valueKey]) || 0);
   const n = data.length;
   if (n === 0) return <div className="empty-state">Sem dados para exibir.</div>;
-  const maxAbs = Math.max(1, ...values.map((v) => Math.abs(v)));
+  const maxAbs = Math.max(fmtTick ? 0.01 : 1, ...values.map((v) => Math.abs(v)));
   const slot = (W - padL - padX) / n, barW = Math.min(28, slot * 0.62);
   const zeroY = signed ? padTop + plotH / 2 : padTop + plotH;
   const scale = signed ? (plotH / 2) / maxAbs : plotH / maxAbs;
@@ -894,7 +894,7 @@ function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, 
   return (
     <div className="chart-box" ref={boxRef} onMouseLeave={() => setActive(null)}>
       <svg viewBox={`0 0 ${W} ${height}`} width="100%" {...arr}>
-        <GradeEixo W={W} top={padTop} h={plotH} min={signed ? -maxAbs : 0} max={maxAbs} padX={padX} padL={padL} ticks={signed ? 2 : 3} />
+        <GradeEixo W={W} top={padTop} h={plotH} min={signed ? -maxAbs : 0} max={maxAbs} padX={padX} padL={padL} ticks={signed ? 2 : 3} fmt={fmtTick} />
         {data.map((d, i) => {
           const v = values[i];
           const x = padL + slot * i + (slot - barW) / 2;
@@ -911,7 +911,7 @@ function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, 
       </svg>
       {active !== null && (
         <ChartTip x={((padL + slot * active + slot / 2) / W) * 100}>
-          <b>{data[active].full || data[active][labelKey]}</b><span className="mono">{fmtBRL(values[active])}</span>
+          <b>{data[active].full || data[active][labelKey]}</b><span className="mono">{fmt(values[active])}</span>
           {onOpen && <em>toque de novo para abrir o mês</em>}
         </ChartTip>
       )}
@@ -6000,6 +6000,43 @@ function App() {
         .pat-f { display: flex; gap: 6px; justify-content: space-between; padding-top: 6px; }
         .pat-f button { flex: 1; border: none; background: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--text-dim); padding: 8px 0; border-radius: 10px; cursor: pointer; transition: background .2s var(--ease), color .2s var(--ease); }
         .pat-f button.on { background: var(--surface-3); color: var(--text); }
+        /* análise completa de ação / FII */
+        .anl-btn { display: flex; align-items: center; gap: 10px; width: calc(100% - 28px); margin: 4px 14px 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface-3); color: var(--text); font-weight: 700; justify-content: flex-start; }
+        .anl-btn .anl-seta { margin-left: auto; color: var(--text-dim); }
+        body.anl-aberta { overflow: hidden; }
+        .anl { position: fixed; inset: 0; z-index: 85; background: var(--bg); overflow-y: auto; overscroll-behavior: contain; animation: fadeIn .2s ease both; }
+        .anl-in { max-width: 760px; margin: 0 auto; padding: 0 16px calc(40px + env(safe-area-inset-bottom)); }
+        .anl-h { position: sticky; top: 0; z-index: 6; margin: 0 -16px; padding-left: 16px !important; padding-right: 16px !important; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 0 10px; background: var(--bg); }
+        .anl-h > div { display: flex; flex-direction: column; min-width: 0; } .anl-h b { font-family: "Manrope", "Inter", sans-serif; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; } .anl-h span { font-size: 13px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .anl-voltar { width: 40px; height: 40px; flex: none; border-radius: 12px; border: none; background: var(--surface); color: var(--text); display: grid; place-items: center; cursor: pointer; box-shadow: 0 1px 2px rgba(16,40,35,0.08); }
+        .anl-load { padding: 40px 8px; text-align: center; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        .anl-hero { border-radius: 20px; padding: 18px 20px; margin: 4px 0 12px; color: #fff; background: radial-gradient(120% 140% at 100% 0%, rgba(52,211,153,0.20) 0%, rgba(52,211,153,0) 46%), linear-gradient(155deg, #0E5640 0%, #0B3D2E 58%, #08291F 100%); box-shadow: 0 18px 40px -18px rgba(8,41,31,0.55); }
+        .anl-hero > span { font-size: 13px; color: rgba(255,255,255,0.72); font-weight: 500; }
+        .anl-hero > b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 34px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.15; margin: 2px 0 2px; font-variant-numeric: tabular-nums; }
+        .anl-hero > small { display: block; font-size: 13px; color: rgba(255,255,255,0.7); } .anl-hero > small strong { color: #fff; font-weight: 700; }
+        .anl-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+        .anl-tiles > div { background: rgba(255,255,255,0.09); border-radius: 14px; padding: 10px 12px; min-width: 0; } .anl-tiles span { display: block; font-size: 12px; color: rgba(255,255,255,0.7); font-weight: 600; }
+        .anl-tiles b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 20px; font-weight: 800; margin-top: 2px; } .anl-tiles b.up { color: #6EE7B7; } .anl-tiles b.down { color: #FCA5A5; }
+        .anl .card { padding: 16px 18px; margin-bottom: 12px; }
+        .anl-mm { display: flex; justify-content: space-between; gap: 12px; } .anl-mm > div:last-child { text-align: right; }
+        .anl-mm span, .anl-prov-h span, .anl-datas span { display: block; font-size: 12px; color: var(--text-dim); font-weight: 600; } .anl-mm b { font-family: "Manrope", "Inter", sans-serif; font-size: 19px; font-weight: 800; }
+        .anl-bar { position: relative; height: 6px; border-radius: 6px; margin: 12px 0 10px; background: linear-gradient(90deg, #FCA5A5, #E5E7EB 50%, #86EFAC); }
+        .anl-bar i { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--surface); border: 3px solid #0E5640; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .anl-faixa small { font-size: 12.5px; color: var(--text-dim); }
+        .anl .pat-card { padding: 18px 18px 12px; } .anl .pat-ch { margin: 10px -18px 4px; position: relative; }
+        .anl-sec { font-family: "Manrope", "Inter", sans-serif; font-size: 17px; font-weight: 800; margin: 18px 2px 10px; }
+        .anl-prov-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+        .anl-prov-h em { font-style: normal; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; } .anl-prov-h em.rec { background: #FEF3C7; color: #92400E; } .anl-prov-h em.pago { background: #DCFCE7; color: #166534; }
+        .anl-prov-v { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; } .anl-prov-v b { font-family: "Manrope", "Inter", sans-serif; font-size: 30px; font-weight: 800; letter-spacing: -0.03em; } .anl-prov-v span { font-size: 13px; color: var(--text-dim); }
+        .anl-prov > small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+        .anl-voce { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-3); font-size: 14px; } .anl-voce b { font-weight: 800; }
+        .anl-datas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); } .anl-datas b { font-size: 17px; font-weight: 700; }
+        .anl-li { display: grid; grid-template-columns: 1fr 1fr 0.9fr auto; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; align-items: center; } .anl-li:last-of-type { border-bottom: none; }
+        .anl-li-h { font-size: 12px; color: var(--text-dim); font-weight: 600; padding-top: 0; } .anl-li b { font-weight: 700; text-align: right; } .anl-li-h span:last-child { text-align: right; }
+        .anl-mais { width: 100%; margin-top: 6px; } .anl-vazio { color: var(--text-dim); font-size: 14px; }
+        .anl-fonte { font-size: 12px; color: var(--text-dim); text-align: center; margin: 14px 0 0; }
+        :root[data-theme="dark"] .anl-prov-h em.rec { background: rgba(251,191,36,0.16); color: #FCD34D; } :root[data-theme="dark"] .anl-prov-h em.pago { background: rgba(74,222,128,0.14); color: #86EFAC; }
+        :root[data-theme="dark"] .anl-bar { background: linear-gradient(90deg, #7F1D1D, #374151 50%, #166534); }
         :root[data-theme="dark"] .pat-base { stroke: rgba(255,255,255,0.2); } :root[data-theme="dark"] .pat-d.up b { color: #4ADE80; } :root[data-theme="dark"] .pat-d.down b { color: #F87171; }
         /* computador: painel escuro do Início */
         @media (min-width: 1100px) {
@@ -10118,6 +10155,142 @@ function RentabilidadeCard({ hist = [], investments = [], totalValue, totalBough
 }
 
 // Renda fixa no cartão do ativo: mostra de onde vem o valor de hoje, ou liga uma posição antiga ao Tesouro/CDI
+// ---- Análise completa de uma ação ou FII: preço (12 meses, B3), mínima/máxima, proventos (B3) ----
+const ANL_CACHE = {};
+const anlTipo = (t) => ({ RENDIMENTO: "Rendimento", DIVIDENDO: "Dividendo", "JRS CAP PROPRIO": "JCP", AMORTIZACAO: "Amortização", "AMORTIZAÇÃO": "Amortização" }[String(t || "").toUpperCase().trim()] || (String(t || "").charAt(0) + String(t || "").slice(1).toLowerCase()));
+const anlPct = (n) => (n >= 0 ? "+" : "−") + Math.abs(n).toFixed(2).replace(".", ",") + "%";
+const anlVal = (v) => (DISCRETO ? "R$ ••••" : "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: v > 0 && v < 1 ? 4 : 2 }));
+async function carregarAnalise(t) {
+  const c = ANL_CACHE[t];
+  if (c && Date.now() - c.em < 30 * 60e3) return c;
+  const desde = new Date(Date.now() - 372 * 864e5).toISOString().slice(0, 10);
+  const [hist, prov] = await Promise.all([
+    rfGet(`precos_hist?ticker=eq.${encodeURIComponent(t)}&data=gte.${desde}&select=data,fechamento,maxima,minima&order=data.asc`),
+    fetch("https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/proventos?t=" + encodeURIComponent(t)).then((r) => r.json()).catch(() => ({ proventos: [] })),
+  ]);
+  const out = { em: Date.now(), hist: (hist || []).map((h) => ({ d: h.data, v: Number(h.fechamento), mx: Number(h.maxima) || Number(h.fechamento), mn: Number(h.minima) || Number(h.fechamento) })), prov: (prov && prov.proventos) || [], nome: String((prov && prov.nome) || "").trim() };
+  ANL_CACHE[t] = out;
+  return out;
+}
+function AnaliseAtivo({ p, cotacoes = {}, onClose }) {
+  const t = p.description, fii = p.category === "FII";
+  const [dados, setDados] = useState(ANL_CACHE[t] || null);
+  const [erro, setErro] = useState(false);
+  const [faixa, setFaixa] = useState("12M");
+  const [ativo, setAtivo] = useState(null);
+  const [todos, setTodos] = useState(false);
+  const hoje = todayStr();
+  const carregar = () => { setErro(false); carregarAnalise(t).then(setDados).catch(() => setErro(true)); };
+  useEffect(() => { carregar(); const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); document.body.classList.add("anl-aberta"); return () => { window.removeEventListener("keydown", k); document.body.classList.remove("anl-aberta"); }; }, [t]);
+  // série de preços: fechamentos da B3 + o preço de agora, se for mais novo
+  const serie = useMemo(() => {
+    const h = dados ? [...dados.hist] : [];
+    const ult = h[h.length - 1], agora = Number(cotacoes[t]) || 0, diaAgora = cotacoes.__centralEm ? diaBahia(cotacoes.__centralEm) : hoje;
+    if (agora > 0 && (!ult || diaAgora > ult.d)) h.push({ d: diaAgora, v: agora, mx: agora, mn: agora, vivo: true });
+    return h;
+  }, [dados, cotacoes, t]);
+  const ult = serie[serie.length - 1];
+  const umAno = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  const ano = serie.filter((x) => x.d >= umAno);
+  const base12 = ano[0];
+  const var12 = ult && base12 && base12.v > 0 ? (ult.v / base12.v - 1) * 100 : null;
+  const min52 = ano.length ? Math.min(...ano.map((x) => x.mn)) : null, max52 = ano.length ? Math.max(...ano.map((x) => x.mx)) : null;
+  const posFaixa = ult && max52 > min52 ? Math.max(0, Math.min(1, (ult.v - min52) / (max52 - min52))) : 0.5;
+  // proventos
+  const prov = (dados && dados.prov) || [];
+  const precoEm = (d) => { let r = null; for (const x of serie) { if (x.d <= d) r = x.v; else break; } return r || (ult && ult.v) || 0; };
+  const ultProv = prov[0];
+  const dy12 = ult && ult.v > 0 ? (prov.filter((x) => x.data_com >= umAno && x.data_com <= hoje).reduce((a, x) => a + Number(x.valor || 0), 0) / ult.v) * 100 : 0;
+  const meses = useMemo(() => {
+    const fim = prov.reduce((m, x) => (x.pagamento && x.pagamento.slice(0, 7) > m ? x.pagamento.slice(0, 7) : m), hoje.slice(0, 7));
+    const [fy, fm] = fim.split("-").map(Number); const out = [];
+    for (let k = 11; k >= 0; k--) { const dt = new Date(fy, fm - 1 - k, 1); const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; out.push({ key, label: MONTHS_ABBR_PT[dt.getMonth()], full: `${MONTHS_ABBR_PT[dt.getMonth()]} de ${dt.getFullYear()}`, value: prov.filter((x) => (x.pagamento || x.data_com || "").slice(0, 7) === key).reduce((a, x) => a + Number(x.valor || 0), 0), fut: key > hoje.slice(0, 7) }); }
+    return out;
+  }, [prov]);
+  const temMeses = meses.some((m) => m.value > 0);
+  // gráfico de preço
+  const dias = { "1M": 31, "6M": 183, "12M": 366 }[faixa];
+  const corte = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+  const pts = serie.filter((x) => x.d >= corte);
+  const W = 600, H = 190, pt = 10, pb = 10;
+  const vs = pts.map((x) => x.v), vmin = vs.length ? Math.min(...vs) : 0, vmax = vs.length ? Math.max(...vs) : 1, fx = Math.max(0.01, vmax - vmin);
+  const X = (k) => (pts.length > 1 ? (k / (pts.length - 1)) * W : W / 2);
+  const Y = (v) => pt + (H - pt - pb) * (1 - (v - vmin) / fx) * 0.9 + (H - pt - pb) * 0.05;
+  const xy = pts.map((x, k) => [X(k), Y(x.v)]);
+  const linha = xy.map((q, k) => (k ? "L" : "M") + q[0].toFixed(1) + "," + q[1].toFixed(1)).join(" ");
+  const area = linha + ` L${W},${H} L0,${H} Z`;
+  const ia = ativo !== null && ativo < pts.length ? ativo : pts.length - 1, sel = pts[ia];
+  const dif = sel && pts[0] ? sel.v - pts[0].v : 0, difPct = pts[0] && pts[0].v > 0 ? (dif / pts[0].v) * 100 : 0, sobe = dif >= 0;
+  const cor = sobe ? "#16A34A" : "#DC2626";
+  const arr = useArrasto(pts.length, (x) => Math.max(0, Math.min(pts.length - 1, Math.round((x / W) * (pts.length - 1)))), setAtivo);
+  const dataTxt = (d) => { const [yy, mm, dd] = d.split("-").map(Number); return d === hoje ? "hoje" : `${dd} de ${MONTHS_ABBR_PT[mm - 1].toLowerCase()}. de ${yy}`; };
+  const unid = fii ? (p.qty === 1 ? "cota" : "cotas") : p.qty === 1 ? "ação" : "ações";
+  const vazio = dados && !serie.length;
+  return (
+    <div className="anl" role="dialog" aria-label={"Análise completa de " + t} id="analise-ativo">
+      <div className="anl-in">
+        <header className="anl-h">
+          <button type="button" className="anl-voltar" aria-label="Voltar" onClick={onClose}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg></button>
+          <div><b>{t}</b>{dados && dados.nome && <span>{dados.nome}</span>}</div>
+        </header>
+        {!dados && !erro && <div className="anl-load">Carregando dados da B3…</div>}
+        {erro && !dados && <div className="anl-load">Não foi possível carregar agora. Confira a internet. <button type="button" className="btn btn-ghost sm" onClick={carregar}>Tentar de novo</button></div>}
+        {vazio && <div className="anl-load">A B3 não tem cotações para {t} nos últimos 12 meses.</div>}
+        {dados && ult && (<>
+          <section className="anl-hero">
+            <span>Último preço</span>
+            <b className="mono">{comCentavos(fmtBRL(ult.v))}</b>
+            <small>{ult.vivo ? "agora" : "fechamento de " + fmtDatePt(ult.d)}{p.qty > 0 && <> · você tem {fmtQty(p.qty)} {unid} = <strong className="mono">{fmtBRL(p.qty * ult.v)}</strong></>}</small>
+            <div className="anl-tiles">
+              <div data-anl="var12"><span>Valorização 12 meses</span><b className={"mono " + (var12 === null ? "" : var12 >= 0 ? "up" : "down")}>{var12 === null ? "—" : anlPct(var12)}</b></div>
+              <div data-anl="dy"><span>{fii ? "Rendimento 12 meses" : "Dividendos 12 meses"}</span><b className="mono">{prov.length ? dy12.toFixed(2).replace(".", ",") + "%" : "—"}</b></div>
+            </div>
+          </section>
+          <section className="card anl-faixa" data-anl="faixa">
+            <div className="anl-mm"><div><span>Mínima 52 semanas</span><b className="mono">{fmtBRL(min52)}</b></div><div><span>Máxima 52 semanas</span><b className="mono">{fmtBRL(max52)}</b></div></div>
+            <div className="anl-bar" aria-hidden="true"><i style={{ left: `${posFaixa * 100}%` }} /></div>
+            <small>Hoje está {posFaixa < 0.2 ? "perto da mínima" : posFaixa > 0.8 ? "perto da máxima" : "no meio da faixa"} do último ano.</small>
+          </section>
+          <section className="card pat-card anl-graf" onPointerLeave={() => setAtivo(null)}>
+            <div className="pat-top">
+              <span className="pat-l">Preço de fechamento</span>
+              <div className="pat-v mono">{comCentavos(fmtBRL(sel ? sel.v : 0))}</div>
+              <div className={`pat-d ${sobe ? "up" : "down"}`}><b className="mono">{(sobe ? "+ " : "− ") + fmtBRL(Math.abs(dif))} ({anlPct(difPct)})</b><span>{ativo !== null && sel ? dataTxt(sel.d) : { "1M": "no último mês", "6M": "nos últimos 6 meses", "12M": "nos últimos 12 meses" }[faixa]}</span></div>
+            </div>
+            <div className="chart-box pat-ch">
+              <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="none" height="170" {...arr}>
+                <defs><linearGradient id={"anl-" + faixa} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={cor} stopOpacity="0.22" /><stop offset="100%" stopColor={cor} stopOpacity="0" /></linearGradient></defs>
+                {pts.length > 0 && <line x1="0" x2={W} y1={Y(pts[0].v)} y2={Y(pts[0].v)} className="pat-base" vectorEffect="non-scaling-stroke" />}
+                <g className="revela" key={faixa}><path d={area} fill={`url(#anl-${faixa})`} /><path d={linha} fill="none" stroke={cor} strokeWidth="2.2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" /></g>
+                {ativo !== null && xy[ia] && <line x1={xy[ia][0]} x2={xy[ia][0]} y1="0" y2={H} stroke="rgba(15,26,22,0.25)" vectorEffect="non-scaling-stroke" />}
+              </svg>
+              {xy[ia] && <span className="pat-pt" style={{ left: `${(xy[ia][0] / W) * 100}%`, top: `${(xy[ia][1] / H) * 170}px`, background: cor }} />}
+            </div>
+            <div className="pat-f" role="tablist">{["1M", "6M", "12M"].map((f) => <button key={f} type="button" role="tab" aria-selected={faixa === f} className={faixa === f ? "on" : ""} onClick={() => { setFaixa(f); setAtivo(null); }}>{f}</button>)}</div>
+          </section>
+          <h3 className="anl-sec">Proventos</h3>
+          {!ultProv ? <section className="card anl-vazio">A B3 não mostra proventos de {t} no último ano.</section> : (<>
+            <section className="card anl-prov" data-anl="ultimo">
+              <div className="anl-prov-h"><span>Último provento</span><em className={ultProv.pagamento && ultProv.pagamento > hoje ? "rec" : "pago"}>{ultProv.pagamento && ultProv.pagamento > hoje ? "A receber" : "Pago"}</em></div>
+              <div className="anl-prov-v"><b className="mono">{anlVal(ultProv.valor)}</b><span>{anlTipo(ultProv.tipo)} por {fii ? "cota" : "ação"}</span></div>
+              <small>{(Number(ultProv.valor) / (precoEm(ultProv.data_com) || 1) * 100).toFixed(2).replace(".", ",")}% sobre o preço na data com</small>
+              {p.qty > 0 && <div className="anl-voce">Com suas {fmtQty(p.qty)} {unid}: <b className="mono">{fmtBRL(p.qty * Number(ultProv.valor))}</b></div>}
+              <div className="anl-datas"><div><span>Data com</span><b>{fmtDatePt(ultProv.data_com)}</b></div><div><span>Pagamento</span><b>{ultProv.pagamento ? fmtDatePt(ultProv.pagamento) : "a definir"}</b></div></div>
+            </section>
+            {temMeses && <section className="card anl-meses" data-anl="meses"><div className="anl-prov-h"><span>Proventos por mês, por {fii ? "cota" : "ação"}</span></div><SvgBarChart data={meses} height={170} color="#16A34A" fmt={anlVal} fmtTick={(v) => (v > 0 && v < 10 ? "R$ " + v.toFixed(2).replace(".", ",") : fmtEixo(v))} /></section>}
+            <section className="card anl-lista" data-anl="lista">
+              <div className="anl-li anl-li-h"><span>Data com</span><span>Pagamento</span><span>Tipo</span><span>Valor</span></div>
+              {(todos ? prov : prov.slice(0, 6)).map((x, k) => <div key={k} className="anl-li"><span>{fmtDatePt(x.data_com)}</span><span>{x.pagamento ? fmtDatePt(x.pagamento) : "—"}</span><span>{anlTipo(x.tipo)}</span><b className="mono">{anlVal(x.valor)}</b></div>)}
+              {prov.length > 6 && <button type="button" className="btn btn-ghost sm anl-mais" onClick={() => setTodos(!todos)}>{todos ? "Mostrar menos" : `Ver todos (${prov.length})`}</button>}
+            </section>
+          </>)}
+          <p className="anl-fonte">Dados públicos da B3.</p>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
 function RfLigar({ p, investments, tdHoje, carregarTd, cdiUltimo, onLigar }) {
   const meus = investments.filter((i) => (i.category || "Outro") === p.category && i.description === p.description);
   const td = (meus.find((i) => i.td) || {}).td, pct = (meus.find((i) => i.cdiPct > 0) || {}).cdiPct;
@@ -10152,6 +10325,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const [catFilter, setCatFilter] = useState("todas");
   const [sortBy, setSortBy] = useState("valor");
   const [openKey, setOpenKey] = useState(null);
+  const [analise, setAnalise] = useState(null);
   const [catsAbertas, setCatsAbertas] = useState(null); // null = só a maior classe aberta
   const [catsTodas, setCatsTodas] = useState({});
   const [pmDraft, setPmDraft] = useState({});
@@ -10276,6 +10450,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
 
   return (
     <div>
+      {analise && <AnaliseAtivo p={analise} cotacoes={cotacoes} onClose={() => setAnalise(null)} />}
       <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
       {positions.length > 0 && <PatrimonioCard hist={Array.isArray(cotacoes.__hist) ? cotacoes.__hist : []} investments={investments} totalValue={totalValue} />}
       <div className="kpi-row three">
@@ -10574,6 +10749,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                             <small>Use para igualar ao preço médio da corretora. Não mexe no seu caixa. Para desfazer, apague o ajuste em Lançamentos.</small>
                           </div>
                         )}
+                        {(p.category === "Ações" || p.category === "FII") && !p.usd && p.isQty && <button type="button" className="btn anl-btn" data-analise={p.description} onClick={() => setAnalise(p)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" /></svg>Análise completa<svg className="anl-seta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg></button>}
                         {ehRendaFixa(p.category) && ligarRendaFixa && <RfLigar p={p} investments={investments} tdHoje={tdHoje} carregarTd={carregarTd} cdiUltimo={cdiUltimo} onLigar={ligarRendaFixa} />}
                         <div className="ac-foot">
                           <span>{pctOf(p.value)} da carteira</span>

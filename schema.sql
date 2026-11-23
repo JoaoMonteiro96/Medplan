@@ -287,3 +287,32 @@ select cron.schedule('sallos-rendafixa', '15 13,20 * * 1-5',
 -- Variação do dia na carteira: fechamento do pregão anterior de cada ativo (gravado pela função "cotacoes")
 -- ============================================================
 alter table public.cotacoes add column if not exists anterior numeric;
+
+-- ============================================================
+-- Análise completa de ações e FIIs: histórico de fechamento (B3, COTAHIST) e proventos (B3)
+-- Dados públicos. Quem grava são as funções "historico" e "proventos". Todo mundo lê o histórico.
+-- ============================================================
+create table if not exists public.precos_hist (
+  ticker     text    not null,
+  data       date    not null,
+  fechamento numeric not null,
+  maxima     numeric,           -- máxima do dia
+  minima     numeric,           -- mínima do dia
+  primary key (ticker, data)
+);
+alter table public.precos_hist add column if not exists maxima numeric, add column if not exists minima numeric;
+alter table public.precos_hist enable row level security;
+drop policy if exists "todos leem precos" on public.precos_hist;
+create policy "todos leem precos" on public.precos_hist for select to anon, authenticated using (true);
+
+create table if not exists public.proventos_b3 (
+  ticker text primary key,
+  dados  jsonb not null,
+  em     timestamptz not null default now()
+);
+alter table public.proventos_b3 enable row level security;  -- só a função lê e grava
+
+-- todo dia útil às 8h de Brasília: fechamento do dia útil anterior
+select cron.unschedule(jobname) from cron.job where jobname = 'sallos-historico';
+select cron.schedule('sallos-historico', '0 11 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/historico', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{}'::jsonb, timeout_milliseconds := 120000) $$);
