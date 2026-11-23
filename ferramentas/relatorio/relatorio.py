@@ -22,8 +22,8 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 
 TELAS = {
     "inicio": "Hoje", "calendario": "Agenda", "faturamento": "Recebimentos", "despesas": "Contas",
-    "organizacao": "Organizar", "investimentos": "Investimentos", "metas": "Metas", "visao": "Relatórios",
-    "contabilidade": "Contabilidade", "importar": "Importar", "backup": "Ajustes",
+    "organizacao": "Organizar (antiga)", "investimentos": "Investimentos", "metas": "Metas", "visao": "Relatórios (antiga)",
+    "contabilidade": "Contabilidade", "importar": "Importar", "backup": "Configurações",
 }
 MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
 SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
@@ -97,7 +97,7 @@ def num(n):
 
 def variacao(agora, antes):
     if not antes:
-        return ("novo", SOBE) if agora else ("igual", CINZA)
+        return ("primeiro período medido", CINZA) if agora else ("igual", CINZA)
     p = round((agora - antes) * 100 / antes)
     if p == 0:
         return "igual ao período anterior", CINZA
@@ -131,7 +131,7 @@ def montar(r, saida):
     c.setFont("Forte", 12); c.drawString(M + w + 10, H - 140, "pessoas usaram o app")
     txt, _ = variacao(r["aparelhos"], r["aparelhos_antes"])
     c.setFillColor(BRANCO_70); c.setFont("Texto", 10)
-    c.drawString(M + w + 10, H - 156, f"{txt} ({num(r['aparelhos_antes'])})")
+    c.drawString(M + w + 10, H - 156, txt if not r["aparelhos_antes"] else f"{txt} (antes: {num(r['aparelhos_antes'])})")
 
     # ---- três cartões ----
     y = H - topo - 22
@@ -191,9 +191,10 @@ def montar(r, saida):
         c.drawString(M, y, "TELA"); c.drawRightString(cx_pes, y, "PESSOAS"); c.drawRightString(cx_abr, y, "ABERTURAS")
         y -= 8
         mxp = max([l["aparelhos"] for l in linhas] + [1])
+        passo = max(17, min(25, (y - 58) / max(1, len(linhas))))  # cabe tudo antes do rodapé
         for l in linhas:
             c.setStrokeColor(LINHA); c.line(M, y, W - M, y)
-            y -= 17
+            y -= passo - 8
             c.setFillColor(TINTA); c.setFont("Forte", 10); c.drawString(M, y, TELAS.get(l["tela"], l["tela"]))
             bmax = cx_pes - 50 - bar_x
             c.setFillColor(VERDE_FUNDO); c.roundRect(bar_x, y - 1, bmax, 8, 4, fill=1, stroke=0)
@@ -230,8 +231,9 @@ def main():
     ap.add_argument("--exemplo", action="store_true")
     ap.add_argument("--dias", type=int, default=3)
     ap.add_argument("--saida")
+    ap.add_argument("--dados", help="arquivo JSON com a resposta de resumo_uso (quando não dá para buscar direto)")
     a = ap.parse_args()
-    r = exemplo(a.dias) if a.exemplo else buscar(a.dias)
+    r = exemplo(a.dias) if a.exemplo else json.load(open(a.dados, encoding="utf-8")) if a.dados else buscar(a.dias)
     saida = a.saida or os.path.join(RAIZ, "ferramentas", "saida", f"relatorio-uso-{r['ate']}{'-exemplo' if a.exemplo else ''}.pdf")
     os.makedirs(os.path.dirname(os.path.abspath(saida)), exist_ok=True)
     montar(r, saida)
