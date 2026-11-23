@@ -39,8 +39,9 @@ Deno.serve(async (req) => {
       if (r.status === 429) { falhas.push(t + " (limite)"); break; }
       const j = await r.json().catch(() => null);
       const p = Number(j?.results?.[0]?.regularMarketPrice);
+      const ant = Number(j?.results?.[0]?.regularMarketPreviousClose); // fechamento do pregão anterior (variação do dia no app)
       if (r.ok && p > 0) {
-        await sb.from("cotacoes").upsert({ ticker: t, preco: Math.round(p * 100) / 100, atualizado: new Date().toISOString() });
+        await sb.from("cotacoes").upsert({ ticker: t, preco: Math.round(p * 100) / 100, anterior: ant > 0 ? Math.round(ant * 100) / 100 : null, atualizado: new Date().toISOString() });
         feitos.push(t);
       } else falhas.push(t);
     } catch (_e) { falhas.push(t); }

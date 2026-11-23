@@ -282,3 +282,8 @@ grant select on public.tesouro_hoje to anon, authenticated;
 select cron.unschedule(jobname) from cron.job where jobname = 'sallos-rendafixa';
 select cron.schedule('sallos-rendafixa', '15 13,20 * * 1-5',
   $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/rendafixa', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{}'::jsonb, timeout_milliseconds := 120000) $$);
+
+-- ============================================================
+-- Variação do dia na carteira: fechamento do pregão anterior de cada ativo (gravado pela função "cotacoes")
+-- ============================================================
+alter table public.cotacoes add column if not exists anterior numeric;
