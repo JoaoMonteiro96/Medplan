@@ -168,10 +168,30 @@ const INV_CATEGORIES = [
   { id: "Renda Fixa", color: "#F59E0B", kind: "list", hint: "Escolha ou digite o título" },
   { id: "Reserva de oportunidade", color: "#0EA5E9", kind: "list", hint: "Onde está a reserva?" },
   { id: "Exterior", color: "#0F766E", kind: "free", moeda: "USD", hint: "Código no exterior, ex: VOO, AAPL" },
+  { id: "Cripto", color: "#DB2777", kind: "cripto", hint: "Qual moeda?" },
   { id: "Outro", color: "#7A93A0", kind: "free", hint: "Descreva o investimento" },
 ];
 const INV_CAT_MAP = Object.fromEntries(INV_CATEGORIES.map((c) => [c.id, c]));
 const invCatMeta = (id) => INV_CAT_MAP[id] || { id, color: "#7A93A0", kind: "free" };
+
+// criptomoedas com cotação automática em reais (AwesomeAPI; se falhar, CoinGecko)
+const CRIPTO_MOEDAS = [{ t: "BTC", n: "Bitcoin", cg: "bitcoin" }, { t: "ETH", n: "Ethereum", cg: "ethereum" }];
+const CRIPTO_MAP = Object.fromEntries(CRIPTO_MOEDAS.map((c) => [c.t, c]));
+async function buscarCripto(moedas) {
+  const got = {};
+  try {
+    const j = await fetch("https://economia.awesomeapi.com.br/json/last/" + moedas.map((m) => m + "-BRL").join(",")).then((r) => r.json());
+    moedas.forEach((m) => { const v = Number(j && j[m + "BRL"] && j[m + "BRL"].bid); if (v > 0) got[m] = v; });
+  } catch (e) {}
+  const faltam = moedas.filter((m) => !got[m]);
+  if (faltam.length) {
+    try {
+      const j = await fetch("https://api.coingecko.com/api/v3/simple/price?vs_currencies=brl&ids=" + faltam.map((m) => CRIPTO_MAP[m].cg).join(",")).then((r) => r.json());
+      faltam.forEach((m) => { const v = Number(j && j[CRIPTO_MAP[m].cg] && j[CRIPTO_MAP[m].cg].brl); if (v > 0) got[m] = v; });
+    } catch (e) {}
+  }
+  return got;
+}
 
 const FIXED_INCOME_OPTIONS = [
   "Tesouro Selic", "Tesouro IPCA+", "Tesouro Prefixado", "Tesouro Renda+", "CDB", "CDB liquidez diária", "LCI", "LCA", "LC",
@@ -1640,7 +1660,7 @@ const BV_PASSOS = [
   ["vale", "Vale a pena esse plantão?", "Digite o valor oferecido e as horas. O app mostra quanto entra, quanto dá por hora e compara com a sua média.", "dois"],
   ["metas", "Metas contadas em plantões", "Diga quanto quer juntar e até quando. O app mostra quantos plantões em cada hospital pagam a meta.", "dois"],
   ["impostos", "Impostos sem susto", "No Simples, o app mostra quanto separar de cada recebimento. No Completo, também avisa as guias, lembra das notas para emitir e estima o imposto de renda.", "dois"],
-  ["invest", "Investimentos e importação", "Ações, fundos, renda fixa e exterior com preço atualizado sozinho. Importe a nota da corretora ou a fatura do cartão em vez de digitar.", "completo"],
+  ["invest", "Investimentos e importação", "Ações, fundos, renda fixa, exterior e bitcoin com preço atualizado sozinho. Importe a nota da corretora ou a fatura do cartão em vez de digitar.", "completo"],
 ];
 function BoasVindas({ onFim }) {
   const [i, setI] = useState(0);
@@ -3337,6 +3357,16 @@ function App() {
     }).catch(() => {});
     return () => { vivo = false; };
   }, [investments.length]);
+  const criptoKey = [...new Set(investments.filter((i) => i.category === "Cripto" && CRIPTO_MAP[String(i.description || "").toUpperCase()]).map((i) => String(i.description).toUpperCase()))].sort().join(",");
+  useEffect(() => {
+    if (!criptoKey) return;
+    let vivo = true; const moedas = criptoKey.split(",");
+    const atualizar = () => buscarCripto(moedas).then((got) => { if (vivo && Object.keys(got).length) setCotacoes((p) => ({ ...p, ...got, __CRIPTOem: new Date().toISOString() })); });
+    atualizar(); const t = setInterval(atualizar, 5 * 60 * 1000);
+    const vis = () => { if (document.visibilityState === "visible") atualizar(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { vivo = false; clearInterval(t); document.removeEventListener("visibilitychange", vis); };
+  }, [criptoKey]);
   const portfolio = useMemo(() => computePortfolio(investments, cotacoes), [investments, cotacoes]);
   // retrato diário da carteira (valor, total comprado e vendido) para o gráfico de rentabilidade
   useEffect(() => {
@@ -10005,16 +10035,19 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const [inicial, setInicial] = useState(false); // já tinha antes de usar o app: entra na carteira inicial, não é aporte
   const meta = invCatMeta(category);
   const isTicker = meta.kind === "ticker";
+  const isCripto = meta.kind === "cripto";
   const byAsset = isTicker && scope === "ativo";
   const needsDesc = !isTicker || byAsset;
   const useQty = byAsset && entry === "qtd";
+  const criptoPreco = isCripto && numOf(qty) > 0 ? numOf(amount) / numOf(qty) : 0;
   const options = useMemo(() => {
     if (isTicker) return ASSET_DB.filter((a) => a.ty === meta.type);
     if (category === "Renda Fixa") return FIXED_INCOME_OPTIONS;
+    if (category === "Cripto") return CRIPTO_MOEDAS;
     if (category === "Reserva de oportunidade") return RESERVE_OPTIONS;
     return [];
   }, [category]);
-  const pickCategory = (id) => { setCategory(id); setDescription(""); setAssetName(""); };
+  const pickCategory = (id) => { setCategory(id); if (id === "Cripto") { setDescription("BTC"); setAssetName("Bitcoin"); } else { setDescription(""); setAssetName(""); } };
   const formTotal = useQty ? numOf(qty) * numOf(price) : numOf(amount);
 
   const submit = () => {
@@ -10024,6 +10057,14 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
     else if (isTicker) { desc = desc.toUpperCase(); name = name || ASSET_NAME[desc] || ""; }
     if (!desc) return;
     if (useQty && numOf(qty) <= 0) return;
+    if (isCripto) {
+      if (numOf(qty) <= 0) return;
+      desc = desc.toUpperCase(); name = (CRIPTO_MAP[desc] || {}).n || name;
+      addInvestment({ description: desc, assetName: name, category, date, tipo, qty: numOf(qty), price: formTotal / numOf(qty), amount: tipo === "venda" ? -formTotal : formTotal, ...(inicial && tipo === "compra" ? { posicaoInicial: true } : {}) });
+      if (inicial && tipo === "compra") avisar("Entrou na carteira inicial, sem contar como aporte");
+      setQty(""); setPrice(""); setAmount(""); setInicial(false); setShowForm(false); setTab("ativos");
+      return;
+    }
     addInvestment({ description: desc, assetName: name, category, date, tipo, qty: useQty ? numOf(qty) : 0, price: useQty ? numOf(price) : 0, amount: tipo === "venda" ? -formTotal : formTotal, ...(emDolar ? { moeda: "USD" } : {}), ...(inicial && tipo === "compra" ? { posicaoInicial: true } : {}) });
     if (inicial && tipo === "compra") avisar("Entrou na carteira inicial, sem contar como aporte");
     setDescription(""); setAssetName(""); setQty(""); setPrice(""); setAmount(""); setInicial(false); setShowForm(false); setTab("ativos");
@@ -10126,13 +10167,15 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             {needsDesc && (
               <div className="field" style={{ gridColumn: "1 / -1" }}>
                 <label>{isTicker ? "Ativo" : "Descrição"}</label>
-                {meta.kind === "free" ? (
+                {isCripto ? (
+                  <div className="chip-row" id="inv-cripto">{CRIPTO_MOEDAS.map((c) => <button key={c.t} type="button" className={`chip ${description === c.t ? "active" : ""}`} aria-pressed={description === c.t} onClick={() => { setDescription(c.t); setAssetName(c.n); }}>{c.n} <span className="mono" style={{ opacity: 0.6 }}>{c.t}</span></button>)}</div>
+                ) : meta.kind === "free" ? (
                   <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={meta.hint} />
                 ) : (
                   <AssetInput value={description} options={options} showAllOnEmpty={meta.kind === "list"} placeholder={meta.hint}
                     onChange={(v) => { setDescription(v); setAssetName(""); }} onPick={(o) => { setDescription(o.t); setAssetName(o.n || ""); }} />
                 )}
-                {assetName && <div className="field-hint"><b>{description}</b> · {assetName}</div>}
+                {assetName && !isCripto && <div className="field-hint"><b>{description}</b> · {assetName}</div>}
                 {isTicker && !assetName && description && <div className="field-hint">Não achou na lista? Pode seguir digitando o código normalmente.</div>}
               </div>
             )}
@@ -10144,7 +10187,13 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                 </div>
               </div>
             )}
-            {useQty ? (
+            {isCripto ? (
+              <>
+                <div className="field"><label htmlFor="inv-cq">Quantidade de {description || "moedas"}</label><input id="inv-cq" type="number" inputMode="decimal" step="any" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Ex.: 0,015" /></div>
+                <div className="field"><label>{tipo === "venda" ? "Valor recebido (R$)" : "Valor pago no total (R$)"}</label><MoneyInput value={amount} onChange={setAmount} /></div>
+                {criptoPreco > 0 && <div className="field-hint" style={{ gridColumn: "1 / -1", marginTop: -4 }}>Preço de 1 {description}: <b className="mono">{fmtBRL(criptoPreco)}</b>. A cotação se atualiza sozinha.</div>}
+              </>
+            ) : useQty ? (
               <>
                 <div className="field"><label>Quantidade</label><input type="number" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" /></div>
                 <div className="field"><label>Preço unitário ({simb})</label><MoneyInput value={price} onChange={setPrice} /></div>
@@ -10155,7 +10204,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             <div className="field"><label>Data</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
           {held && (() => {
-            const q = numOf(qty), pr = numOf(price);
+            const q = numOf(qty), pr = isCripto ? criptoPreco : numOf(price);
             const buying = tipo !== "venda";
             const newQty = held.qty + q, newAvg = newQty > 0 ? (held.cost + q * pr) / newQty : 0;
             const sellQty = Math.min(q, held.qty), sellResult = (pr - held.avg) * sellQty;
