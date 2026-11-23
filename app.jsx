@@ -802,11 +802,22 @@ function RangeTabs({ value, onChange, options = [3, 6, 12, 24] }) {
 // valor curto para eixos: R$ 12 mil, R$ 1,2 mi
 const fmtEixo = (v) => { const a = Math.abs(v), s = v < 0 ? "−" : ""; if (a >= 1e6) return s + "R$ " + (a / 1e6).toFixed(1).replace(".", ",").replace(",0", "") + " mi"; if (a >= 1e3) return s + "R$ " + Math.round(a / 1e3) + " mil"; return s + "R$ " + Math.round(a); };
 // arrastar o dedo (ou o mouse) pelo gráfico mostra cada ponto; vibra de leve no Android ao trocar
+// largura real do gráfico no computador: acima de 600 px o desenho cresce sem aumentar as letras
+function useLargura(min = 600) {
+  const ref = useRef(null); const [w, setW] = useState(min);
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => { const x = Math.round(es[0].contentRect.width); setW((o) => { const n = Math.max(min, Math.min(1400, x)); return Math.abs(n - o) > 4 ? n : o; }); });
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
+  return [ref, w];
+}
 function useArrasto(n, indice, setActive) {
   const ultimo = useRef(null), arrastando = useRef(false);
   const mover = (ev) => {
     const svg = ev.currentTarget; const r = svg.getBoundingClientRect(); if (!r.width) return;
-    const i = indice(((ev.clientX - r.left) / r.width) * 600);
+    const vw = (svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width) || 600;
+    const i = indice(((ev.clientX - r.left) / r.width) * vw);
     if (i === null || i < 0 || i >= n) return;
     if (ultimo.current !== i) { ultimo.current = i; setActive(i); if (arrastando.current) { try { navigator.vibrate && navigator.vibrate(4); } catch (e) {} } }
   };
@@ -831,7 +842,7 @@ function ChartTip({ x, children }) {
 function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, signed = false, valueKey = "value", labelKey = "label", onOpen }) {
   const [active, setActive] = useState(null);
   const tapped = useRef(null);
-  const W = 600, padTop = 14, padBottom = 28, padX = 6, padL = 74;
+  const [boxRef, W] = useLargura(600); const padTop = 14, padBottom = 28, padX = 6, padL = 74;
   const plotH = height - padTop - padBottom;
   const values = data.map((d) => Number(d[valueKey]) || 0);
   const n = data.length;
@@ -843,7 +854,7 @@ function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, 
   const click = (i) => { if (tapped.current === i && onOpen) { onOpen(data[i]); tapped.current = null; } else { tapped.current = i; setActive(i); } };
   const arr = useArrasto(n, (x) => Math.floor((x - padL) / slot), setActive);
   return (
-    <div className="chart-box" onMouseLeave={() => setActive(null)}>
+    <div className="chart-box" ref={boxRef} onMouseLeave={() => setActive(null)}>
       <svg viewBox={`0 0 ${W} ${height}`} width="100%" {...arr}>
         <GradeEixo W={W} top={padTop} h={plotH} min={signed ? -maxAbs : 0} max={maxAbs} padX={padX} padL={padL} ticks={signed ? 2 : 3} />
         {data.map((d, i) => {
@@ -874,7 +885,7 @@ function SvgAreaChart({ data, height = 200, color = TEAL, valueKey = "value", la
   const [active, setActive] = useState(null);
   const gradId = useMemo(() => "grad-" + Math.random().toString(36).slice(2, 9), []);
   const tapped = useRef(null);
-  const W = 600, padTop = bare ? 6 : 16, padBottom = bare ? 4 : 28, padX = bare ? 0 : 14, padL = bare ? 0 : 74;
+  const [boxRef, W] = useLargura(600); const padTop = bare ? 6 : 16, padBottom = bare ? 4 : 28, padX = bare ? 0 : 14, padL = bare ? 0 : 74;
   const plotH = height - padTop - padBottom;
   const values = data.map((d) => Number(d[valueKey]) || 0);
   const n = data.length;
@@ -888,7 +899,7 @@ function SvgAreaChart({ data, height = 200, color = TEAL, valueKey = "value", la
   const click = (i) => { if (tapped.current === i && onOpen) { onOpen(data[i]); tapped.current = null; } else { tapped.current = i; setActive(i); } };
   const arr = useArrasto(n, (x) => (n > 1 ? Math.max(0, Math.min(n - 1, Math.round((x - padL) / stepX))) : 0), setActive);
   return (
-    <div className="chart-box" onMouseLeave={() => !bare && setActive(null)}>
+    <div className="chart-box" ref={boxRef} onMouseLeave={() => !bare && setActive(null)}>
       <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={bare ? height : undefined} preserveAspectRatio={bare ? "none" : "xMidYMid meet"} {...(bare ? { style: { display: "block" } } : arr)}>
         {!bare && <GradeEixo W={W} top={padTop} h={plotH} min={minV} max={maxV} padX={padX} padL={padL} />}
         <defs>
@@ -916,7 +927,7 @@ function SvgDualBarChart({ data, height = 200, onOpen }) {
   const [active, setActive] = useState(null);
   const [hidden, setHidden] = useState({});
   const tapped = useRef(null);
-  const W = 600, padTop = 12, padBottom = 28, padX = 4, padL = 74;
+  const [boxRef, W] = useLargura(600); const padTop = 12, padBottom = 28, padX = 4, padL = 74;
   const plotH = height - padTop - padBottom;
   const n = data.length;
   if (n === 0) return <div className="empty-state">Sem dados para exibir.</div>;
@@ -938,7 +949,7 @@ function SvgDualBarChart({ data, height = 200, onOpen }) {
   const arr = useArrasto(n, (x) => Math.floor((x - padL) / slot), setActive);
   return (
     <div>
-      <div className="chart-box" onMouseLeave={() => setActive(null)}>
+      <div className="chart-box" ref={boxRef} onMouseLeave={() => setActive(null)}>
         <svg viewBox={`0 0 ${W} ${height}`} width="100%" {...arr}>
           <GradeEixo W={W} top={padTop} h={plotH} min={min} max={max} padX={padX} padL={padL} />
           {data.map((d, i) => (
@@ -2968,7 +2979,7 @@ function App() {
   }));
 
   const addInvestment = (d) => setInvestments((prev) => [...prev, { id: uid(), description: d.description, assetName: d.assetName || "", category: d.category, date: d.date,
-    tipo: d.tipo || "compra", qty: d.qty || 0, price: d.price || 0, amount: Number(d.amount) || 0 }]);
+    tipo: d.tipo || "compra", qty: d.qty || 0, price: d.price || 0, amount: Number(d.amount) || 0, ...(d.moeda ? { moeda: d.moeda } : {}), ...(d.posicaoInicial ? { posicaoInicial: true } : {}) }]);
   // Ajusta o preço médio de um ativo para o valor informado, registrando a diferença como um lançamento de ajuste
   const adjustAvg = (p, novo) => {
     const n = numOf(novo);
@@ -5084,6 +5095,12 @@ function App() {
           .dgvs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
           .dgv { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
           .dgv.wide { grid-column: 1 / -1; }
+          /* computador: o detalhe aberto ocupa a linha toda e os fechados se juntam em pares, sem buracos */
+          .dgvs { display: flex; flex-wrap: wrap; align-items: flex-start; } .dgvs > .dgv { flex: 1 1 calc(50% - 6px); min-width: 300px; } .dgvs > .dgv.open, .dgvs > .dgv.wide { flex-basis: 100%; }
+          /* colunas da mesma altura: o cartão da direita acompanha a lista da esquerda */
+          .dgrid.dgrid-eq { align-items: stretch; }
+          .dgrid.dgrid-eq > .card:nth-child(2) { display: flex; flex-direction: column; }
+          .dgrid.dgrid-eq > .card:nth-child(2) > :not(.card-head) { margin-top: auto; margin-bottom: auto; }
           .dgv-h { display: grid; grid-template-columns: 38px 1fr auto 20px; gap: 14px; align-items: center; width: 100%; padding: 14px 18px; border: none; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
           .dgv-h:hover { background: var(--surface-2); }
           .dgv-ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
@@ -5267,7 +5284,7 @@ function App() {
         :root[data-theme="dark"] .gp-prazo.ok { background: rgba(34,197,94,.12); color: #86EFAC; } :root[data-theme="dark"] .gp-prazo.falta { background: rgba(245,158,11,.12); color: #FCD34D; }
 
         /* ================= v31: organização (caminho do dinheiro) ================= */
-        .oa { max-width: 640px; } @media (min-width: 1100px) { .oa { max-width: none; } .oa-chips { max-width: 420px; } .oa.oa-rodape { max-width: 760px; } }
+        .oa { max-width: 640px; } @media (min-width: 1100px) { .oa { max-width: none; } .oa-chips { max-width: 420px; } .oa.oa-rodape { max-width: none; margin-top: 12px; } }
         .oa-chips { display: flex; gap: 8px; margin-bottom: 12px; }
         .oa-chips button { flex: 1; font: inherit; font-size: 13.5px; font-weight: 600; padding: 10px 8px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); cursor: pointer; }
         .oa-chips button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
@@ -5373,7 +5390,11 @@ function App() {
         .oa-res .oa-n { position: static; display: inline-grid; margin-right: 8px; width: 24px; height: 24px; background: #16A34A; color: #fff; vertical-align: middle; }
         .oa-res .oa-res-lb { display: flex; align-items: center; }
         .oa-inv { margin-top: 10px; padding-top: 10px; border-top: 1px dashed currentColor; opacity: .9; font-size: 13px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-        @media (min-width: 1100px) { .oa-topo { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; align-items: start; } .oa-topo > * { margin-top: 0 !important; } }
+        @media (min-width: 1100px) { .oa-topo { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; align-items: stretch; } .oa-topo > .oa-sug { display: flex; flex-direction: column; } .oa-topo > .oa-sug .oa-sug-sobra { margin-top: auto; } .oa-topo > * { margin-top: 0 !important; } }
+        .inv-ini { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin: 0 0 14px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface-2); cursor: pointer; }
+        .inv-ini.on { border-color: #16A34A; background: color-mix(in srgb, #16A34A 7%, var(--surface)); }
+        .inv-ini input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: #16A34A; flex-shrink: 0; }
+        .inv-ini b { display: block; font-size: 14.5px; } .inv-ini small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 2px; }
         .cfg-legal { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; } .cfg-legal a { font-size: 13.5px; font-weight: 600; color: var(--accent, #15803D); }
         .cc-excluir { display: block; margin-top: 14px; padding: 6px 0; border: none; background: none; color: #B91C1C; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
         :root[data-theme="dark"] .cc-excluir { color: #FCA5A5; }
@@ -6778,7 +6799,7 @@ function FaturamentoTab({
 
 
       {confirmar}
-      <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: simples ? "1fr" : "1.7fr 1fr", alignItems: "start" } : null}>
+      <div className={desk ? "dgrid dgrid-eq" : ""} style={desk ? { gridTemplateColumns: simples ? "1fr" : "1.7fr 1fr" } : null}>
       <div className="card flush">
         <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3><span className="card-note">toque no status para marcar como recebido</span></div>
         {sorted.length === 0 ? <div className="empty-state">Nenhuma receita neste mês ainda.</div> : (
@@ -9616,7 +9637,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
     <div>
       {topo}
 
-      <div className={desk ? "dgrid" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr", alignItems: "start" } : null}>
+      <div className={desk ? "dgrid dgrid-eq" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr" } : null}>
       <div className="card">
         <div className="card-head">
           <h3 className="card-title">Contas de {MONTHS_PT[viewMonth].toLowerCase()}</h3>
@@ -9981,6 +10002,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const [price, setPrice] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayIso);
+  const [inicial, setInicial] = useState(false); // já tinha antes de usar o app: entra na carteira inicial, não é aporte
   const meta = invCatMeta(category);
   const isTicker = meta.kind === "ticker";
   const byAsset = isTicker && scope === "ativo";
@@ -10002,8 +10024,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
     else if (isTicker) { desc = desc.toUpperCase(); name = name || ASSET_NAME[desc] || ""; }
     if (!desc) return;
     if (useQty && numOf(qty) <= 0) return;
-    addInvestment({ description: desc, assetName: name, category, date, tipo, qty: useQty ? numOf(qty) : 0, price: useQty ? numOf(price) : 0, amount: tipo === "venda" ? -formTotal : formTotal, ...(emDolar ? { moeda: "USD" } : {}) });
-    setDescription(""); setAssetName(""); setQty(""); setPrice(""); setAmount(""); setShowForm(false); setTab("ativos");
+    addInvestment({ description: desc, assetName: name, category, date, tipo, qty: useQty ? numOf(qty) : 0, price: useQty ? numOf(price) : 0, amount: tipo === "venda" ? -formTotal : formTotal, ...(emDolar ? { moeda: "USD" } : {}), ...(inicial && tipo === "compra" ? { posicaoInicial: true } : {}) });
+    if (inicial && tipo === "compra") avisar("Entrou na carteira inicial, sem contar como aporte");
+    setDescription(""); setAssetName(""); setQty(""); setPrice(""); setAmount(""); setInicial(false); setShowForm(false); setTab("ativos");
   };
 
   // ----- derivados -----
@@ -10081,6 +10104,12 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             <button className={`tipo-btn buy ${tipo === "compra" ? "active" : ""}`} onClick={() => setTipo("compra")}>Compra / aporte</button>
             <button className={`tipo-btn sell ${tipo === "venda" ? "active" : ""}`} onClick={() => setTipo("venda")}>Venda / resgate</button>
           </div>
+          {tipo === "compra" && (
+            <label className={`inv-ini ${inicial ? "on" : ""}`} id="inv-inicial">
+              <input type="checkbox" checked={inicial} onChange={(e) => setInicial(e.target.checked)} />
+              <span><b>Já tinha antes de usar o app</b><small>Entra na carteira inicial e não aparece como aporte do mês.</small></span>
+            </label>
+          )}
           <div className="field"><label>Categoria</label>
             <div className="chip-row">{INV_CATEGORIES.map((c) => <button key={c.id} type="button" className={`chip ${category === c.id ? "active" : ""}`} onClick={() => pickCategory(c.id)}>{c.id}</button>)}</div>
           </div>
@@ -10163,7 +10192,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             );
           })()}
           {formTotal > 0 && <div className="total-line">Total do lançamento: <b className="mono">{fmtBRL(formTotal)}</b></div>}
-          <button className="btn btn-primary" onClick={submit}>Salvar {tipo === "venda" ? "venda" : "compra"}</button>
+          <button className="btn btn-primary" id="inv-salvar" onClick={submit}>{tipo === "venda" ? "Salvar venda" : inicial ? "Salvar na carteira inicial" : "Salvar compra"}</button>
         </div>
       )}
 

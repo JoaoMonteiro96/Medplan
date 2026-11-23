@@ -78,6 +78,8 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Apagar plantões de um hospital** (`ApagarPlantoesSheet`, `apagarPlantoesDe`): em Recebimentos, no grupo do hospital, ou no plantão aberto no calendário ("Apagar vários de..."). Opções: de hoje em diante ou todos; encerra o plantão fixo; tem Desfazer.
 - **Férias** (`FeriasSheet`, `resumoFerias`): botão no calendário. Mostra os plantões para passar, quanto deixa de receber e, pelo mês em que o dinheiro cairia, se as contas continuam pagas. Salva no calendário (dias em azul) e pode tirar os plantões da agenda (com Desfazer).
 - **Vale a pena esse plantão?** (`ValePlantao`): no menu Mais (no Simples, na tela de Metas) e na barra lateral do computador.
+- **Investimento manual como carteira inicial:** em Investimentos › Novo lançamento › Compra, a opção "Já tinha antes de usar o app" grava `posicaoInicial: true` (entra na carteira, não conta como aporte do mês).
+- **Computador (Faturamento, Despesas):** as duas colunas têm a mesma altura (`dgrid-eq`); em "Detalhes" o item aberto ocupa a linha toda e os fechados se juntam (`.dgvs` em flex). Os gráficos (`SvgAreaChart`, `SvgBarChart`, `SvgDualBarChart`) medem a largura real acima de 600 px (`useLargura`), então as letras não crescem.
 - **Metas em plantões** (`MetaEmPlantoes`): quantos plantões em cada hospital pagam a meta.
 
 ## O que o João já recusou (não sugerir de novo)
