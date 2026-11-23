@@ -177,19 +177,23 @@ const invCatMeta = (id) => INV_CAT_MAP[id] || { id, color: "#7A93A0", kind: "fre
 // criptomoedas com cotação automática em reais (AwesomeAPI; se falhar, CoinGecko)
 const CRIPTO_MOEDAS = [{ t: "BTC", n: "Bitcoin", cg: "bitcoin" }, { t: "ETH", n: "Ethereum", cg: "ethereum" }];
 const CRIPTO_MAP = Object.fromEntries(CRIPTO_MOEDAS.map((c) => [c.t, c]));
+// devolve { BTC: preço, ... } e, em __ant, o preço de 24 horas atrás (para a variação do dia)
+const diaBahia = (iso) => { try { return new Date(iso).toLocaleDateString("sv-SE", { timeZone: "America/Bahia" }); } catch (e) { return String(iso || "").slice(0, 10); } };
 async function buscarCripto(moedas) {
-  const got = {};
+  const got = {}, ant = {};
   try {
     const j = await fetch("https://economia.awesomeapi.com.br/json/last/" + moedas.map((m) => m + "-BRL").join(",")).then((r) => r.json());
-    moedas.forEach((m) => { const v = Number(j && j[m + "BRL"] && j[m + "BRL"].bid); if (v > 0) got[m] = v; });
+    moedas.forEach((m) => { const o = j && j[m + "BRL"]; const v = Number(o && o.bid), pc = Number(o && o.pctChange); if (v > 0) { got[m] = v; if (isFinite(pc) && pc > -99) ant[m] = v / (1 + pc / 100); } });
   } catch (e) {}
   const faltam = moedas.filter((m) => !got[m]);
   if (faltam.length) {
     try {
-      const j = await fetch("https://api.coingecko.com/api/v3/simple/price?vs_currencies=brl&ids=" + faltam.map((m) => CRIPTO_MAP[m].cg).join(",")).then((r) => r.json());
-      faltam.forEach((m) => { const v = Number(j && j[CRIPTO_MAP[m].cg] && j[CRIPTO_MAP[m].cg].brl); if (v > 0) got[m] = v; });
+      const j = await fetch("https://api.coingecko.com/api/v3/simple/price?vs_currencies=brl&include_24hr_change=true&ids=" + faltam.map((m) => CRIPTO_MAP[m].cg).join(",")).then((r) => r.json());
+      faltam.forEach((m) => { const o = j && j[CRIPTO_MAP[m].cg]; const v = Number(o && o.brl), pc = Number(o && o.brl_24h_change); if (v > 0) { got[m] = v; if (isFinite(pc) && pc > -99) ant[m] = v / (1 + pc / 100); } });
     } catch (e) {}
   }
+  const hoje = diaBahia(new Date().toISOString());
+  got.__ant = Object.fromEntries(Object.entries(ant).map(([m, a]) => [m, { a, d: hoje }]));
   return got;
 }
 
@@ -3033,11 +3037,13 @@ function App() {
     const sb = await getSupabase(cloudCfg);
     await sb.from("cotacoes_pedidos").upsert(tickers.map((t) => ({ ticker: t, visto_em: new Date().toISOString() })), { onConflict: "user_id,ticker" });
     if (pedirNovos) { try { await sb.functions.invoke("cotacoes", { body: { tickers } }); } catch (e) { /* a função roda sozinha também */ } }
-    const { data, error } = await sb.from("cotacoes").select("ticker,preco,atualizado").in("ticker", tickers);
+    // "anterior" = fechamento do pregão anterior (para a variação do dia); se a coluna ainda não existir, lê sem ela
+    let { data, error } = await sb.from("cotacoes").select("ticker,preco,anterior,atualizado").in("ticker", tickers);
+    if (error) ({ data, error } = await sb.from("cotacoes").select("ticker,preco,atualizado").in("ticker", tickers));
     if (error) throw error;
-    const novo = {}; let ultima = "";
-    (data || []).forEach((r) => { if (Number(r.preco) > 0) { novo[r.ticker] = Number(r.preco); if (r.atualizado > ultima) ultima = r.atualizado; } });
-    if (Object.keys(novo).length) setCotacoes((prev) => ({ ...prev, ...novo, __centralEm: ultima }));
+    const novo = {}, ant = {}; let ultima = "";
+    (data || []).forEach((r) => { if (Number(r.preco) > 0) { novo[r.ticker] = Number(r.preco); if (Number(r.anterior) > 0) ant[r.ticker] = { a: Number(r.anterior), d: diaBahia(r.atualizado) }; if (r.atualizado > ultima) ultima = r.atualizado; } });
+    if (Object.keys(novo).length) setCotacoes((prev) => ({ ...prev, ...novo, __ANT: { ...(prev.__ANT || {}), ...ant }, __centralEm: ultima }));
     return { n: tickers.length, ok: Object.keys(novo).length, ultima, faltam: tickers.filter((t) => !novo[t]) };
   };
   useEffect(() => { if (!loaded || !session) return; cotacoesCentral(true).catch(() => {}); }, [loaded, session, investments.length]);
@@ -3060,7 +3066,7 @@ function App() {
       return;
     }
     const token = (brapiToken || "").trim();
-    const next = {}, marks = {};
+    const next = {}, marks = {}, antD = {};
     const okList = [], needToken = [], notFound = [], other = [];
     let stop = "", netFails = 0; // stop: "notoken" | "token" | "limit" | "net"
     setQuoteStatus("");
@@ -3076,7 +3082,8 @@ function App() {
           let j = null;
           try { j = await r.json(); } catch (e) { j = null; }
           const price = Number(j && j.results && j.results[0] && j.results[0].regularMarketPrice);
-          if (r.ok && price > 0) { next[t] = Math.round(price * 100) / 100; marks[t] = "ok"; okList.push(t); netFails = 0; }
+          const prev = Number(j && j.results && j.results[0] && j.results[0].regularMarketPreviousClose);
+          if (r.ok && price > 0) { next[t] = Math.round(price * 100) / 100; if (prev > 0) antD[t] = { a: prev, d: todayStr() }; marks[t] = "ok"; okList.push(t); netFails = 0; }
           else if (r.status === 401 || (r.status === 403 && !token)) {
             if (token) { stop = "token"; other.push(t); marks[t] = "fail"; }
             else { stop = "notoken"; needToken.push(t); marks[t] = "token"; }
@@ -3091,7 +3098,7 @@ function App() {
       }
       setQuoteRun((r) => ({ ...r, done: k + 1, marks: { ...marks } }));
     }
-    if (okList.length) setCotacoes((prev) => ({ ...prev, ...next }));
+    if (okList.length) setCotacoes((prev) => ({ ...prev, ...next, __ANT: { ...(prev.__ANT || {}), ...antD } }));
     const n = tickers.length;
     const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     const parts = [`${okList.length} de ${n} ${n === 1 ? "cotação atualizada" : "cotações atualizadas"} às ${hora}.`];
@@ -3458,7 +3465,7 @@ function App() {
   useEffect(() => {
     if (!criptoKey) return;
     let vivo = true; const moedas = criptoKey.split(",");
-    const atualizar = () => buscarCripto(moedas).then((got) => { if (vivo && Object.keys(got).length) setCotacoes((p) => ({ ...p, ...got, __CRIPTOem: new Date().toISOString() })); });
+    const atualizar = () => buscarCripto(moedas).then(({ __ant, ...got }) => { if (vivo && Object.keys(got).length) setCotacoes((p) => ({ ...p, ...got, __ANT: { ...(p.__ANT || {}), ...__ant }, __CRIPTOem: new Date().toISOString() })); });
     atualizar(); const t = setInterval(atualizar, 5 * 60 * 1000);
     const vis = () => { if (document.visibilityState === "visible") atualizar(); };
     document.addEventListener("visibilitychange", vis);
@@ -5294,13 +5301,14 @@ function App() {
 
         /* ================= v37: investimentos por classe (modelo A) ================= */
         .cl-tot { margin: 2px 0 12px; } .cl-tot b { display: block; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; } .cl-tot small { display: block; font-size: 13px; margin-top: 2px; }
+        .cl-var { display: flex; flex-wrap: wrap; gap: 6px 28px; margin-top: 6px; } .cl-var > div { min-width: 0; } .cl-var span { display: block; font-size: 12px; color: var(--text-dim); font-weight: 600; } .cl-var em { display: block; font-style: normal; font-size: 14px; font-weight: 700; white-space: nowrap; } .cl-var i { font-style: normal; font-weight: 600; }
         .cl-bar { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 12px; background: var(--surface-3); } .cl-bar i { display: block; height: 100%; }
         .cl-card { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
         .cl-head { display: grid; grid-template-columns: 10px 1fr auto 18px; gap: 12px; align-items: center; width: 100%; padding: 14px 16px; background: none; border: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
         .cl-head:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
         .cl-dot { width: 10px; height: 10px; border-radius: 3px; }
         .cl-name b { display: block; font-size: 15.5px; } .cl-name small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
-        .cl-val { text-align: right; } .cl-val b { display: block; font-size: 15px; font-weight: 700; } .cl-val small { display: block; font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+        .cl-val { text-align: right; } .cl-val b { display: block; font-size: 15px; font-weight: 700; } .cl-val small { display: block; font-size: 12.5px; font-weight: 600; margin-top: 2px; } .cl-val small { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 5px; } .cl-val small > * { white-space: nowrap; } .cl-val .cl-pct { font-style: normal; } .cl-name small { white-space: nowrap; }
         .cl-chev { color: var(--text-dim); transition: transform .18s; display: inline-flex; } .cl-card.open .cl-chev { transform: rotate(180deg); }
         .cl-card .asset-grid { display: block; gap: 0; padding: 0; margin: 0; }
         .cl-card .asset-card.cl-row { border: none; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; transform: none; animation: none; background: transparent; }
@@ -10224,6 +10232,15 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const returnPct = totalBought > 0 ? (totalReturn / totalBought) * 100 : 0;
   const sgn = (n) => (n >= 0 ? "+" : "−");
   const signPct = (n) => sgn(n) + Math.abs(n).toFixed(2).replace(".", ",") + "%";
+  // variação do dia: preço de agora contra o fechamento do pregão anterior (bolsa) ou de 24 horas atrás (cripto)
+  const antM = cotacoes.__ANT || {};
+  const comAnt = positions.filter((p) => p.isQty && !p.usd && p.qty > 0 && p.cotacao > 0 && antM[p.description] && antM[p.description].a > 0);
+  const diaData = comAnt.filter((p) => invCatMeta(p.category).kind === "ticker").reduce((m, p) => (antM[p.description].d > m ? antM[p.description].d : m), "");
+  const diaItens = diaData ? comAnt.filter((p) => antM[p.description].d === (invCatMeta(p.category).kind === "ticker" ? diaData : todayStr())) : [];
+  const diaVar = diaItens.reduce((a, p) => a + p.qty * (p.cotacao - antM[p.description].a), 0);
+  const diaBase = diaItens.reduce((a, p) => a + p.qty * antM[p.description].a, 0);
+  const diaPct = diaBase > 0 ? (diaVar / diaBase) * 100 : 0;
+  const diaRot = diaData === todayStr() ? "Hoje" : "Último pregão";
   const pctOf = (v) => (totalValue > 0 ? ((v / totalValue) * 100).toFixed(1).replace(".", ",") : "0") + "%";
 
   const classes = useMemo(() => {
@@ -10446,7 +10463,10 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             {positions.length > 0 && (
               <div className="cl-tot">
                 <b className="mono">{fmtBRL(totalValue)}</b>
-                <small className="mono" style={{ color: profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(profit)} {fmtBRL(Math.abs(profit))} ({signPct(profitPct)}) sobre o custo</small>
+                <div className="cl-var">
+                  <div data-var="total"><span>Variação total</span><em className="mono" style={{ color: profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(profit)} {fmtBRL(Math.abs(profit))} <i>({signPct(profitPct)})</i></em></div>
+                  {diaItens.length > 0 && <div data-var="dia"><span>{diaRot}</span><em className="mono" style={{ color: diaVar >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(diaVar)} {fmtBRL(Math.abs(diaVar))} <i>({signPct(diaPct)})</i></em></div>}
+                </div>
                 <div className="cl-bar" role="img" aria-label="Divisão da carteira por classe">
                   {presentCats.map((c) => { const v = positions.filter((p) => p.category === c).reduce((a, p) => a + p.value, 0); return totalValue > 0 && v > 0 ? <i key={c} title={c + " " + pctOf(v)} style={{ width: (v / totalValue) * 100 + "%", background: invCatMeta(c).color }} /> : null; })}
                 </div>
@@ -10485,7 +10505,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
 
           {positions.length === 0 ? <div className="card"><div className="empty-state">Nenhuma posição ainda. Toque em “Novo lançamento”.</div></div> : gruposOrd.map((g, gi) => {
             const sub = g.items.reduce((a, p) => a + p.value, 0);
-            const subProfit = sub - g.items.reduce((a, p) => a + p.cost, 0);
+            const subCost = g.items.reduce((a, p) => a + p.cost, 0);
+            const subProfit = sub - subCost;
+            const subPct = subCost > 0 ? (subProfit / subCost) * 100 : 0;
             const aberta = catsAbertas === null ? gi === 0 : catsAbertas.includes(g.cat);
             const alternar = () => setCatsAbertas((prev) => { const atual = prev === null ? [maiorCat] : prev; return atual.includes(g.cat) ? atual.filter((c) => c !== g.cat) : [...atual, g.cat]; });
             const LIM = 5, todas = catsTodas[g.cat] || g.items.length <= LIM + 1;
@@ -10495,7 +10517,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                 <button type="button" className="cl-head" aria-expanded={aberta} onClick={alternar}>
                   <span className="cl-dot" style={{ background: invCatMeta(g.cat).color }} />
                   <span className="cl-name"><b>{g.cat === "Exterior" ? "Exterior (em dólar)" : g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}{g.cat === "Exterior" ? " · " + fmtUSD(g.items.reduce((a, p) => a + (p.valueUsd || 0), 0)) : ""}</small></span>
-                  <span className="cl-val"><b className="mono">{fmtBRL(sub)}</b><small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</small></span>
+                  <span className="cl-val"><b className="mono">{fmtBRL(sub)}</b><small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}><span>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</span><i className="cl-pct">({signPct(subPct)})</i></small></span>
                   <span className="cl-chev" aria-hidden="true"><IconChevronDown size={18} /></span>
                 </button>
                 {aberta && g.cat === "Exterior" && (
