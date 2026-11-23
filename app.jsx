@@ -7185,7 +7185,7 @@ async function syncLembretes(on, items) {
   } catch (e) {}
 }
 async function notifTeste() {
-  const titulo = "Sallos: lembretes ativados", opts = { body: "É assim que o aviso aparece, um dia antes de cada vencimento e de cada pagamento.", icon: "sallos-192.png", badge: "sallos-192.png", tag: "mediplan-teste" };
+  const titulo = "Sallos: lembretes ativados", opts = { body: "É assim que o aviso aparece, um dia antes de cada vencimento e de cada pagamento.", icon: "sallos-192.png", badge: "sallos-badge.png", tag: "mediplan-teste" };
   try { const reg = await swReady(); if (reg && reg.showNotification) { await reg.showNotification(titulo, opts); return true; } } catch (e) {}
   try { new Notification(titulo, opts); return true; } catch (e) { return false; }
 }
