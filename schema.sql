@@ -242,3 +242,43 @@ begin
 end $$;
 revoke all on function public.excluir_minha_conta() from public, anon;
 grant execute on function public.excluir_minha_conta() to authenticated;
+
+-- ============================================================
+-- Renda fixa: preços do Tesouro Direto e CDI diário (dados públicos)
+-- Quem grava é só a função "rendafixa" (chave de serviço). Todo mundo lê.
+-- ============================================================
+create table if not exists public.tesouro_precos (
+  titulo      text    not null,   -- ex.: "Tesouro IPCA+"
+  vencimento  date    not null,
+  data        date    not null,   -- dia do preço
+  taxa_compra numeric,
+  taxa_venda  numeric,
+  pu_compra   numeric,            -- preço de compra de 1 título nesse dia
+  pu_venda    numeric,            -- preço de resgate de 1 título nesse dia
+  pu_base     numeric,
+  primary key (titulo, vencimento, data)
+);
+alter table public.tesouro_precos enable row level security;
+drop policy if exists "todos leem tesouro" on public.tesouro_precos;
+create policy "todos leem tesouro" on public.tesouro_precos for select to anon, authenticated using (true);
+
+create table if not exists public.cdi_diario (
+  data date primary key,
+  taxa numeric not null           -- % ao dia (série 12 do Banco Central)
+);
+alter table public.cdi_diario enable row level security;
+drop policy if exists "todos leem cdi" on public.cdi_diario;
+create policy "todos leem cdi" on public.cdi_diario for select to anon, authenticated using (true);
+
+-- preço mais recente de cada título que ainda não venceu
+create or replace view public.tesouro_hoje with (security_invoker = true) as
+  select distinct on (titulo, vencimento) titulo, vencimento, data, taxa_compra, taxa_venda, pu_compra, pu_venda
+  from public.tesouro_precos
+  where vencimento >= current_date
+  order by titulo, vencimento, data desc;
+grant select on public.tesouro_hoje to anon, authenticated;
+
+-- todo dia útil, às 10h15 e às 17h15 de Brasília
+select cron.unschedule(jobname) from cron.job where jobname = 'sallos-rendafixa';
+select cron.schedule('sallos-rendafixa', '15 13,20 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/rendafixa', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{}'::jsonb, timeout_milliseconds := 120000) $$);

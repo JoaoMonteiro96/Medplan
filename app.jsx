@@ -193,8 +193,22 @@ async function buscarCripto(moedas) {
   return got;
 }
 
+// ---- Tesouro Direto e CDI (tabelas públicas do Supabase, gravadas todo dia pela função "rendafixa") ----
+const TD_FAMILIAS = ["Tesouro IPCA+ com Juros Semestrais", "Tesouro Prefixado com Juros Semestrais", "Tesouro IGPM+ com Juros Semestrais", "Tesouro Renda+ Aposentadoria Extra", "Tesouro Educa+", "Tesouro IPCA+", "Tesouro Prefixado", "Tesouro Selic"];
+const tdFamilia = (desc) => {
+  const d = String(desc || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (/^tesouro renda\+/.test(d)) return "Tesouro Renda+ Aposentadoria Extra";
+  return TD_FAMILIAS.find((f) => d.startsWith(f.toLowerCase())) || null;
+};
+const tdNome = (titulo, venc) => titulo.replace(" Aposentadoria Extra", "") + " " + String(venc || "").slice(0, 4);
+const ehRendaFixa = (cat) => cat === "Renda Fixa" || cat === "Reserva de oportunidade";
+const rfGet = (path) => fetch("https://hhqxkizvcgnohklztkef.supabase.co/rest/v1/" + path, { headers: { apikey: "sb_publishable_-UA-2TWP5dNL3NLhMjdRhQ_LcT7DWRV", Authorization: "Bearer sb_publishable_-UA-2TWP5dNL3NLhMjdRhQ_LcT7DWRV" } })
+  .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); });
+// fator do CDI entre o dia seguinte à data e o último dia publicado, com X% do CDI
+const fatorCdi = (cdi, desde, pct) => { let f = 1; const k = (Number(pct) || 0) / 100; for (const [d, t] of cdi) if (d > desde) f *= 1 + (t / 100) * k; return f; };
+
 const FIXED_INCOME_OPTIONS = [
-  "Tesouro Selic", "Tesouro IPCA+", "Tesouro Prefixado", "Tesouro Renda+", "CDB", "CDB liquidez diária", "LCI", "LCA", "LC",
+  "Tesouro Selic", "Tesouro IPCA+", "Tesouro Prefixado", "Tesouro Renda+", "Tesouro IPCA+ com Juros Semestrais", "Tesouro Prefixado com Juros Semestrais", "Tesouro Educa+", "CDB", "CDB liquidez diária", "LCI", "LCA", "LC",
   "CRI", "CRA", "Debênture incentivada", "Fundo DI", "Previdência PGBL", "Previdência VGBL", "Conta remunerada",
 ].map((n) => ({ t: n, n: "", ty: "R" }));
 const RESERVE_OPTIONS = [
@@ -2999,7 +3013,7 @@ function App() {
   }));
 
   const addInvestment = (d) => setInvestments((prev) => [...prev, { id: uid(), description: d.description, assetName: d.assetName || "", category: d.category, date: d.date,
-    tipo: d.tipo || "compra", qty: d.qty || 0, price: d.price || 0, amount: Number(d.amount) || 0, ...(d.moeda ? { moeda: d.moeda } : {}), ...(d.posicaoInicial ? { posicaoInicial: true } : {}) }]);
+    tipo: d.tipo || "compra", qty: d.qty || 0, price: d.price || 0, amount: Number(d.amount) || 0, ...(d.moeda ? { moeda: d.moeda } : {}), ...(d.posicaoInicial ? { posicaoInicial: true } : {}), ...(d.td ? { td: d.td } : {}), ...(d.cdiPct > 0 ? { cdiPct: d.cdiPct } : {}) }]);
   // Ajusta o preço médio de um ativo para o valor informado, registrando a diferença como um lançamento de ajuste
   const adjustAvg = (p, novo) => {
     const n = numOf(novo);
@@ -3357,6 +3371,89 @@ function App() {
     }).catch(() => {});
     return () => { vivo = false; };
   }, [investments.length]);
+  // Tesouro Direto: lista de títulos com o preço de hoje (guardada por 6 horas)
+  const [tdHoje, setTdHoje] = useState(() => { try { const c = JSON.parse(localStorage.getItem("mediplan-rf-tesouro") || "null"); return c && c.rows ? c.rows : []; } catch (e) { return []; } });
+  const tdCarregando = useRef(false);
+  const carregarTd = useCallback(() => {
+    try { const c = JSON.parse(localStorage.getItem("mediplan-rf-tesouro") || "null"); if (c && c.rows && c.rows.length && Date.now() - c.em < 6 * 3600e3) return; } catch (e) {}
+    if (tdCarregando.current) return; tdCarregando.current = true;
+    rfGet("tesouro_hoje?select=titulo,vencimento,data,pu_compra,pu_venda,taxa_compra&order=titulo,vencimento").then((rows) => {
+      if (Array.isArray(rows) && rows.length) { setTdHoje(rows); try { localStorage.setItem("mediplan-rf-tesouro", JSON.stringify({ em: Date.now(), rows })); } catch (e) {} }
+    }).catch(() => {}).finally(() => { tdCarregando.current = false; });
+  }, []);
+  const temTd = investments.some((i) => i.td && i.td.venc);
+  useEffect(() => { if (temTd) carregarTd(); }, [temTd]);
+  // preço de resgate de hoje vira a cotação de cada título
+  useEffect(() => {
+    if (!tdHoje.length) return;
+    const novo = {};
+    investments.forEach((i) => { if (!i.td) return; const t = tdHoje.find((x) => x.titulo === i.td.titulo && x.vencimento === i.td.venc); if (t && Number(t.pu_venda) > 0 && Math.abs(numOf(cotacoes[i.description]) - Number(t.pu_venda)) > 0.004) novo[i.description] = Number(t.pu_venda); });
+    if (Object.keys(novo).length) setCotacoes((p) => ({ ...p, ...novo }));
+  }, [tdHoje, investments]);
+  // quantos títulos: valor investido dividido pelo preço do dia da compra
+  const tdTentados = useRef(new Set());
+  useEffect(() => {
+    const falta = investments.filter((i) => i.td && i.td.venc && !(Number(i.qty) > 0) && Math.abs(Number(i.amount) || 0) > 0 && !tdTentados.current.has(i.id));
+    if (!falta.length) return;
+    falta.forEach((i) => tdTentados.current.add(i.id));
+    (async () => {
+      const upd = {};
+      for (const i of falta) {
+        try {
+          const base = `tesouro_precos?select=data,pu_compra,pu_venda&titulo=eq.${encodeURIComponent(i.td.titulo)}&vencimento=eq.${i.td.venc}`;
+          let rows = await rfGet(`${base}&data=lte.${i.date || todayStr()}&order=data.desc&limit=1`);
+          if (!rows.length) rows = await rfGet(`${base}&order=data.asc&limit=1`);
+          const venda = i.tipo === "venda" || Number(i.amount) < 0;
+          const pu = rows[0] ? Number(venda ? rows[0].pu_venda : rows[0].pu_compra || rows[0].pu_venda) : 0;
+          if (pu > 0) upd[i.id] = { qty: Math.round((Math.abs(Number(i.amount)) / pu) * 1e6) / 1e6, price: pu };
+        } catch (e) { tdTentados.current.delete(i.id); }
+      }
+      if (Object.keys(upd).length) setInvestments((p) => p.map((i) => upd[i.id] ? { ...i, ...upd[i.id] } : i));
+    })();
+  }, [investments]);
+  // CDB, LCI, LCA: estimativa pelo CDI (antes do IR)
+  const [cdi, setCdi] = useState([]);
+  const cdiDesde = investments.filter((i) => i.cdiPct > 0 && i.date).reduce((m, i) => (!m || i.date < m ? i.date : m), "");
+  useEffect(() => {
+    if (!cdiDesde) return;
+    let vivo = true;
+    try { const c = JSON.parse(localStorage.getItem("mediplan-rf-cdi") || "null"); if (c && c.rows && c.desde <= cdiDesde) { setCdi(c.rows); if (Date.now() - c.em < 6 * 3600e3) return; } } catch (e) {}
+    (async () => {
+      const rows = [];
+      for (let off = 0; off < 20000; off += 1000) {
+        const pg = await rfGet(`cdi_diario?select=data,taxa&data=gt.${cdiDesde}&order=data.asc&limit=1000&offset=${off}`).catch(() => null);
+        if (!pg) return; rows.push(...pg.map((x) => [x.data, Number(x.taxa)])); if (pg.length < 1000) break;
+      }
+      if (!vivo) return;
+      setCdi(rows); try { localStorage.setItem("mediplan-rf-cdi", JSON.stringify({ em: Date.now(), desde: cdiDesde, rows })); } catch (e) {}
+    })();
+    return () => { vivo = false; };
+  }, [cdiDesde]);
+  useEffect(() => {
+    if (!cdi.length) return;
+    const grupos = {};
+    investments.forEach((i) => { if (!ehRendaFixa(i.category) || i.td) return; const k = (i.category || "") + "|" + i.description; (grupos[k] = grupos[k] || []).push(i); });
+    const novo = {};
+    Object.values(grupos).forEach((lst) => {
+      const pct = (lst.find((i) => i.cdiPct > 0) || {}).cdiPct; if (!pct) return;
+      const v = lst.reduce((a, i) => a + (Number(i.amount) || 0) * fatorCdi(cdi, i.date || "", pct), 0);
+      const d = lst[0].description; if (v > 0 && Math.abs(numOf(cotacoes[d]) - v) > 0.004) novo[d] = Math.round(v * 100) / 100;
+    });
+    if (Object.keys(novo).length) setCotacoes((p) => ({ ...p, ...novo }));
+  }, [cdi, investments]);
+  // ligar uma posição que já existe ao Tesouro (vencimento) ou ao CDI (%)
+  const ligarRendaFixa = (pos, cfg) => {
+    const mesma = (i) => (i.category || "Outro") === pos.category && i.description === pos.description;
+    const antes = investments.filter(mesma); const desfazer = () => setInvestments((p) => p.map((i) => antes.find((a) => a.id === i.id) || i));
+    if (cfg.td) {
+      const nome = tdNome(cfg.td.titulo, cfg.td.venc);
+      setInvestments((p) => p.map((i) => mesma(i) ? { ...i, description: nome, td: cfg.td, qty: 0, price: 0 } : i));
+      avisar("Agora o preço do " + nome + " se atualiza sozinho", desfazer);
+    } else if (cfg.cdiPct > 0) {
+      setInvestments((p) => p.map((i) => mesma(i) ? { ...i, cdiPct: cfg.cdiPct } : i));
+      avisar(`Estimando com ${String(cfg.cdiPct).replace(".", ",")}% do CDI`, desfazer);
+    }
+  };
   const criptoKey = [...new Set(investments.filter((i) => i.category === "Cripto" && CRIPTO_MAP[String(i.description || "").toUpperCase()]).map((i) => String(i.description).toUpperCase()))].sort().join(",");
   useEffect(() => {
     if (!criptoKey) return;
@@ -5421,6 +5518,13 @@ function App() {
         .oa-res .oa-res-lb { display: flex; align-items: center; }
         .oa-inv { margin-top: 10px; padding-top: 10px; border-top: 1px dashed currentColor; opacity: .9; font-size: 13px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
         @media (min-width: 1100px) { .oa-topo { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; align-items: stretch; } .oa-topo > .oa-sug { display: flex; flex-direction: column; } .oa-topo > .oa-sug .oa-sug-sobra { margin-top: auto; } .oa-topo > * { margin-top: 0 !important; } }
+        .rf-box { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
+        .rf-box label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-dim); }
+        .rf-box select, .rf-ligar select { width: 100%; min-width: 0; height: 42px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+        .rf-pct { display: flex; align-items: center; gap: 8px; } .rf-pct input { max-width: 120px; } .rf-pct span { font-size: 14px; color: var(--text-dim); white-space: nowrap; }
+        .rf-info, .rf-ligar { margin: 10px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; }
+        .rf-info > b, .rf-ligar > b { display: block; font-size: 13.5px; margin-bottom: 2px; } .rf-info span, .rf-ligar > span { color: var(--text-dim); } .rf-info .link-btn { font-size: 13px; padding: 0; margin-left: 4px; }
+        .rf-row { display: flex; gap: 8px; align-items: center; margin-top: 6px; } .rf-row > select, .rf-row > .rf-pct { flex: 1; min-width: 0; }
         .inv-ini { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin: 0 0 14px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface-2); cursor: pointer; }
         .inv-ini.on { border-color: #16A34A; background: color-mix(in srgb, #16A34A 7%, var(--surface)); }
         .inv-ini input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: #16A34A; flex-shrink: 0; }
@@ -6129,7 +6233,7 @@ function App() {
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
-            setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
+            setCotacao={setCotacao} tdHoje={tdHoje} carregarTd={carregarTd} cdiUltimo={cdi.length ? cdi[cdi.length - 1][0] : ""} ligarRendaFixa={ligarRendaFixa} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
         {activeTab === "metas" && (
@@ -10005,8 +10109,34 @@ function RentabilidadeCard({ hist = [], investments = [], totalValue, totalBough
   );
 }
 
+// Renda fixa no cartão do ativo: mostra de onde vem o valor de hoje, ou liga uma posição antiga ao Tesouro/CDI
+function RfLigar({ p, investments, tdHoje, carregarTd, cdiUltimo, onLigar }) {
+  const meus = investments.filter((i) => (i.category || "Outro") === p.category && i.description === p.description);
+  const td = (meus.find((i) => i.td) || {}).td, pct = (meus.find((i) => i.cdiPct > 0) || {}).cdiPct;
+  const fam = td ? td.titulo : tdFamilia(p.description);
+  const [venc, setVenc] = useState(""); const [pctF, setPctF] = useState(""); const [mudar, setMudar] = useState(false);
+  useEffect(() => { if (fam && carregarTd) carregarTd(); }, [fam]);
+  if (td) { const t = tdHoje.find((x) => x.titulo === td.titulo && x.vencimento === td.venc);
+    return <div className="rf-info" data-rf="td"><b>Tesouro Direto · vence {fmtDatePt(td.venc)}</b><span>{t ? <>Preço de hoje <b className="mono">{fmtBRL(t.pu_venda)}</b> por título ({fmtDatePt(t.data).slice(0, 5)}). Atualiza sozinho.</> : "O preço de hoje aparece quando houver internet."}</span></div>; }
+  if (pct && !mudar) return <div className="rf-info" data-rf="cdi"><b>Rende {String(pct).replace(".", ",")}% do CDI</b><span>Valor de hoje estimado pelo CDI{cdiUltimo ? ` até ${fmtDatePt(cdiUltimo).slice(0, 5)}` : ""}, antes do imposto de renda. <button type="button" className="link-btn" onClick={() => { setPctF(String(pct)); setMudar(true); }}>Mudar</button></span></div>;
+  if (fam) { const ops = tdHoje.filter((x) => x.titulo === fam);
+    return (
+      <div className="rf-ligar" data-rf="ligar-td">
+        <b>Atualizar sozinho pelo Tesouro</b>
+        {ops.length ? <div className="rf-row"><select aria-label="Vencimento do título" value={venc} onChange={(e) => setVenc(e.target.value)}><option value="">Qual vencimento?</option>{ops.map((x) => <option key={x.vencimento} value={x.vencimento}>{tdNome(x.titulo, x.vencimento)} · vence {fmtDatePt(x.vencimento)}</option>)}</select>
+          <button type="button" className="btn btn-primary sm" disabled={!venc} onClick={() => onLigar(p, { td: { titulo: fam, venc } })}>Usar</button></div> : <span>Sem internet agora. Tente de novo mais tarde.</span>}
+      </div>);
+  }
+  return (
+    <div className="rf-ligar" data-rf="ligar-cdi">
+      <b>{mudar ? "Mudar quanto rende" : "Estimar o valor de hoje pelo CDI"}</b>
+      <div className="rf-row"><div className="rf-pct"><input type="number" inputMode="decimal" min="0" step="any" aria-label="Porcentagem do CDI" value={pctF} onChange={(e) => setPctF(e.target.value)} placeholder="Ex.: 110" /><span>% do CDI</span></div>
+        <button type="button" className="btn btn-primary sm" disabled={!(numOf(pctF) > 0)} onClick={() => { onLigar(p, { cdiPct: numOf(pctF) }); setMudar(false); }}>Usar</button></div>
+    </div>);
+}
+
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
-  setCotacao, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, usaCentral, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
+  setCotacao, tdHoje = [], carregarTd, cdiUltimo = "", ligarRendaFixa, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, usaCentral, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
   const gv = useGv();
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
@@ -10033,6 +10163,8 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayIso);
   const [inicial, setInicial] = useState(false); // já tinha antes de usar o app: entra na carteira inicial, não é aporte
+  const [tdVenc, setTdVenc] = useState("");
+  const [cdiPctF, setCdiPctF] = useState("");
   const meta = invCatMeta(category);
   const isTicker = meta.kind === "ticker";
   const isCripto = meta.kind === "cripto";
@@ -10040,6 +10172,12 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const needsDesc = !isTicker || byAsset;
   const useQty = byAsset && entry === "qtd";
   const criptoPreco = isCripto && numOf(qty) > 0 ? numOf(amount) / numOf(qty) : 0;
+  const rfCat = ehRendaFixa(category);
+  const tdFam = rfCat ? tdFamilia(description) : null;
+  const tdOpcoes = tdFam ? tdHoje.filter((t) => t.titulo === tdFam) : [];
+  const tdSel = tdOpcoes.find((t) => t.vencimento === tdVenc) || null;
+  useEffect(() => { if (rfCat && showForm && carregarTd) carregarTd(); }, [rfCat, showForm]);
+  useEffect(() => { setTdVenc(""); }, [tdFam]);
   const options = useMemo(() => {
     if (isTicker) return ASSET_DB.filter((a) => a.ty === meta.type);
     if (category === "Renda Fixa") return FIXED_INCOME_OPTIONS;
@@ -10057,6 +10195,14 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
     else if (isTicker) { desc = desc.toUpperCase(); name = name || ASSET_NAME[desc] || ""; }
     if (!desc) return;
     if (useQty && numOf(qty) <= 0) return;
+    if (rfCat && !isTicker) {
+      const extra = tdFam && tdSel ? { td: { titulo: tdFam, venc: tdSel.vencimento } } : !tdFam && numOf(cdiPctF) > 0 ? { cdiPct: numOf(cdiPctF) } : {};
+      if (extra.td) desc = tdNome(tdFam, tdSel.vencimento);
+      addInvestment({ description: desc, assetName: name, category, date, tipo, qty: 0, price: 0, amount: tipo === "venda" ? -formTotal : formTotal, ...(inicial && tipo === "compra" ? { posicaoInicial: true } : {}), ...extra });
+      if (inicial && tipo === "compra") avisar("Entrou na carteira inicial, sem contar como aporte");
+      setDescription(""); setAssetName(""); setAmount(""); setTdVenc(""); setCdiPctF(""); setInicial(false); setShowForm(false); setTab("ativos");
+      return;
+    }
     if (isCripto) {
       if (numOf(qty) <= 0) return;
       desc = desc.toUpperCase(); name = (CRIPTO_MAP[desc] || {}).n || name;
@@ -10100,7 +10246,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const maiorCat = gruposOrd.length ? gruposOrd[0].cat : null;
   const tickerCount = positions.filter((p) => p.isQty && p.meta.kind === "ticker").length;
   // posição que o lançamento em preenchimento vai alterar, para mostrar o efeito antes de salvar
-  const held0 = needsDesc && description.trim() ? positions.find((p) => p.category === category && p.description.toUpperCase() === description.trim().toUpperCase()) : null;
+  const held0 = needsDesc && description.trim() && !(tdFam && tdVenc) ? positions.find((p) => p.category === category && p.description.toUpperCase() === description.trim().toUpperCase()) : null;
   const held = held0 && held0.usd ? { ...held0, cost: held0.costUsd, value: held0.valueUsd, cotacao: held0.cotacaoUsd } : held0;
   const emDolar = invCatMeta(category).moeda === "USD", fmtM = emDolar ? fmtUSD : fmtBRL, simb = emDolar ? "US$" : "R$";
   const startTrade = (p, kind) => {
@@ -10176,6 +10322,25 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                     onChange={(v) => { setDescription(v); setAssetName(""); }} onPick={(o) => { setDescription(o.t); setAssetName(o.n || ""); }} />
                 )}
                 {assetName && !isCripto && <div className="field-hint"><b>{description}</b> · {assetName}</div>}
+                {tdFam && (
+                  <div className="rf-box" id="inv-td">
+                    <label htmlFor="inv-td-venc">Vencimento</label>
+                    {tdOpcoes.length ? (
+                      <select id="inv-td-venc" value={tdVenc} onChange={(e) => setTdVenc(e.target.value)}>
+                        <option value="">Escolha o ano do título</option>
+                        {tdOpcoes.map((t) => <option key={t.vencimento} value={t.vencimento}>{tdNome(t.titulo, t.vencimento)} · vence {fmtDatePt(t.vencimento)}</option>)}
+                      </select>
+                    ) : <div className="field-hint">Sem internet agora. Salve assim e escolha o vencimento depois, na carteira.</div>}
+                    {tdSel && <div className="field-hint">Preço de hoje: <b className="mono">{fmtBRL(tdSel.pu_venda)}</b> por título (resgate). O valor da sua carteira se atualiza sozinho todo dia.</div>}
+                  </div>
+                )}
+                {rfCat && !tdFam && description.trim() && (
+                  <div className="rf-box" id="inv-cdi">
+                    <label htmlFor="inv-cdi-pct">Rende quanto do CDI? (opcional)</label>
+                    <div className="rf-pct"><input id="inv-cdi-pct" type="number" inputMode="decimal" min="0" step="any" value={cdiPctF} onChange={(e) => setCdiPctF(e.target.value)} placeholder="Ex.: 110" /><span>% do CDI</span></div>
+                    <div className="field-hint">Com isso o app estima quanto vale hoje, pelo CDI do Banco Central (antes do imposto de renda).</div>
+                  </div>
+                )}
                 {isTicker && !assetName && description && <div className="field-hint">Não achou na lista? Pode seguir digitando o código normalmente.</div>}
               </div>
             )}
@@ -10387,6 +10552,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                             <small>Use para igualar ao preço médio da corretora. Não mexe no seu caixa. Para desfazer, apague o ajuste em Lançamentos.</small>
                           </div>
                         )}
+                        {ehRendaFixa(p.category) && ligarRendaFixa && <RfLigar p={p} investments={investments} tdHoje={tdHoje} carregarTd={carregarTd} cdiUltimo={cdiUltimo} onLigar={ligarRendaFixa} />}
                         <div className="ac-foot">
                           <span>{pctOf(p.value)} da carteira</span>
                           {mark && <span className={`qmark ${mark}`}>{mark === "ok" ? "cotação atualizada" : mark === "token" ? "precisa de token" : "sem retorno"}</span>}
