@@ -399,9 +399,10 @@ function computePortfolio(investments, cotacoes) {
   });
   const positions = Object.values(groups).filter((g) => g.qty > 0.0000001 || g.cost > 0.005).map((g) => {
     const meta = invCatMeta(g.category);
-    const isQty = g.qty > 0.0000001;
-    const cot = cotacoes ? numOf(cotacoes[g.description]) : 0;
-    const value = isQty ? (cot > 0 ? g.qty * cot + g.legacyCost : g.cost) : (cot > 0 ? cot : g.cost);
+    const rf = ehRendaFixa(g.category); // renda fixa: só o valor investido (sem valor atual nem cotação)
+    const isQty = !rf && g.qty > 0.0000001;
+    const cot = !rf && cotacoes ? numOf(cotacoes[g.description]) : 0;
+    const value = rf ? g.cost : isQty ? (cot > 0 ? g.qty * cot + g.legacyCost : g.cost) : (cot > 0 ? cot : g.cost);
     const base = { ...g, meta, isQty, cotacao: cot, avg: isQty ? g.cost / g.qty : 0, value, profit: value - g.cost, profitPct: g.cost > 0 ? ((value - g.cost) / g.cost) * 100 : 0 };
     if (meta.moeda !== "USD") return base;
     // exterior: lançamentos em dólar, totais convertidos para real pelo dólar de hoje
@@ -10634,7 +10635,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                     return (
                       <article key={p.key} className={`asset-card cl-row ${open ? "open" : ""}`} data-asset={p.description}>
                         <button className="ac-top" aria-expanded={open} onClick={() => setOpenKey(open ? null : p.key)}>
-                          <span className="ac-id"><b>{p.description}</b><span className="mono">{p.usd ? (p.isQty ? `${fmtQty(p.qty)} · PM ${fmtUSD(p.avgUsd)}${hasQuote ? " · hoje " + fmtUSD(p.cotacaoUsd) : ""}` : `aplicado ${fmtUSD(p.costUsd)}`) : p.isQty ? `${fmtQty(p.qty)} · PM ${fmtBRL(p.avg)}${hasQuote ? " · hoje " + fmtBRL(p.cotacao) : ""}` : `aplicado ${fmtBRL(p.cost)}`}</span></span>
+                          <span className="ac-id"><b>{p.description}</b><span className="mono">{p.usd ? (p.isQty ? `${fmtQty(p.qty)} · PM ${fmtUSD(p.avgUsd)}${hasQuote ? " · hoje " + fmtUSD(p.cotacaoUsd) : ""}` : `aplicado ${fmtUSD(p.costUsd)}`) : p.isQty ? `${fmtQty(p.qty)} · PM ${fmtBRL(p.avg)}${hasQuote ? " · hoje " + fmtBRL(p.cotacao) : ""}` : ehRendaFixa(p.category) ? "valor investido" : `aplicado ${fmtBRL(p.cost)}`}</span></span>
                           <span className="ac-val">
                             <b className="mono">{fmtBRL(p.value)}</b>
                             {p.usd && <small className="mono">{fmtUSD(p.valueUsd)}</small>}
@@ -10652,7 +10653,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                           ) : (
                             <>
                               <div className="ac-stat"><span>Investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
-                              <div className="ac-stat"><span>Valor atual ({p.usd ? "US$" : "R$"})</span>{quoteInput}</div>
+                              {!ehRendaFixa(p.category) && <div className="ac-stat"><span>Valor atual ({p.usd ? "US$" : "R$"})</span>{quoteInput}</div>}
                             </>
                           )}
                           {!ehRendaFixa(p.category) && <div className="ac-stat"><span>Resultado</span><b className="mono" style={hasQuote ? { color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" } : null}>{hasQuote ? sgn(p.profit) + " " + fmtBRL(Math.abs(p.profit)) : "—"}</b></div>}
@@ -10678,7 +10679,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                           <div className="ac-more">
                             {p.isQty && <div className="kv-line"><span>Quantidade</span><b className="mono">{fmtQty(p.qty)}</b></div>}
                             <div className="kv-line"><span>Total investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
-                            <div className="kv-line"><span>Valor atual</span><b className="mono">{fmtBRL(p.value)}</b></div>
+                            {!ehRendaFixa(p.category) && <div className="kv-line"><span>Valor atual</span><b className="mono">{fmtBRL(p.value)}</b></div>}
                             {Math.abs(p.realized) > 0.005 && <div className="kv-line"><span>Resultado de vendas</span><b className="mono" style={{ color: p.realized >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(p.realized)} {fmtBRL(Math.abs(p.realized))}</b></div>}
                             <div className="ac-hist-title">{hist.length} {hist.length === 1 ? "lançamento" : "lançamentos"}</div>
                             {hist.map((i) => {
