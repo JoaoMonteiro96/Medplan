@@ -365,7 +365,7 @@ function ajustesPM(investments) {
   [...investments].sort((a, b) => (a.date || "").localeCompare(b.date || "") || String(a.id).localeCompare(String(b.id))).forEach((i) => {
     const k = (i.category || "Outro") + "|" + i.description, n = Number(i.qty || 0);
     const st = q[k] = q[k] || { qty: 0, cost: 0 };
-    if (i.tipo === "ajuste") { if (st.qty > 0) { const d = Math.max(-st.cost, Number(i.ajuste || 0)); st.cost += d; tot += d; } return; }
+    if (i.tipo === "ajuste") { if (st.qty > 0 || ehRendaFixa(i.category)) { const d = Math.max(-st.cost, Number(i.ajuste || 0)); st.cost += d; tot += d; } return; }
     if (n > 0) { if (i.tipo === "venda") { const avg = st.qty > 0 ? st.cost / st.qty : 0, sq = Math.min(n, st.qty); st.cost -= avg * sq; st.qty -= sq; } else { st.qty += n; st.cost += Math.abs(Number(i.amount || 0)); } }
     else st.cost += Number(i.amount || 0);
   });
@@ -384,7 +384,12 @@ function computePortfolio(investments, cotacoes) {
     g.entries += 1;
     if (i.assetName && !g.assetName) g.assetName = i.assetName;
     // ajuste manual do preço médio: muda só o custo da posição, sem compra, venda nem movimento de caixa
-    if (i.tipo === "ajuste") { if (g.qty > 0) g.cost = Math.max(0, g.cost + Number(i.ajuste || 0)); return; }
+    if (i.tipo === "ajuste") {
+      if (g.qty > 0) g.cost = Math.max(0, g.cost + Number(i.ajuste || 0));
+      // renda fixa: corrige o valor investido (conta como carteira inicial, não como aporte nem como ganho)
+      else if (ehRendaFixa(cat)) { const d = Math.max(-g.cost, Number(i.ajuste || 0)); g.cost += d; g.legacyCost += d; if (d > 0) g.bought += d; else g.sold -= d; }
+      return;
+    }
     const amt = Number(i.amount || 0);
     const q = Number(i.qty || 0);
     if (q > 0) {
@@ -3028,6 +3033,15 @@ function App() {
     setInvestments((prev) => [...prev, { id: uid(), description: p.description, assetName: p.assetName || "", category: p.category, date: todayStr(), tipo: "ajuste", qty: 0, price: n, amount: 0, ajuste: delta }]);
     return true;
   };
+  // renda fixa: muda o valor investido de um título (vira um ajuste da carteira inicial, sem mexer no caixa)
+  const ajustarInvestido = (p, novo, batch) => {
+    const n = numOf(novo);
+    if (!p || !ehRendaFixa(p.category) || !(n >= 0)) return false;
+    const delta = Math.round((n - p.cost) * 100) / 100;
+    if (Math.abs(delta) < 0.005) return true;
+    setInvestments((prev) => [...prev, { id: uid(), description: p.description, assetName: p.assetName || "", category: p.category, date: todayStr(), tipo: "ajuste", qty: 0, price: n, amount: 0, ajuste: delta, ...(batch ? { batch, source: "print" } : {}) }]);
+    return true;
+  };
   const setCotacao = (key, val) => setCotacoes((prev) => ({ ...prev, [key]: val }));
   // Central de cotações: uma função no Supabase busca os preços para todos (com o token guardado lá).
   // O app só avisa quais ativos tem e lê os preços já buscados. Ninguém precisa de token.
@@ -3715,8 +3729,16 @@ function App() {
     return entry;
   };
   const commitPrint = (rows, modo, date, ext) => {
-    const bid = uid(); const d = date || todayStr(); const cot = {};
-    const newInv = rows.map((r, n) => {
+    const bid = uid(); const d = date || todayStr(); const cot = {}; let ajustados = 0;
+    const ajustes = [];
+    rows.filter((r) => r.rf && r.existe).forEach((r) => {
+      const delta = Math.round(((Number(r.inv) || 0) - r.existe.cost) * 100) / 100;
+      if (Math.abs(delta) < 0.005) return;
+      ajustados++;
+      ajustes.push({ id: uid() + "a" + ajustados, batch: bid, source: "print", description: r.existe.description, assetName: r.existe.assetName || "", category: r.existe.category, date: todayStr(), tipo: "ajuste", qty: 0, price: Number(r.inv) || 0, amount: 0, ajuste: delta });
+    });
+    const novos = rows.filter((r) => !(r.rf && r.existe)).map((r, n) => {
+      if (r.rf) return { id: uid() + n, batch: bid, description: r.ticker, assetName: "", category: "Renda Fixa", date: d, tipo: "compra", qty: 0, price: 0, amount: Math.round((Number(r.inv) || 0) * 100) / 100, source: "print", ...(modo === "inicial" ? { posicaoInicial: true } : {}) };
       const comQtd = r.qty > 0 && r.pm > 0;
       if (r.price > 0 && comQtd) cot[r.ticker] = r.price;
       if (!comQtd && r.value > 0) cot[r.ticker] = r.value;
@@ -3724,9 +3746,10 @@ function App() {
         qty: comQtd ? r.qty : 0, price: comQtd ? r.pm : 0, amount: comQtd ? Math.round(r.qty * r.pm * 100) / 100 : Math.round((r.inv || 0) * 100) / 100, source: "print",
         ...(ext ? { moeda: "USD" } : {}), ...(modo === "inicial" ? { posicaoInicial: true } : {}) };
     });
+    const newInv = [...novos, ...ajustes];
     setInvestments((p) => [...p, ...newInv]);
     if (Object.keys(cot).length) setCotacoes((p) => ({ ...p, ...cot }));
-    const entry = { id: bid, date: todayStr(), label: (ext ? "Carteira no exterior" : "Carteira") + (modo === "inicial" ? " (carteira inicial)" : " (compra nova)"), despesas: 0, entradas: 0, baixas: 0, investimentos: newInv.length, cotacoes: Object.keys(cot).length, total: 0 };
+    const entry = { id: bid, date: todayStr(), label: (ext ? "Carteira no exterior" : "Carteira") + (modo === "inicial" ? " (carteira inicial)" : " (compra nova)"), despesas: 0, entradas: 0, baixas: 0, investimentos: newInv.length, ajustados, cotacoes: Object.keys(cot).length, total: 0 };
     setImportLog((p) => [entry, ...p].slice(0, 30));
     return entry;
   };
@@ -6205,7 +6228,7 @@ function App() {
         )}
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
-            addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
+            addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg} ajustarInvestido={ajustarInvestido}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
@@ -10244,7 +10267,7 @@ function RfLigar({ p, investments, tdHoje, carregarTd, cdiUltimo, onLigar }) {
     </div>);
 }
 
-function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg,
+function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg, ajustarInvestido,
   setCotacao, tdHoje = [], carregarTd, cdiUltimo = "", ligarRendaFixa, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, usaCentral, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
   const gv = useGv();
   const [tab, setTab] = useState("resumo");
@@ -10652,12 +10675,24 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                             </>
                           ) : (
                             <>
-                              <div className="ac-stat"><span>Investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
+                              {ehRendaFixa(p.category) && ajustarInvestido
+                                ? <div className="ac-stat"><span>Valor investido (R$)</span><MoneyInput className="cell-input ac-input pm-in" aria-label={"Valor investido em " + p.description} value={pmDraft[p.key] !== undefined ? pmDraft[p.key] : Math.round(p.cost * 100) / 100} onChange={(v) => setPmDraft((d) => ({ ...d, [p.key]: v }))} /></div>
+                                : <div className="ac-stat"><span>Investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>}
                               {!ehRendaFixa(p.category) && <div className="ac-stat"><span>Valor atual ({p.usd ? "US$" : "R$"})</span>{quoteInput}</div>}
                             </>
                           )}
                           {!ehRendaFixa(p.category) && <div className="ac-stat"><span>Resultado</span><b className="mono" style={hasQuote ? { color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" } : null}>{hasQuote ? sgn(p.profit) + " " + fmtBRL(Math.abs(p.profit)) : "—"}</b></div>}
                         </div>
+                        {ehRendaFixa(p.category) && ajustarInvestido && pmDraft[p.key] !== undefined && Math.abs((Number(pmDraft[p.key]) || 0) - Math.round(p.cost * 100) / 100) >= 0.005 && (
+                          <div className="pm-bar" data-inv-bar>
+                            <p>{Number(pmDraft[p.key]) >= 0 ? <>O valor investido passa de {fmtBRL(p.cost)} para <b>{fmtBRL(Number(pmDraft[p.key]))}</b>.</> : "Digite um valor."}</p>
+                            <div className="pm-btns">
+                              <button type="button" className="btn btn-primary sm" data-inv-salvar onClick={() => { if (ajustarInvestido(p, pmDraft[p.key])) { setPmDraft((d) => { const n = { ...d }; delete n[p.key]; return n; }); avisar("Valor investido atualizado"); } }}>Salvar valor</button>
+                              <button type="button" className="btn btn-ghost sm" onClick={() => setPmDraft((d) => { const n = { ...d }; delete n[p.key]; return n; })}>Cancelar</button>
+                            </div>
+                            <small>Corrige a carteira inicial. Não conta como aporte nem mexe no seu caixa.</small>
+                          </div>
+                        )}
                         {p.isQty && pmDraft[p.key] !== undefined && Math.abs((Number(pmDraft[p.key]) || 0) - Math.round(p.avg * 100) / 100) >= 0.005 && (
                           <div className="pm-bar" data-pm-bar>
                             <p>{Number(pmDraft[p.key]) > 0 ? <>Preço médio passa de {(p.usd ? fmtUSD : fmtBRL)(p.avg)} para <b>{(p.usd ? fmtUSD : fmtBRL)(Number(pmDraft[p.key]))}</b>. Total investido fica {(p.usd ? fmtUSD : fmtBRL)(Number(pmDraft[p.key]) * p.qty)}.</> : "Digite um preço maior que zero."}</p>
@@ -10687,7 +10722,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                               if (i.tipo === "ajuste") return (
                                 <div key={i.id} className="ac-hist" data-ajuste>
                                   <span className="ah-date">{fmtDatePt(i.date)}</span>
-                                  <span className="ah-kind" style={{ color: "var(--text-dim)" }}>Ajuste do preço médio</span>
+                                  <span className="ah-kind" style={{ color: "var(--text-dim)" }}>{ehRendaFixa(i.category) ? "Ajuste do valor investido" : "Ajuste do preço médio"}</span>
                                   <span className="ah-qty mono">para {fmtBRL(i.price)}</span>
                                   <b className="mono">{Number(i.ajuste) >= 0 ? "+" : "−"} {fmtBRL(Math.abs(i.ajuste))}</b>
                                 </div>
@@ -10734,7 +10769,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                       <tr key={i.id}>
                         <td>{fmtDatePt(i.date).slice(0, 5)}<span className="cell-sub">{i.date.slice(0, 4)}</span></td>
                         <td className="grow"><b>{i.description}</b><span className="cell-sub">{i.category}</span></td>
-                        <td><span className={`badge ${i.posicaoInicial || i.tipo === "ajuste" ? "" : sell ? "badge-pending" : "badge-paid"}`} style={{ cursor: "default" }}>{i.tipo === "ajuste" ? "Ajuste de preço médio" : i.posicaoInicial ? "Posição inicial" : sell ? "Venda" : "Compra"}</span></td>
+                        <td><span className={`badge ${i.posicaoInicial || i.tipo === "ajuste" ? "" : sell ? "badge-pending" : "badge-paid"}`} style={{ cursor: "default" }}>{i.tipo === "ajuste" ? (ehRendaFixa(i.category) ? "Ajuste do valor investido" : "Ajuste de preço médio") : i.posicaoInicial ? "Posição inicial" : sell ? "Venda" : "Compra"}</span></td>
                         <td className="num mono hide-sm">{i.qty > 0 ? Number(i.qty) : "—"}</td>
                         <td className="num mono hide-sm">{i.qty > 0 || i.tipo === "ajuste" ? fmtBRL(i.price) : "—"}</td>
                         <td className="num mono" style={{ color: sell ? "var(--brick)" : "var(--text)" }}>{i.tipo === "ajuste" ? (Number(i.ajuste) >= 0 ? "+ " : "− ") + fmtBRL(Math.abs(i.ajuste)) : fmtBRL(Math.abs(i.amount))}</td>
@@ -10886,12 +10921,25 @@ function acharTicker(linha, ext) {
   if (toks.length === 1 && /^[A-Za-z]{2,5}$/.test(toks[0]) && !US_STOP.has(toks[0].toUpperCase()) && toks[0] !== toks[0][0].toUpperCase() + toks[0].slice(1).toLowerCase()) return toks[0].toUpperCase();
   return "";
 }
+// nome de um título de renda fixa numa linha do print (ex.: "Tesouro Selic 2031", "CDB Banco X 110% CDI")
+function nomeRendaFixa(linha) {
+  const l = String(linha || "");
+  const m = l.match(/\btesouro\s+(selic|ipca\s*\+?|prefixado|educa\s*\+?|renda\s*\+?|igp-?m\s*\+?)(\s+com\s+juros\s+semestrais)?(\s+aposentadoria\s+extra)?(?:\s+(20\d{2}))?/i);
+  if (m) {
+    const fam = { selic: "Selic", prefixado: "Prefixado" }[m[1].toLowerCase()] || m[1].replace(/\s+/g, "").replace(/\+?$/, "+").replace(/^ipca/i, "IPCA").replace(/^educa/i, "Educa").replace(/^renda/i, "Renda").replace(/^igp-?m/i, "IGPM");
+    return ["Tesouro", fam, m[2] ? "com Juros Semestrais" : "", m[3] ? "Aposentadoria Extra" : "", m[4] || ""].filter(Boolean).join(" ");
+  }
+  const o = l.match(/^\s*(cdb|lci|lca|lc|cri|cra|deb[eê]ntures?)\b(.*)$/i);
+  if (o) { const n = (o[1].toUpperCase() + o[2].replace(/(R\$|US\$)\s*-?[\d.,]+/g, " ")).replace(/\s+/g, " ").trim().replace(/^DEB[EÊ]NTURES?/i, "Debênture"); if (n.length >= 3) return n.slice(0, 60); }
+  return "";
+}
+const chaveRF = (n) => normH(n).replace(/[^a-z0-9+%]/g, "");
 const LBL = {
   qty: /quantidade|\bqtde?\b|\bcotas\b|\bshares\b|quantity/i,
   pm: /pre[cç]o m[eé]dio|custo m[eé]dio|\bp\.?m\.?\b|average|avg/i,
   price: /pre[cç]o atual|pre[cç]o do ativo|cota[cç][aã]o|[uú]ltimo pre[cç]o|last price|current price/i,
-  value: /^posi[cç][aã]o\b|posi[cç][aã]o atual|valor atual|saldo atual|market value|valor de mercado/i,
-  inv: /valor investido|valor aplicado|custo total|total investido|cost basis/i,
+  value: /^posi[cç][aã]o\b|posi[cç][aã]o atual|valor atual|saldo atual|market value|valor de mercado|valor bruto|saldo bruto|valor l[ií]quido|saldo l[ií]quido/i,
+  inv: /valor investido|valor aplicado|custo total|total investido|cost basis|investimento inicial|valor da aplica[cç][aã]o/i,
 };
 const temData = (l) => /\b\d{4}-\d{2}-\d{2}\b|\b\d{2}\/\d{2}\/\d{4}\b/.test(l);
 // Lê a carteira: devolve [{ticker, qty, pm, price, value, inv}]
@@ -10908,6 +10956,14 @@ function lerCarteiraTexto(texto, ext) {
     if (atual && li - desde > 9) atual = null;
     const tk = acharTicker(l, ext);
     const lbl = Object.keys(LBL).find((k) => LBL[k].test(l));
+    const rfN = !ext && !tk && !lbl ? nomeRendaFixa(l) : "";
+    if (rfN) {
+      // título de renda fixa: os valores vêm nas linhas de baixo ("Valor investido", "Valor atual"); se vier um valor na mesma linha, é o atual
+      const r = pega(rfN); r.rf = true; atual = r; desde = li;
+      const din = (l.match(/R\$\s*-?[\d][\d.,]*/g) || []).map((m) => numLoc(m.replace(/[^\d.,]/g, ""), loc)).filter((v) => v > 0);
+      if (din.length === 1) put(r, "value", din[0]); else if (din.length >= 2) { put(r, "inv", din[0]); put(r, "value", din[1]); }
+      return;
+    }
     const ns = numsOf(l.replace(/\b[A-Z]{4}\d{1,2}\b/g, " ").replace(/\(\s*-?[\d.,]+%\s*\)/g, " ").replace(/-?[\d.,]+%/g, " "), loc);
     if (tk && !lbl) {
       const r = pega(tk); atual = r; desde = li;
@@ -10971,7 +11027,7 @@ function lerCarteiraTabelas(tables, ext) {
 // Junta o que veio de vários arquivos: o PDF traz a quantidade, o print traz o preço médio…
 function juntarCarteira(lista) {
   const m = {};
-  lista.forEach((r) => { const a = m[r.ticker] = m[r.ticker] || { ticker: r.ticker }; ["qty", "pm", "price", "value", "inv", "ganho"].forEach((k) => { if (r[k] !== undefined && a[k] === undefined) a[k] = r[k]; }); });
+  lista.forEach((r) => { const a = m[r.ticker] = m[r.ticker] || { ticker: r.ticker }; ["qty", "pm", "price", "value", "inv", "ganho", "rf"].forEach((k) => { if (r[k] !== undefined && a[k] === undefined) a[k] = r[k]; }); });
   return Object.values(m).map((r) => {
     if (!(r.pm > 0) && r.inv > 0 && r.qty > 0) r.pm = Math.round((r.inv / r.qty) * 10000) / 10000;
     if (!(r.price > 0) && r.value > 0 && r.qty > 0) r.price = Math.round((r.value / r.qty) * 10000) / 10000;
@@ -11022,7 +11078,7 @@ function lerNotaGenerica(lines) {
 }
 if (typeof window !== "undefined") window.__mp = { pdfToLines, parseNotaCorretagem, lerCarteiraTexto, lerCarteiraTabelas, juntarCarteira, lerTradesExterior, lerNotaGenerica, detectLoc, numLoc, catCompra, chaveLoja };
 
-function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
+function CarteiraImport({ fonte, commitPrint, investments = [], portfolio, goTab }) {
   const ext = fonte === "ext";
   const [lidos, setLidos] = useState([]); // [{nome, itens}]
   const [edits, setEdits] = useState({});
@@ -11034,6 +11090,8 @@ function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
   const ref = useRef(null);
   const fmtM = ext ? fmtUSD : fmtBRL, simb = ext ? "US$" : "R$";
   const jaTem = new Set(investments.map((i) => String(i.description || "").toUpperCase()));
+  // títulos de renda fixa que já estão na carteira, pelo nome (sem acento, maiúscula ou espaço)
+  const rfTem = useMemo(() => { const m = new Map(); ((portfolio && portfolio.positions) || []).forEach((p) => { if (ehRendaFixa(p.category)) m.set(chaveRF(p.description), p); }); return m; }, [portfolio]);
   const accept = { print: "image/*", cpdf: ".pdf,application/pdf", cplan: ".xlsx,.xls,.csv,.ods,text/csv", ext: ".pdf,.csv,.xlsx,.xls,application/pdf,image/*" }[fonte] || "*";
   const ler = async (files, senha) => {
     setErro(""); setFeito(null);
@@ -11059,22 +11117,24 @@ function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
   const rows = base.map((r) => {
     const e = edits[r.ticker] || {};
     const pmCalc = !(lidos.some((l) => l.itens.some((x) => x.ticker === r.ticker && x.pm > 0))) && r.pm > 0;
-    const o = { ...r, pmCalc, on: !jaTem.has(r.ticker), ...e };
+    const existe = r.rf ? rfTem.get(chaveRF(r.ticker)) || null : null;
+    const o = { ...r, pmCalc, existe, on: r.rf ? true : !jaTem.has(r.ticker), ...e };
     o.semQtd = !(Number(o.qty) > 0);
-    o.falta = o.on && (o.semQtd ? !(Number(o.inv) > 0) : !(Number(o.pm) > 0));
+    if (o.rf) { o.invUse = e.inv !== undefined ? Number(e.inv) || 0 : Number(r.inv) > 0 ? Number(r.inv) : Number(r.value) || 0; o.falta = o.on && !(o.invUse > 0); }
+    else o.falta = o.on && (o.semQtd ? !(Number(o.inv) > 0) : !(Number(o.pm) > 0));
     return o;
   });
   const setRow = (tk, p) => setEdits((d) => ({ ...d, [tk]: { ...(d[tk] || {}), ...p } }));
   const marcados = rows.filter((r) => r.on), faltando = marcados.filter((r) => r.falta);
   const adicionar = () => {
     if (!marcados.length || faltando.length) return;
-    const e = commitPrint(marcados.map((r) => ({ ticker: r.ticker, qty: Number(r.qty) || 0, pm: Number(r.pm) || 0, inv: Number(r.inv) || 0, price: Number(r.price) || 0, value: Number(r.value) || 0 })), modo, modo === "aporte" ? data : todayStr(), ext);
+    const e = commitPrint(marcados.map((r) => r.rf ? { ticker: r.ticker, rf: true, inv: r.invUse, existe: r.existe } : ({ ticker: r.ticker, qty: Number(r.qty) || 0, pm: Number(r.pm) || 0, inv: Number(r.inv) || 0, price: Number(r.price) || 0, value: Number(r.value) || 0 })), modo, modo === "aporte" ? data : todayStr(), ext);
     setFeito(e); setLidos([]); setEdits({});
   };
   const numIn = (v, on) => <input inputMode="decimal" value={v === undefined || v === "" ? "" : String(v).replace(".", ",")} onChange={(e) => { const t = e.target.value.replace(/[^\d,.]/g, ""); on(t === "" ? "" : (isNaN(numLoc(t, "br")) ? "" : t.endsWith(",") ? t : numLoc(t, "br"))); }} />;
   return (
     <div className="pr ci" data-fonte={fonte}>
-      {feito && <div className="note-info" role="status">{feito.investimentos} {feito.investimentos === 1 ? "ativo adicionado" : "ativos adicionados"} {modo === "inicial" ? "como carteira inicial" : "como aporte"}. Dá para desfazer no histórico de importações, abaixo.{goTab && <> <button className="link-btn" onClick={() => goTab("investimentos")}>Ver investimentos</button></>}</div>}
+      {feito && <div className="note-info" role="status">{feito.investimentos - (feito.ajustados || 0) > 0 ? <>{feito.investimentos - (feito.ajustados || 0)} {feito.investimentos - (feito.ajustados || 0) === 1 ? "ativo adicionado" : "ativos adicionados"} {modo === "inicial" ? "como carteira inicial" : "como aporte"}{feito.ajustados ? "; " : ". "}</> : null}{feito.ajustados ? <>{feito.ajustados} {feito.ajustados === 1 ? "título de renda fixa corrigido" : "títulos de renda fixa corrigidos"}, sem somar. </> : null}Dá para desfazer no histórico de importações, abaixo.{goTab && <> <button className="link-btn" onClick={() => goTab("investimentos")}>Ver investimentos</button></>}</div>}
       {fonte === "colar" ? (<>
         <textarea className="cart-colar" rows={6} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={"Copie do site da corretora e cole aqui. Exemplo:\nITSA4  1.300  11,17\nHGLG11  180  165,00"} />
         <button className="btn btn-primary sm" style={{ marginTop: 8 }} disabled={!texto.trim()} onClick={lerTexto}>Ler lista</button>
@@ -11097,8 +11157,13 @@ function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
           {rows.map((r) => (
             <div key={r.ticker} className={`ci-row ${r.on ? "" : "off"} ${r.falta ? "falta" : ""}`} data-tk={r.ticker}>
               <input type="checkbox" checked={r.on} onChange={(e) => setRow(r.ticker, { on: e.target.checked })} aria-label={"Incluir " + r.ticker} />
-              <div className="ci-tk"><b>{r.ticker}</b><small>{jaTem.has(r.ticker) ? "já está na carteira" : ext ? "Exterior" : b3Category(r.ticker)}</small></div>
-              {r.semQtd ? (
+              <div className="ci-tk"><b>{r.ticker}</b><small>{r.rf ? (r.existe ? "já está na carteira" : "Renda fixa") : jaTem.has(r.ticker) ? "já está na carteira" : ext ? "Exterior" : b3Category(r.ticker)}</small></div>
+              {r.rf ? (
+                <div className="ci-semq" data-rf>
+                  <span>{r.existe ? (Math.abs(r.existe.cost - r.invUse) < 0.005 ? <>Já está com <b>{fmtBRL(r.existe.cost)}</b>. Nada muda.</> : <>Hoje está com <b>{fmtBRL(r.existe.cost)}</b>. Vai ficar <b>{fmtBRL(r.invUse)}</b>, sem somar.</>) : <>Entra com o valor investido{r.value > 0 && Number(r.inv) > 0 ? <> (hoje vale {fmtBRL(r.value)})</> : null}.</>}</span>
+                  <label className="ci-f"><small>Valor investido (R$)</small>{numIn(r.invUse || "", (v) => setRow(r.ticker, { inv: v }))}</label>
+                </div>
+              ) : r.semQtd ? (
                 <div className="ci-semq">
                   <span>Sem quantidade no arquivo. Entra pelo valor: investido <b>{fmtM(r.inv || 0)}</b>{r.value > 0 ? <>, hoje <b>{fmtM(r.value)}</b></> : null}.</span>
                   <label className="ci-f"><small>Quantidade (se souber)</small>{numIn(r.qty, (v) => setRow(r.ticker, { qty: v }))}</label>
@@ -11113,7 +11178,7 @@ function CarteiraImport({ fonte, commitPrint, investments = [], goTab }) {
               </div>)}
             </div>
           ))}
-          {faltando.length > 0 && <div className="note-bad">Falta o preço médio de {faltando.map((r) => r.ticker).join(", ")}. Ele aparece no app da corretora, na tela de cada ativo. Se não souber, use o preço atual.</div>}
+          {faltando.length > 0 && <div className="note-bad">Falta {faltando.every((r) => r.rf) ? "o valor investido" : "o preço médio"} de {faltando.map((r) => r.ticker).join(", ")}. Ele aparece no app da corretora, na tela de cada ativo. Se não souber, use o preço atual.</div>}
           <div className="field" style={{ marginTop: 12 }}><label>Adicionar como</label>
             <div className="chip-row" role="group" aria-label="Adicionar como">
               <button type="button" className={`chip sm ${modo === "inicial" ? "active" : ""}`} aria-pressed={modo === "inicial"} onClick={() => setModo("inicial")}>Carteira que já tenho</button>
@@ -11430,7 +11495,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
           </>)}
 
           <div className="card-head" style={{ marginTop: 18 }}><h3 className="card-title">{source === "print" ? "Escolha o print" : source === "colar" ? "Cole a lista" : "Anexe o arquivo"}</h3></div>
-          {["print", "cpdf", "cplan", "colar", "ext"].includes(source) ? <CarteiraImport key={source} fonte={source} commitPrint={commitPrint} investments={investments} goTab={goTab} /> : (<>
+          {["print", "cpdf", "cplan", "colar", "ext"].includes(source) ? <CarteiraImport key={source} fonte={source} commitPrint={commitPrint} investments={investments} portfolio={portfolio} goTab={goTab} /> : (<>
           {source !== "colar" && <button className="drop" onClick={() => fileRef.current && fileRef.current.click()}>
             <IconUpload size={26} color={TEAL} />
             <b>{source === "nota" || source === "ext" ? "Escolher arquivo ou foto" : "Escolher arquivo"}</b>
