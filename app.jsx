@@ -3033,6 +3033,13 @@ function App() {
     setInvestments((prev) => [...prev, { id: uid(), description: p.description, assetName: p.assetName || "", category: p.category, date: todayStr(), tipo: "ajuste", qty: 0, price: n, amount: 0, ajuste: delta }]);
     return true;
   };
+  // tira um ativo da carteira sem ser venda (lançado por engano, repetido…): apaga os lançamentos dele, com Desfazer
+  const removerAtivo = (p) => {
+    const mesma = (i) => (i.category || "Outro") === p.category && i.description === p.description;
+    const antes = investments.filter(mesma); if (!antes.length) return;
+    setInvestments((prev) => prev.filter((i) => !mesma(i)));
+    avisar(p.description + " saiu da carteira", () => setInvestments((prev) => [...prev, ...antes.filter((a) => !prev.some((x) => x.id === a.id))]));
+  };
   // renda fixa: muda o valor investido de um título (vira um ajuste da carteira inicial, sem mexer no caixa)
   const ajustarInvestido = (p, novo, batch) => {
     const n = numOf(novo);
@@ -4699,6 +4706,7 @@ function App() {
         .ac-hist { display: grid; grid-template-columns: 78px 1fr auto; column-gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
         .ac-hist .ah-kind { font-weight: 700; font-size: 12px; } .ac-hist .ah-qty { grid-column: 1 / 3; font-size: 12px; color: var(--text-dim); } .ac-hist b { grid-row: 1; grid-column: 3; }
         .ac-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+        .ac-actions .ac-tirar { margin-left: auto; color: var(--brick); gap: 6px; } .ac-tirar-bar { margin-top: 10px; } .ac-tirar-ok { background: var(--brick); color: #fff; }
         .pos-preview { border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; animation: riseIn .3s ease backwards; }
         .pp-title { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
         .pp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .pp-grid span { display: block; font-size: 11.5px; color: var(--text-dim); } .pp-grid b { font-size: 14px; }
@@ -6228,7 +6236,7 @@ function App() {
         )}
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
-            addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg} ajustarInvestido={ajustarInvestido}
+            addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg} ajustarInvestido={ajustarInvestido} removerAtivo={removerAtivo}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
@@ -10267,7 +10275,7 @@ function RfLigar({ p, investments, tdHoje, carregarTd, cdiUltimo, onLigar }) {
     </div>);
 }
 
-function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg, ajustarInvestido,
+function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg, ajustarInvestido, removerAtivo,
   setCotacao, tdHoje = [], carregarTd, cdiUltimo = "", ligarRendaFixa, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, usaCentral, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
   const gv = useGv();
   const [tab, setTab] = useState("resumo");
@@ -10277,6 +10285,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const [sortBy, setSortBy] = useState("valor");
   const [openKey, setOpenKey] = useState(null);
   const [analise, setAnalise] = useState(null);
+  const [tirar, setTirar] = useState(null); // ativo com a confirmação de "Remover da carteira" aberta
   const [catsAbertas, setCatsAbertas] = useState(null); // null = só a maior classe aberta
   const [catsTodas, setCatsTodas] = useState({});
   const [pmDraft, setPmDraft] = useState({});
@@ -10739,7 +10748,17 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                             <div className="ac-actions">
                               <button className="btn btn-primary sm" onClick={() => startTrade(p, "compra")}>Comprar mais</button>
                               <button className="btn btn-ghost sm" onClick={() => startTrade(p, "venda")}>Vender</button>
+                              {removerAtivo && <button type="button" className="btn btn-ghost sm ac-tirar" data-remover={p.description} onClick={() => setTirar(tirar === p.key ? null : p.key)}><IconTrash size={15} />Remover</button>}
                             </div>
+                            {removerAtivo && tirar === p.key && (
+                              <div className="pm-bar ac-tirar-bar" data-remover-bar>
+                                <p>Tirar <b>{p.description}</b> da carteira? {hist.length === 1 ? "O lançamento dele é apagado" : `Os ${hist.length} lançamentos dele são apagados`}. Não conta como venda nem mexe no seu caixa.</p>
+                                <div className="pm-btns">
+                                  <button type="button" className="btn sm ac-tirar-ok" data-remover-ok onClick={() => { setTirar(null); setOpenKey(null); removerAtivo(p); }}>Remover da carteira</button>
+                                  <button type="button" className="btn btn-ghost sm" onClick={() => setTirar(null)}>Cancelar</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </article>
