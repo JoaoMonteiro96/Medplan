@@ -3378,89 +3378,16 @@ function App() {
     }).catch(() => {});
     return () => { vivo = false; };
   }, [investments.length]);
-  // Tesouro Direto: lista de títulos com o preço de hoje (guardada por 6 horas)
-  const [tdHoje, setTdHoje] = useState(() => { try { const c = JSON.parse(localStorage.getItem("mediplan-rf-tesouro") || "null"); return c && c.rows ? c.rows : []; } catch (e) { return []; } });
-  const tdCarregando = useRef(false);
-  const carregarTd = useCallback(() => {
-    try { const c = JSON.parse(localStorage.getItem("mediplan-rf-tesouro") || "null"); if (c && c.rows && c.rows.length && Date.now() - c.em < 6 * 3600e3) return; } catch (e) {}
-    if (tdCarregando.current) return; tdCarregando.current = true;
-    rfGet("tesouro_hoje?select=titulo,vencimento,data,pu_compra,pu_venda,taxa_compra&order=titulo,vencimento").then((rows) => {
-      if (Array.isArray(rows) && rows.length) { setTdHoje(rows); try { localStorage.setItem("mediplan-rf-tesouro", JSON.stringify({ em: Date.now(), rows })); } catch (e) {} }
-    }).catch(() => {}).finally(() => { tdCarregando.current = false; });
-  }, []);
-  const temTd = investments.some((i) => i.td && i.td.venc);
-  useEffect(() => { if (temTd) carregarTd(); }, [temTd]);
-  // preço de resgate de hoje vira a cotação de cada título
+  // Renda fixa usa o valor digitado (23/11/2026). Limpa o que o cálculo automático (Tesouro do dia / CDI) tinha gravado:
+  // tira o vínculo dos lançamentos e o valor automático, e a posição volta ao valor aplicado ou ao valor atual que a pessoa digitar.
   useEffect(() => {
-    if (!tdHoje.length) return;
-    const novo = {};
-    investments.forEach((i) => { if (!i.td) return; const t = tdHoje.find((x) => x.titulo === i.td.titulo && x.vencimento === i.td.venc); if (t && Number(t.pu_venda) > 0 && Math.abs(numOf(cotacoes[i.description]) - Number(t.pu_venda)) > 0.004) novo[i.description] = Number(t.pu_venda); });
-    if (Object.keys(novo).length) setCotacoes((p) => ({ ...p, ...novo }));
-  }, [tdHoje, investments]);
-  // quantos títulos: valor investido dividido pelo preço do dia da compra
-  const tdTentados = useRef(new Set());
-  useEffect(() => {
-    const falta = investments.filter((i) => i.td && i.td.venc && !(Number(i.qty) > 0) && Math.abs(Number(i.amount) || 0) > 0 && !tdTentados.current.has(i.id));
-    if (!falta.length) return;
-    falta.forEach((i) => tdTentados.current.add(i.id));
-    (async () => {
-      const upd = {};
-      for (const i of falta) {
-        try {
-          const base = `tesouro_precos?select=data,pu_compra,pu_venda&titulo=eq.${encodeURIComponent(i.td.titulo)}&vencimento=eq.${i.td.venc}`;
-          let rows = await rfGet(`${base}&data=lte.${i.date || todayStr()}&order=data.desc&limit=1`);
-          if (!rows.length) rows = await rfGet(`${base}&order=data.asc&limit=1`);
-          const venda = i.tipo === "venda" || Number(i.amount) < 0;
-          const pu = rows[0] ? Number(venda ? rows[0].pu_venda : rows[0].pu_compra || rows[0].pu_venda) : 0;
-          if (pu > 0) upd[i.id] = { qty: Math.round((Math.abs(Number(i.amount)) / pu) * 1e6) / 1e6, price: pu };
-        } catch (e) { tdTentados.current.delete(i.id); }
-      }
-      if (Object.keys(upd).length) setInvestments((p) => p.map((i) => upd[i.id] ? { ...i, ...upd[i.id] } : i));
-    })();
+    const auto = investments.filter((i) => i.td || i.cdiPct > 0);
+    if (!auto.length) return;
+    const descs = new Set(auto.map((i) => i.description));
+    setInvestments((p) => p.map((i) => { if (!(i.td || i.cdiPct > 0)) return i; const { td, cdiPct, ...r } = i; return td ? { ...r, qty: 0, price: 0 } : r; }));
+    setCotacoes((p) => { const n = { ...p }; descs.forEach((d) => { delete n[d]; }); return n; });
+    try { localStorage.removeItem("mediplan-rf-tesouro"); localStorage.removeItem("mediplan-rf-cdi"); } catch (e) {}
   }, [investments]);
-  // CDB, LCI, LCA: estimativa pelo CDI (antes do IR)
-  const [cdi, setCdi] = useState([]);
-  const cdiDesde = investments.filter((i) => i.cdiPct > 0 && i.date).reduce((m, i) => (!m || i.date < m ? i.date : m), "");
-  useEffect(() => {
-    if (!cdiDesde) return;
-    let vivo = true;
-    try { const c = JSON.parse(localStorage.getItem("mediplan-rf-cdi") || "null"); if (c && c.rows && c.desde <= cdiDesde) { setCdi(c.rows); if (Date.now() - c.em < 6 * 3600e3) return; } } catch (e) {}
-    (async () => {
-      const rows = [];
-      for (let off = 0; off < 20000; off += 1000) {
-        const pg = await rfGet(`cdi_diario?select=data,taxa&data=gt.${cdiDesde}&order=data.asc&limit=1000&offset=${off}`).catch(() => null);
-        if (!pg) return; rows.push(...pg.map((x) => [x.data, Number(x.taxa)])); if (pg.length < 1000) break;
-      }
-      if (!vivo) return;
-      setCdi(rows); try { localStorage.setItem("mediplan-rf-cdi", JSON.stringify({ em: Date.now(), desde: cdiDesde, rows })); } catch (e) {}
-    })();
-    return () => { vivo = false; };
-  }, [cdiDesde]);
-  useEffect(() => {
-    if (!cdi.length) return;
-    const grupos = {};
-    investments.forEach((i) => { if (!ehRendaFixa(i.category) || i.td) return; const k = (i.category || "") + "|" + i.description; (grupos[k] = grupos[k] || []).push(i); });
-    const novo = {};
-    Object.values(grupos).forEach((lst) => {
-      const pct = (lst.find((i) => i.cdiPct > 0) || {}).cdiPct; if (!pct) return;
-      const v = lst.reduce((a, i) => a + (Number(i.amount) || 0) * fatorCdi(cdi, i.date || "", pct), 0);
-      const d = lst[0].description; if (v > 0 && Math.abs(numOf(cotacoes[d]) - v) > 0.004) novo[d] = Math.round(v * 100) / 100;
-    });
-    if (Object.keys(novo).length) setCotacoes((p) => ({ ...p, ...novo }));
-  }, [cdi, investments]);
-  // ligar uma posição que já existe ao Tesouro (vencimento) ou ao CDI (%)
-  const ligarRendaFixa = (pos, cfg) => {
-    const mesma = (i) => (i.category || "Outro") === pos.category && i.description === pos.description;
-    const antes = investments.filter(mesma); const desfazer = () => setInvestments((p) => p.map((i) => antes.find((a) => a.id === i.id) || i));
-    if (cfg.td) {
-      const nome = tdNome(cfg.td.titulo, cfg.td.venc);
-      setInvestments((p) => p.map((i) => mesma(i) ? { ...i, description: nome, td: cfg.td, qty: 0, price: 0 } : i));
-      avisar("Agora o preço do " + nome + " se atualiza sozinho", desfazer);
-    } else if (cfg.cdiPct > 0) {
-      setInvestments((p) => p.map((i) => mesma(i) ? { ...i, cdiPct: cfg.cdiPct } : i));
-      avisar(`Estimando com ${String(cfg.cdiPct).replace(".", ",")}% do CDI`, desfazer);
-    }
-  };
   const criptoKey = [...new Set(investments.filter((i) => i.category === "Cripto" && CRIPTO_MAP[String(i.description || "").toUpperCase()]).map((i) => String(i.description).toUpperCase()))].sort().join(",");
   useEffect(() => {
     if (!criptoKey) return;
@@ -6278,7 +6205,7 @@ function App() {
         {activeTab === "investimentos" && (
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg}
-            setCotacao={setCotacao} tdHoje={tdHoje} carregarTd={carregarTd} cdiUltimo={cdi.length ? cdi[cdi.length - 1][0] : ""} ligarRendaFixa={ligarRendaFixa} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
+            setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
             viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
         )}
         {activeTab === "metas" && (
@@ -10355,10 +10282,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
   const useQty = byAsset && entry === "qtd";
   const criptoPreco = isCripto && numOf(qty) > 0 ? numOf(amount) / numOf(qty) : 0;
   const rfCat = ehRendaFixa(category);
-  const tdFam = rfCat ? tdFamilia(description) : null;
+  const tdFam = null;
   const tdOpcoes = tdFam ? tdHoje.filter((t) => t.titulo === tdFam) : [];
   const tdSel = tdOpcoes.find((t) => t.vencimento === tdVenc) || null;
-  useEffect(() => { if (rfCat && showForm && carregarTd) carregarTd(); }, [rfCat, showForm]);
   useEffect(() => { setTdVenc(""); }, [tdFam]);
   const options = useMemo(() => {
     if (isTicker) return ASSET_DB.filter((a) => a.ty === meta.type);
@@ -10378,8 +10304,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
     if (!desc) return;
     if (useQty && numOf(qty) <= 0) return;
     if (rfCat && !isTicker) {
-      const extra = tdFam && tdSel ? { td: { titulo: tdFam, venc: tdSel.vencimento } } : !tdFam && numOf(cdiPctF) > 0 ? { cdiPct: numOf(cdiPctF) } : {};
-      if (extra.td) desc = tdNome(tdFam, tdSel.vencimento);
+      const extra = {};
       addInvestment({ description: desc, assetName: name, category, date, tipo, qty: 0, price: 0, amount: tipo === "venda" ? -formTotal : formTotal, ...(inicial && tipo === "compra" ? { posicaoInicial: true } : {}), ...extra });
       if (inicial && tipo === "compra") avisar("Entrou na carteira inicial, sem contar como aporte");
       setDescription(""); setAssetName(""); setAmount(""); setTdVenc(""); setCdiPctF(""); setInicial(false); setShowForm(false); setTab("ativos");
@@ -10524,13 +10449,6 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                       </select>
                     ) : <div className="field-hint">Sem internet agora. Salve assim e escolha o vencimento depois, na carteira.</div>}
                     {tdSel && <div className="field-hint">Preço de hoje: <b className="mono">{fmtBRL(tdSel.pu_venda)}</b> por título (resgate). O valor da sua carteira se atualiza sozinho todo dia.</div>}
-                  </div>
-                )}
-                {rfCat && !tdFam && description.trim() && (
-                  <div className="rf-box" id="inv-cdi">
-                    <label htmlFor="inv-cdi-pct">Rende quanto do CDI? (opcional)</label>
-                    <div className="rf-pct"><input id="inv-cdi-pct" type="number" inputMode="decimal" min="0" step="any" value={cdiPctF} onChange={(e) => setCdiPctF(e.target.value)} placeholder="Ex.: 110" /><span>% do CDI</span></div>
-                    <div className="field-hint">Com isso o app estima quanto vale hoje, pelo CDI do Banco Central (antes do imposto de renda).</div>
                   </div>
                 )}
                 {isTicker && !assetName && description && <div className="field-hint">Não achou na lista? Pode seguir digitando o código normalmente.</div>}
@@ -10692,7 +10610,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                 <button type="button" className="cl-head" aria-expanded={aberta} onClick={alternar}>
                   <span className="cl-dot" style={{ background: invCatMeta(g.cat).color }} />
                   <span className="cl-name"><b>{g.cat === "Exterior" ? "Exterior (em dólar)" : g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}{g.cat === "Exterior" ? " · " + fmtUSD(g.items.reduce((a, p) => a + (p.valueUsd || 0), 0)) : ""}</small></span>
-                  <span className="cl-val"><b className="mono">{fmtBRL(sub)}</b><small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}><span>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</span><i className="cl-pct">({signPct(subPct)})</i></small></span>
+                  <span className="cl-val"><b className="mono">{fmtBRL(sub)}</b>{!ehRendaFixa(g.cat) && <small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}><span>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</span><i className="cl-pct">({signPct(subPct)})</i></small>}</span>
                   <span className="cl-chev" aria-hidden="true"><IconChevronDown size={18} /></span>
                 </button>
                 {aberta && g.cat === "Exterior" && (
@@ -10720,7 +10638,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                           <span className="ac-val">
                             <b className="mono">{fmtBRL(p.value)}</b>
                             {p.usd && <small className="mono">{fmtUSD(p.valueUsd)}</small>}
-                            {hasQuote ? <small className="mono" style={{ color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{signPct(p.profitPct)}</small> : <small>sem cotação</small>}
+                            {ehRendaFixa(p.category) ? null : hasQuote ? <small className="mono" style={{ color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{signPct(p.profitPct)}</small> : <small>sem cotação</small>}
                           </span>
                         </button>
                         {open && (<>
@@ -10737,7 +10655,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                               <div className="ac-stat"><span>Valor atual ({p.usd ? "US$" : "R$"})</span>{quoteInput}</div>
                             </>
                           )}
-                          <div className="ac-stat"><span>Resultado</span><b className="mono" style={hasQuote ? { color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" } : null}>{hasQuote ? sgn(p.profit) + " " + fmtBRL(Math.abs(p.profit)) : "—"}</b></div>
+                          {!ehRendaFixa(p.category) && <div className="ac-stat"><span>Resultado</span><b className="mono" style={hasQuote ? { color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" } : null}>{hasQuote ? sgn(p.profit) + " " + fmtBRL(Math.abs(p.profit)) : "—"}</b></div>}
                         </div>
                         {p.isQty && pmDraft[p.key] !== undefined && Math.abs((Number(pmDraft[p.key]) || 0) - Math.round(p.avg * 100) / 100) >= 0.005 && (
                           <div className="pm-bar" data-pm-bar>
