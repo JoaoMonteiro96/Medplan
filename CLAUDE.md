@@ -19,7 +19,7 @@ O Sallos (antigo Mediplan) é um app de finanças para médicos. Ele organiza pl
 - `index.html`: abertura com a marca (splash), o esqueleto de carregamento e o carregamento do app.
 - `service-worker.js`: deixa o app funcionar como aplicativo e sem internet.
 - `manifest.json`, `sallos-*.png`: ícones e dados de instalação.
-- `conheca/`: página de apresentação (sallos.com.br/conheca), com imagens e o vídeo de demonstração.
+- `conheca/`: página de apresentação (sallos.com.br/conheca), com imagens e o vídeo de demonstração. Visual de 23/11/2026: topo escuro de "monitor" (grade e linha de batimento), celulares em 3D com etiquetas de vidro; recursos com o celular fixo que troca de tela ao rolar (computador) e carrossel (celular). A página é gerada: edite `ferramentas/paginas/conheca-molde.html` (visual) e a lista `CAPS` em `ferramentas/paginas/conheca.py` (recursos) e rode `python3 ferramentas/paginas/conheca.py ferramentas/paginas/conheca-molde.html conheca/index.html`.
 - `schema.sql`: tabelas, regras de acesso, pasta de notas e tarefas automáticas do Supabase.
 - `supabase/functions/cotacoes/index.ts`: cópia da função da central de cotações (a que roda está no Supabase).
 - `privacidade/` e `termos/`: Política de privacidade e Termos de uso (sallos.com.br/privacidade e /termos). São geradas por `ferramentas/paginas/gerar.py` (rode `python3 ferramentas/paginas/gerar.py .` na raiz). O e-mail de contato e o responsável entram pelas variáveis `CONTATO` e `RESP`.
@@ -122,4 +122,4 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Sem textos explicativos no rodapé das seções.** O João não gosta. Dicas só dentro de formulários, quando ajudam a preencher.
 - Ícones de linha (nada de emoji).
 - Mudou uma tela que aparece na página de apresentação ou no vídeo? Ofereça atualizar os dois (`ferramentas/LEIA-ME.md` explica como).
-- O vídeo de demonstração (22/11/2026, 18 cenas, cerca de 3 min 47 s) já mostra Cobrar, Contas em 3 passos, o resumo do mês, a Contabilidade em abas e Ajustes pela engrenagem. Para gravar de novo, veja `ferramentas/LEIA-ME.md` (são 18 partes: `seq 0 17`).
+- O vídeo de demonstração (23/11/2026, 19 cenas, cerca de 4 min 3 s) já mostra Cobrar, Contas em 3 passos, o resumo do mês, a Contabilidade em abas, Ajustes pela engrenagem e a Análise completa de um FII. Para gravar de novo, veja `ferramentas/LEIA-ME.md` (são 19 partes: `seq 0 18`).

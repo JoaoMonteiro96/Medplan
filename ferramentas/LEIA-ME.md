@@ -24,13 +24,13 @@ As datas dos dados de teste andam junto com o dia de hoje (`comum.cjs`), então 
 Precisa de Python com Pillow e numpy, ffmpeg e a fonte Inter (`SALLOS_FONTES=/pasta/da/inter/`).
 
 1. `npm run build`
-2. `node ferramentas/video/captura.cjs` e depois `node ferramentas/video/captura-faturamento.cjs` (tiram as fotos das telas em `video/cap/`)
+2. `node ferramentas/video/captura.cjs`, depois `node ferramentas/video/captura-faturamento.cjs` e `node ferramentas/video/captura-analise.cjs` (tiram as fotos das telas em `video/cap/`)
 3. Conferir quadros antes de gerar tudo: `cd ferramentas/video && python3 render.py quadro 6 7.0 teste.jpg` (cena 6, segundo 7)
-4. Gerar as cenas (uns 25 minutos): `mkdir -p parts && seq 0 17 | xargs -P 6 -I{} python3 render.py partes {}`
+4. Gerar as cenas (uns 25 minutos): `mkdir -p parts && seq 0 18 | xargs -P 6 -I{} python3 render.py partes {}`
 5. `bash montar.sh` junta tudo com a trilha (original, feita no `musica.py`)
 6. `cp site.mp4 ../../conheca/sallos-demonstracao.mp4`
 
-O roteiro das cenas (textos, legendas, toques) fica em `cenas.py`. Hoje são 18 cenas, cerca de 3 minutos e 47 segundos. Se mudar o número de cenas, ajuste o `seq 0 17`.
+O roteiro das cenas (textos, legendas, toques) fica em `cenas.py`. Hoje são 19 cenas, cerca de 4 minutos e 3 segundos. Se mudar o número de cenas, ajuste o `seq 0 18`. Para mudar uma cena só, gere de novo só ela e a seguinte (a transição usa o último quadro da anterior) e rode o `montar.sh`.
 
 ## Fotos da página de apresentação
 
