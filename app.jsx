@@ -10297,14 +10297,16 @@ async function rfTodos(path) { const out = []; for (let o = 0; o < 20000; o += 1
 async function carregarBench(desde) {
   const dia = todayStr(), d0 = !desde || desde < "2017-01-02" ? "2017-01-02" : desde;
   let c = BENCH_MEM; if (!c) { try { c = JSON.parse(localStorage.getItem("mediplan-bench") || "null"); } catch (e) { c = null; } }
-  if (c && c.dia === dia && c.desde <= d0 && c.cdi) return (BENCH_MEM = c);
+  // usa o que já baixou hoje, a menos que algum índice tenha vindo vazio (aí tenta de novo, no máximo a cada 10 minutos)
+  const completo = c && c.cdi && c.cdi.length && c.ipca && c.ipca.length && c.ibov && c.ibov.length;
+  if (c && c.dia === dia && c.desde <= d0 && (completo || Date.now() - (c.em || 0) < 6e5)) return (BENCH_MEM = c);
   const pega = (p) => p.catch(() => null);
   const [cdi, ipca, ibov] = await Promise.all([
     pega(rfTodos(`cdi_diario?select=data,taxa&data=gte.${d0}&order=data.asc`)),
     pega(rfGet(`ipca_mensal?select=mes,taxa&mes=gte.${d0.slice(0, 7)}-01&order=mes.asc`)),
     pega(rfTodos(`precos_hist?select=data,fechamento&ticker=eq.BOVA11&data=gte.${d0}&order=data.asc`)),
   ]);
-  const b = { dia, desde: d0, cdi: (cdi || []).map((x) => [x.data, Number(x.taxa)]), ipca: (ipca || []).map((x) => [String(x.mes).slice(0, 7), Number(x.taxa)]), ibov: (ibov || []).map((x) => [x.data, Number(x.fechamento)]) };
+  const b = { dia, em: Date.now(), desde: d0, cdi: (cdi || []).map((x) => [x.data, Number(x.taxa)]), ipca: (ipca || []).map((x) => [String(x.mes).slice(0, 7), Number(x.taxa)]), ibov: (ibov || []).map((x) => [x.data, Number(x.fechamento)]) };
   if (cdi || ipca || ibov) { try { localStorage.setItem("mediplan-bench", JSON.stringify(b)); } catch (e) {} }
   return (BENCH_MEM = b);
 }
