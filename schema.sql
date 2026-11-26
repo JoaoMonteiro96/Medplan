@@ -270,6 +270,15 @@ alter table public.cdi_diario enable row level security;
 drop policy if exists "todos leem cdi" on public.cdi_diario;
 create policy "todos leem cdi" on public.cdi_diario for select to anon, authenticated using (true);
 
+-- IPCA do mês (série 433 do Banco Central). Usado para comparar a carteira com a inflação.
+create table if not exists public.ipca_mensal (
+  mes  date primary key,           -- primeiro dia do mês
+  taxa numeric not null            -- % no mês
+);
+alter table public.ipca_mensal enable row level security;
+drop policy if exists "todos leem ipca" on public.ipca_mensal;
+create policy "todos leem ipca" on public.ipca_mensal for select to anon, authenticated using (true);
+
 -- preço mais recente de cada título que ainda não venceu
 create or replace view public.tesouro_hoje with (security_invoker = true) as
   select distinct on (titulo, vencimento) titulo, vencimento, data, taxa_compra, taxa_venda, pu_compra, pu_venda

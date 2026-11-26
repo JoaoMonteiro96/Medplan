@@ -84,10 +84,23 @@ async function cdi() {
   return { linhas: rows.length };
 }
 
+// IPCA do mês (série 433 do Banco Central), para comparar a carteira com a inflação
+async function ipca() {
+  const br = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
+  const r = await fetch(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json&dataInicial=${br(new Date(DESDE + "T12:00:00Z"))}&dataFinal=${br(new Date())}`);
+  if (!r.ok) throw new Error("IPCA do Banco Central: HTTP " + r.status);
+  const j = await r.json();
+  const rows = (Array.isArray(j) ? j : []).map((x: { data: string; valor: string }) => ({ mes: iso(x.data), taxa: Number(String(x.valor).replace(",", ".")) }))
+    .filter((x: { mes: string; taxa: number }) => x.mes && isFinite(x.taxa));
+  if (rows.length) { const { error } = await sb.from("ipca_mensal").upsert(rows, { onConflict: "mes" }); if (error) throw new Error("gravar IPCA: " + error.message); }
+  return { linhas: rows.length };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return resp("ok");
   const out: Record<string, unknown> = {};
   try { out.tesouro = await tesouro(); } catch (e) { out.tesouro = { erro: String(e) }; }
   try { out.cdi = await cdi(); } catch (e) { out.cdi = { erro: String(e) }; }
+  try { out.ipca = await ipca(); } catch (e) { out.ipca = { erro: String(e) }; }
   return resp(out);
 });
