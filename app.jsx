@@ -6207,7 +6207,7 @@ function App() {
         .hj-saldo { display: flex; justify-content: space-between; gap: 10px; padding-bottom: 13px; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,.12); }
         .hj-saldo > div { display: flex; flex-direction: column; min-width: 0; } .hj-saldo .r { align-items: flex-end; text-align: right; }
         .hj-saldo small { font-size: 11.5px; color: rgba(255,255,255,.65); white-space: nowrap; }
-        .hj-saldo b { color: #fff; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; } .hj-saldo .r b { color: rgba(255,255,255,.85); font-weight: 700; }
+        .hj-saldo b { color: #fff; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; } .hj-saldo .r b { color: rgba(255,255,255,.85); font-weight: 700; } .hj-saldo b.neg { color: #FCA5A5; }
         .hj-aneis-svg { width: 124px; height: 124px; flex-shrink: 0; }
         .hj-arco { transition: stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1); }
         @media (prefers-reduced-motion: reduce) { .hj-arco { transition: none; } }
@@ -8702,20 +8702,20 @@ const iniciais = (nome) => String(nome || "?").replace(/\b(de|da|do|das|dos|e)\b
 const diaRotulo = (iso) => { const h = todayStr(); if (iso === h) return "Hoje"; if (iso === addDaysIso(h, 1)) return "Amanhã";
   const d = new Date(iso + "T12:00:00"); return d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "").replace(/^./, (c) => c.toUpperCase()) + ", " + fmtDatePt(iso).slice(0, 5); };
 
-function HojeAneis({ a, simples, saldo = null, saldoFim = null }) {
+function HojeAneis({ a, simples, saldo = null, saldoTit = "Saldo em caixa", dir = null, atual = true }) {
   if (!a) return null;
   const sobraPrev = a.previsto - a.contas, sobraReal = a.recebido - a.pagas;
   const aneis = [
     { k: "rec", nome: "Recebido", cor: "#4ADE80", v: a.recebido, p: pctDe(a.recebido, a.previsto), sub: a.previsto > 0 ? `${Math.round(pctDe(a.recebido, a.previsto) * 100)}% de ${fmtCurto(a.previsto)}` : "nada previsto ainda" },
     { k: "pag", nome: "Contas pagas", cor: "#FCD34D", v: a.pagas, p: pctDe(a.pagas, a.contas), sub: a.contas > 0 ? `${Math.round(pctDe(a.pagas, a.contas) * 100)}% de ${fmtCurto(a.contas)}` : "nenhuma conta no mês" },
     simples
-      ? { k: "sob", nome: "Sobrou até agora", cor: "#7DD3FC", v: sobraReal, p: pctDe(sobraReal, sobraPrev), sub: sobraPrev > 0 ? `de ${fmtCurto(sobraPrev)} no mês` : "" }
+      ? { k: "sob", nome: atual ? "Sobrou até agora" : "Sobrou", cor: "#7DD3FC", v: sobraReal, p: pctDe(sobraReal, sobraPrev), sub: sobraPrev > 0 ? `de ${fmtCurto(sobraPrev)} no mês` : "" }
       : { k: "inv", nome: "Investido", cor: "#7DD3FC", v: a.investido, p: pctDe(a.investido, sobraPrev), sub: sobraPrev > 0 ? `${Math.round(pctDe(a.investido, sobraPrev) * 100)}% da sobra` : "" },
   ];
   const R = [58, 41, 24];
   return (
     <section className="hj-aneis" id="hoje-aneis" aria-label="Seu mês em três anéis">
-      {saldo !== null && <div className="hj-saldo" id="hoje-saldo"><div><small>Saldo em caixa</small><b className="mono">{comCentavos(fmtBRL(saldo))}</b></div>{saldoFim !== null && <div className="r"><small>Previsto no fim do mês</small><b className="mono">{fmtCurto(saldoFim)}</b></div>}</div>}
+      {saldo !== null && <div className="hj-saldo" id="hoje-saldo"><div><small>{saldoTit}</small><b className={`mono ${saldo < 0 ? "neg" : ""}`}>{saldo < 0 ? "− " : ""}{comCentavos(fmtBRL(Math.abs(saldo)))}</b></div>{dir && <div className="r"><small>{dir[0]}</small><b className={`mono ${dir[1] < 0 ? "neg" : ""}`}>{fmtCurto(dir[1])}</b></div>}</div>}
       <div className="hj-aneis-c">
       <svg className="hj-aneis-svg" viewBox="0 0 132 132" aria-hidden="true">
         <g fill="none" strokeLinecap="round" strokeWidth="13" transform="rotate(-90 66 66)">
@@ -8995,12 +8995,13 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
     saldo: saldoRealizado, sobra: curStats.net - curStats.expTotal, receitas: curStats.net, receitasAnt: prevStats.net, despesas: curStats.expTotal, despesasAnt: prevStats.expTotal, investido: curStats.invested || 0,
     receber: Math.max(0, curStats.net - jaCaiuH), nReceber: monthIncomeItems.filter((i) => !i.recebido).length, pagar: totalPendingExpenses, nPagar: monthExpenseItems.filter((e) => !e.paid).length,
     ir: { hora: () => setActiveTab("faturamento"), imposto: () => setActiveTab("contabilidade"), patrimonio: () => setActiveTab("investimentos"), meta: () => setActiveTab("metas"), receber: () => setActiveTab("faturamento"), pagar: () => setActiveTab("despesas"), despesas: () => setActiveTab("despesas"), receitas: () => setActiveTab("faturamento"), investido: () => setActiveTab("investimentos"), sobra: () => setActiveTab("despesas") } };
+  const aneisMes = { recebido: jaCaiuH, previsto: curStats.net, pagas: monthExpenseItems.filter((e) => e.paid).reduce((a, e) => a + (Number(e.amount) || 0), 0), contas: monthExpenseItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), investido: Math.max(0, curStats.invested || 0) };
   const hojeNovo = (
     <div className="hj" id="hoje-novo">
       <div className="hj-ola"><small>{ehMesAtual ? dataHoje : `${MONTHS_PT[viewMonth]} de ${viewYear}`}</small><h2>{hello}</h2></div>
       {guia}
       {ehMesAtual && <ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} />}
-      {ehMesAtual && hojeInfo && <HojeAneis a={hojeInfo.aneis} simples={simples} saldo={saldoRealizado} saldoFim={saldoRealizado + dBlocos.receber - dBlocos.pagar} />}
+      <HojeAneis a={aneisMes} simples={simples} atual={ehMesAtual} saldo={saldoRealizado} saldoTit={ehMesAtual ? "Saldo em caixa" : "Saldo em caixa hoje"} dir={ehMesAtual ? ["Previsto no fim do mês", saldoRealizado + dBlocos.receber - dBlocos.pagar] : [`Sobra de ${MONTHS_PT[viewMonth].toLowerCase()}`, curStats.net - curStats.expTotal]} />
       {ehMesAtual && hojeInfo && <ProximoPlantao p={hojeInfo.proximo} onVer={() => setActiveTab("calendario")} />}
       {ehMesAtual && hojeInfo && <ParaConfirmar itens={hojeInfo.itens} pagar={hojeInfo.pagar} onCobrar={onCobrar} />}
       {alerts.length > 0 && <Avisos alerts={alerts} />}
@@ -9044,7 +9045,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         </div>
       );
     }
-    if (ehMesAtual) return hojeNovo;
+    return hojeNovo;
     return (
       <div>
         <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${mesNome} de ${viewYear}.`}</p></div>
@@ -9122,7 +9123,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       </div>
     );
   }
-  if (ehMesAtual) return hojeNovo;
+  return hojeNovo;
   return (
     <div>
       <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${MONTHS_PT[viewMonth].toLowerCase()} de ${viewYear}.`}</p></div>
