@@ -2,7 +2,6 @@
 name: corrigir-bug
 description: Reproduz o bug, acha a causa, faz a correção mínima, testa e relata.
 argument-hint: "<o que está errado>"
-disable-model-invocation: true
 ---
 # /corrigir-bug
 

@@ -2,7 +2,6 @@
 name: gamificacao
 description: Pesquisa e propõe mecânicas de hábito financeiro saudável para o Sallos (gamificacao).
 argument-hint: "[objetivo]"
-disable-model-invocation: true
 ---
 # /gamificacao
 

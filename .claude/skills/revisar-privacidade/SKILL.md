@@ -2,7 +2,6 @@
 name: revisar-privacidade
 description: Revisa mapa de dados, consentimento, exclusão, exportação e segurança do Sallos (privacidade-lgpd).
 argument-hint: "[tema]"
-disable-model-invocation: true
 ---
 # /revisar-privacidade
 

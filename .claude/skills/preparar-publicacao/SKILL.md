@@ -2,7 +2,6 @@
 name: preparar-publicacao
 description: Prepara a publicação do site ou, no futuro, nas lojas, sem publicar (gestor-release).
 argument-hint: "[site | lojas]"
-disable-model-invocation: true
 ---
 # /preparar-publicacao
 

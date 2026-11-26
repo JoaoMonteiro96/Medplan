@@ -2,7 +2,6 @@
 name: design-movimento
 description: Avalia animações e transições do Sallos (designer-movimento).
 argument-hint: "[tela ou interação]"
-disable-model-invocation: true
 ---
 # /design-movimento
 

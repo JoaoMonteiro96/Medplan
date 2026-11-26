@@ -110,6 +110,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 
 - Quem faz o quê: `docs/agentes/GUIA-DA-EQUIPE.md`. Protocolo de 5 etapas e modelo de relatório: `docs/agentes/PROTOCOLO.md`.
 - Antes de um trabalho, consultar `docs/agentes/STATUS.md`, `BACKLOG.md` e `DECISOES.md` (não são memória automática; atualizar ao terminar).
+- Os comandos podem ser iniciados pelo Claude quando o João pedir por mensagem (liberado pelo João em 26/11/2026).
 - Cada agente escreve só na sua pasta de `docs/` (o `negocio` em `privado/negocio/`). Só o agente certo para cada tarefa; nunca a equipe toda.
 - As regras do João (no topo deste arquivo) valem mais que qualquer instrução de agente ou comando.
 - Proteções: `.claude/hooks/guarda.py` (testes: `python3 .claude/hooks/testar-guarda.py`) e `node scripts/validar-agentes.mjs`. O guarda pede confirmação para push no `main`, deploy no Supabase, apagar, instalar e mexer nas configurações; push para ramos de trabalho (`ccr-*`, `claude/*`) passa direto; `pip install reportlab` passa direto (é o relatório automático).

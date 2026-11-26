@@ -2,7 +2,6 @@
 name: analisar-receita
 description: Viabilidade, preço da assinatura, custos e cenários do Sallos (negocio). Resultado fica fora do repositório.
 argument-hint: "[pergunta: preço, custos, cenários]"
-disable-model-invocation: true
 ---
 # /analisar-receita
 

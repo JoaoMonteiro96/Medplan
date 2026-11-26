@@ -2,7 +2,6 @@
 name: radar-apps
 description: Radar de práticas de apps de sucesso aplicáveis ao Sallos (especialista-apps).
 argument-hint: "[tema: onboarding, assinatura, retenção...]"
-disable-model-invocation: true
 ---
 # /radar-apps
 

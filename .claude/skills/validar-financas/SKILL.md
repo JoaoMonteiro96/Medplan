@@ -2,7 +2,6 @@
 name: validar-financas
 description: Confere cálculos, tabelas de imposto, textos e alertas financeiros do Sallos (especialista-financas).
 argument-hint: "[cálculo ou tela]"
-disable-model-invocation: true
 ---
 # /validar-financas
 

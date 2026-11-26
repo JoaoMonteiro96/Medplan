@@ -2,7 +2,6 @@
 name: otimizar-performance
 description: Mede o desempenho do Sallos e propõe otimizações (performance).
 argument-hint: "[tela ou sintoma]"
-disable-model-invocation: true
 ---
 # /otimizar-performance
 

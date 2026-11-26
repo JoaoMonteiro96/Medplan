@@ -2,7 +2,6 @@
 name: auditar-app
 description: Auditoria de segurança, dados e qualidade do Sallos, sem editar código (auditor).
 argument-hint: "[área: seguranca | dados | publicacao | tudo]"
-disable-model-invocation: true
 ---
 # /auditar-app
 

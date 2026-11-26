@@ -2,7 +2,6 @@
 name: marketing-instagram
 description: Monta campanha de Instagram do Sallos com calendário, Reels, Stories e legendas, como rascunho (diretor-marketing).
 argument-hint: "<objetivo da campanha>"
-disable-model-invocation: true
 ---
 # /marketing-instagram
 

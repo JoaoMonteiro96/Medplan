@@ -2,7 +2,6 @@
 name: analisar-feedback
 description: Classifica feedback e rascunha respostas (suporte-cliente).
 argument-hint: "<feedback colado ou resumo>"
-disable-model-invocation: true
 ---
 # /analisar-feedback
 

@@ -2,7 +2,6 @@
 name: melhorar-design
 description: Audita e melhora a interface do Sallos no celular e no computador, mantendo a lógica (frontend).
 argument-hint: "<tela ou problema>"
-disable-model-invocation: true
 ---
 # /melhorar-design
 

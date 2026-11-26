@@ -2,7 +2,6 @@
 name: plano-crescimento
 description: Diagnóstico do funil do Sallos e experimentos priorizados (crescimento).
 argument-hint: "[foco]"
-disable-model-invocation: true
 ---
 # /plano-crescimento
 

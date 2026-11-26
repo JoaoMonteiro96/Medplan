@@ -2,7 +2,6 @@
 name: tipografia
 description: Diagnóstico e opções de fontes com protótipo (tipografia).
 argument-hint: "[tela ou problema]"
-disable-model-invocation: true
 ---
 # /tipografia
 

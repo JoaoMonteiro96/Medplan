@@ -2,7 +2,6 @@
 name: preparar-release
 description: Verifica se a versão está pronta para publicar no sallos.com.br, sem publicar.
 argument-hint: "[o que entra nesta versão]"
-disable-model-invocation: true
 ---
 # /preparar-release
 

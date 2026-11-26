@@ -2,7 +2,6 @@
 name: analisar-metricas
 description: Plano de métricas do Sallos com privacidade (analista-dados).
 argument-hint: "[pergunta]"
-disable-model-invocation: true
 ---
 # /analisar-metricas
 

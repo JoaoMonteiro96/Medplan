@@ -2,7 +2,6 @@
 name: central-comando
 description: Coordena vários agentes num pedido amplo, com as 5 etapas do protocolo (orquestrador).
 argument-hint: "<pedido amplo>"
-disable-model-invocation: true
 ---
 # /central-comando
 
