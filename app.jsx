@@ -1917,31 +1917,8 @@ function ConviteHoje({ vazio, guiaAberto, onPlantao, algumRecebido, notifOn, onL
   return null;
 }
 
-// pergunta única: como a empresa da pessoa paga imposto (troca os 27,5% de partida por uma taxa típica)
-const IMPOSTO_TIPICO = [
-  ["simples", "Simples Nacional", 6, "a maioria dos médicos com empresa"],
-  ["presumido", "Lucro Presumido", 16.33, "IRPJ, CSLL, PIS, Cofins e ISS"],
-];
 // imposto que a própria pessoa ainda tem de pagar no mês: fica de fora o que já vem com imposto pago (Pix como sócio, carteira, pró-labore)
 const impostoAPagar = (itens) => Math.max(0, (itens || []).filter((i) => i.forma !== "socio" && i.forma !== "clt").reduce((a, i) => a + (Number(i.gross) || 0) - (Number(i.net) || 0), 0));
-function ImpostoPergunta({ atual, onEscolher, onCalcular, onFechar }) {
-  return (
-    <div className="card rm imp-perg" id="imposto-pergunta">
-      <div className="rm-h"><div><span>Para acertar o imposto</span><h3>Como sua empresa paga imposto?</h3></div><button type="button" className="rm-x" aria-label="Agora não" onClick={onFechar}><IconX size={16} /></button></div>
-      <div className="imp-ops">
-        {IMPOSTO_TIPICO.map(([k, nome, pct, sub]) => (
-          <button key={k} type="button" className="imp-op" data-regime={k} onClick={() => onEscolher(pct, nome)}>
-            <b>{nome}</b><small>{sub}</small><span className="mono">cerca de {pct.toLocaleString("pt-BR")}%</span>
-          </button>
-        ))}
-      </div>
-      <div className="imp-pe">
-        <button type="button" className="btn btn-ghost sm" onClick={onCalcular}>Calcular com meus números</button>
-        <span>Hoje o app usa {(Number(atual) || 0).toLocaleString("pt-BR")}%.</span>
-      </div>
-    </div>
-  );
-}
 
 function ResumoMes({ r, simples, onFechar }) {
   if (!r) return null;
@@ -2931,9 +2908,6 @@ function App() {
     return Math.round((contab.regime === "presumido" ? calcPresumido(p) : calcSimples(p)).carga * 100) / 100;
   }, [contab]);
   useEffect(() => { if (loaded && contabCarga !== null && Number(taxRateGeral) !== contabCarga) setTaxRateGeral(contabCarga); }, [contabCarga, taxRateGeral, loaded]);
-  // pergunta uma vez como a empresa paga imposto, só para quem ainda está nos 27,5% de partida e recebe por nota da própria empresa
-  const perguntarImposto = loaded && contab.modo !== "contab" && !contab.impostoOk && Number(taxRateGeral) === 27.5
-    && vinculos.some((v) => formaDe(v) === "pj" && (v.taxOverride === undefined || v.taxOverride === null || v.taxOverride === ""));
   const monthShifts = shifts.filter((s) => inMonth(s.date, viewYear, viewMonth));
   const monthPresencas = presencas.filter((p) => inMonth(p.date, viewYear, viewMonth));
   const monthIncomeItems = buildIncomeItems(viewYear, viewMonth);
@@ -5685,13 +5659,6 @@ function App() {
         .rm-grid > div { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; min-width: 0; } .rm-grid small { display: block; font-size: 12px; color: var(--text-dim); } .rm-grid b { font-size: 15.5px; font-weight: 800; white-space: nowrap; }
         .rm-grid b.in { color: #15803D; } .rm-grid b.neg { color: #B91C1C; } :root[data-theme="dark"] .rm-grid b.in { color: #6EE7B7; }
         .rm-l { margin-top: 10px; font-size: 13.5px; color: var(--text-dim); } .rm-l b { color: var(--text); }
-        .imp-ops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-        .imp-op { text-align: left; border: 1.5px solid var(--border); background: var(--surface-2); border-radius: 12px; padding: 12px; min-height: 44px; cursor: pointer; color: var(--text); font: inherit; display: grid; gap: 2px; min-width: 0; }
-        .imp-op b { font-family: "Manrope", "Inter", sans-serif; font-size: 15px; } .imp-op small { font-size: 12px; color: var(--text-dim); } .imp-op span { font-size: 13px; font-weight: 700; color: #0E5640; margin-top: 4px; }
-        :root[data-theme="dark"] .imp-op span { color: #6EE7B7; }
-        .imp-op:hover, .imp-op:focus-visible { border-color: #0E5640; }
-        .imp-pe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; font-size: 13px; color: var(--text-dim); }
-        @media (max-width: 380px) { .imp-ops { grid-template-columns: 1fr; } }
         /* cobrar pelo WhatsApp */
         .conf-bts { display: flex; gap: 6px; align-items: center; }
         @media (max-width: 520px) { .conf-it.tem-cob { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 8px; } .conf-it.tem-cob .conf-v { grid-column: 3; grid-row: 1; font-size: 14px; } .conf-it.tem-cob .conf-bts { grid-column: 2 / -1; grid-row: 2; flex-direction: row; justify-content: flex-end; } }
@@ -6490,8 +6457,6 @@ function App() {
             } }}
             separado={contab.separado || {}} onSeparar={(keys) => { setContab((p) => ({ ...p, separado: { ...(p.separado || {}), ...Object.fromEntries(keys.map((k) => [k, true])) } })); vibrar(6);
               avisar("Imposto separado", () => setContab((p) => { const n = { ...(p.separado || {}) }; keys.forEach((k) => { delete n[k]; }); return { ...p, separado: n }; })); }}
-            impostoPergunta={perguntarImposto ? <ImpostoPergunta atual={taxRateGeral} onCalcular={() => { setContab((p) => ({ ...p, impostoOk: true })); goTab("contabilidade"); }} onFechar={() => setContab((p) => ({ ...p, impostoOk: true }))}
-              onEscolher={(pct, nome) => { const antes = taxRateGeral; setTaxRateGeral(pct); setContab((p) => ({ ...p, impostoOk: true })); avisar(`Imposto ajustado para ${pct.toLocaleString("pt-BR")}%`, () => { setTaxRateGeral(antes); setContab((p) => ({ ...p, impostoOk: false })); }); }} /> : null}
             workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
@@ -9124,7 +9089,7 @@ function ValePlantao({ vinculos = [], netOf, info, onClose }) {
   );
 }
 
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false, onCobrar, resumoMes = null, fecharResumo, workPrev = null, blocosHoje = null, setBlocosHoje = () => {}, impostoPergunta = null, separado = {}, onSeparar = null, convite = null }) {
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false, onCobrar, resumoMes = null, fecharResumo, workPrev = null, blocosHoje = null, setBlocosHoje = () => {}, separado = {}, onSeparar = null, convite = null }) {
   const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
@@ -9190,25 +9155,23 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
     <div className="hj" id="hoje-novo">
       <div className="hj-ola"><small>{ehMesAtual ? dataHoje : `${MONTHS_PT[viewMonth]} de ${viewYear}`}</small><h2>{hello}</h2></div>
       {guia}
-      {impostoPergunta}
       {ehMesAtual && <ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} />}
       <HojeAneis a={aneisMes} simples={simples} atual={ehMesAtual} saldo={saldoRealizado} saldoTit={ehMesAtual ? "Saldo em caixa" : "Saldo em caixa hoje"} dir={ehMesAtual ? ["Previsto no fim do mês", saldoRealizado + dBlocos.receber - dBlocos.pagar] : [`Sobra de ${MONTHS_PT[viewMonth].toLowerCase()}`, curStats.net - curStats.expTotal]} />
       {ehMesAtual && hojeInfo && <ProximoPlantao p={hojeInfo.proximo} onVer={() => setActiveTab("calendario")} />}
       {ehMesAtual && hojeInfo && <ParaConfirmar itens={hojeInfo.itens} pagar={hojeInfo.pagar} onCobrar={onCobrar} />}
       {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
-      {ehMesAtual && convite && !impostoPergunta && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
+      {ehMesAtual && convite && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
       {alerts.length > 0 && <Avisos alerts={alerts} />}
       <InsightsCaixa items={insights} />
       <HojeBlocos escolha={blocosHoje} setEscolha={setBlocosHoje} simples={simples} d={dBlocos} />
       {!simples && <button className="btn btn-ghost hj-pdf" onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>}
     </div>
   );
-  // no computador: a mesma pergunta do imposto, a caixinha e os convites, lado a lado
-  const extrasDesk = (impostoPergunta || (ehMesAtual && (onSeparar || convite))) ? (
+  // no computador: a caixinha do imposto e os convites, lado a lado
+  const extrasDesk = (ehMesAtual && (onSeparar || convite)) ? (
     <div className="desk-extras">
-      {impostoPergunta}
       {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
-      {ehMesAtual && convite && !impostoPergunta && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
+      {ehMesAtual && convite && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
     </div>
   ) : null;
   const prevNome = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();

@@ -70,7 +70,6 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - `mediplan-uso-fila`, `mediplan-uso-id`, `mediplan-uso-off`: contagem anônima de uso das telas (a pessoa pode desligar em Ajustes → Privacidade). Também vão `_modo:simples`/`_modo:completo` (modo do dia), `_m:guia`, `_m:plantao`, `_m:conta`, `_m:recebi`, `_m:indicou` (primeiros passos, uma vez por aparelho, controlados por `mediplan-uso-marcos`) e as telas internas `ferias`, `vale`, `metaplantoes`.
 - `mediplan-vibrar-off`: vibração desligada (Configurações › Aparência).
 - `mediplan-convite-lembrete`, `mediplan-convite-colega`: convites da Hoje já dispensados.
-- `contab.impostoOk`: a pessoa já respondeu "Como sua empresa paga imposto?" (Simples ≈ 6%, Presumido ≈ 16,33%) ou fechou a pergunta. Só aparece para quem está nos 27,5% de partida e recebe por nota da própria empresa.
 
 ## Como o app está organizado (novembro de 2026)
 
@@ -128,6 +127,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - Lançar gastos por mensagem (conversa).
 - Notificação depois do plantão.
 - Marcar escala como "Fiz/Feito".
+- Pergunta "Como sua empresa paga imposto?" na Hoje (26/11/2026): cada lançamento já diz quanto paga de imposto.
 - Enxugar as telas juntando os números do mês num resumo só e mudando gráficos de lugar (proposta de 22/11/2026). Ele quer manter os gráficos onde estão.
 
 ## Supabase (projeto "mediplan-sp")

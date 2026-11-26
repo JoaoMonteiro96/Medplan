@@ -20,3 +20,4 @@ Só decisões que o João tomou de verdade. As recusas também ficam no `CLAUDE.
 | 26/11/2026 | O Sallos vai ter Instagram (ainda não criado) | João |
 | 26/11/2026 | Números do negócio ficam fora do repositório (que é público) | João |
 | 26/11/2026 | Comandos podem ser iniciados pelo Claude quando o João pedir por mensagem | João |
+| 26/11/2026 | Sem a pergunta "Como sua empresa paga imposto?" na Hoje: cada lançamento já diz quanto paga de imposto | João |
