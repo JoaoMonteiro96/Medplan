@@ -36,9 +36,9 @@ async function rota(r) {
   const aparelho = async (dados) => {
     const ctx = await nav.newContext({ viewport: { width: 412, height: 915 }, serviceWorkers: 'block', locale: 'pt-BR' });
     await ctx.addInitScript(([d]) => { if (sessionStorage.getItem('t')) return; sessionStorage.setItem('t', '1'); localStorage.clear(); localStorage.setItem('mediplan-uso-off', '1'); localStorage.setItem('mediplan-guia', 'antigo'); localStorage.setItem('mediplan-cloud-config', JSON.stringify({ url: 'https://mock.supabase.co', key: 'sb_publishable_teste1234567890' })); if (d) localStorage.setItem('mediplan-data-v2', JSON.stringify(d)); }, [dados]);
-    await ctx.route('https://cdn.jsdelivr.net/npm/@supabase/**', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: MOCK }));
+    await ctx.route('**/libs/supabase-2.45.4.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: MOCK }));
     await ctx.route('https://mock.supabase.co/**', rota);
-    await ctx.route(/^https?:\/\/(?!localhost|mock\.supabase|cdn\.jsdelivr\.net\/npm\/@supabase)/, (r) => r.abort());
+    await ctx.route(/^https?:\/\/(?!localhost|mock\.supabase)/, (r) => r.abort());
     const p = await ctx.newPage(); const erros = []; p.on('pageerror', (e) => erros.push(e.message));
     await p.goto(s.url); await p.waitForTimeout(3500); return { ctx, p, erros };
   };

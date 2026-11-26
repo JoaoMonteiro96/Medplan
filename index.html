@@ -23,10 +23,20 @@
 <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="sallos-inicio-828x1792.png" />
 <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="sallos-inicio-750x1334.png" />
 <meta name="apple-mobile-web-app-title" content="Sallos" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" />
+<link rel="preload" href="fontes/manrope-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fontes/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
 <style>
+/* fontes guardadas no próprio app: abrem sem internet e não piscam */
+@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url(fontes/inter-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;src:url(fontes/inter-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url(fontes/inter-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:swap;src:url(fontes/inter-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:800;font-display:swap;src:url(fontes/inter-latin-800-normal.woff2) format("woff2")}
+@font-face{font-family:Manrope;font-style:normal;font-weight:500;font-display:swap;src:url(fontes/manrope-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:Manrope;font-style:normal;font-weight:600;font-display:swap;src:url(fontes/manrope-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:Manrope;font-style:normal;font-weight:700;font-display:swap;src:url(fontes/manrope-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:Manrope;font-style:normal;font-weight:800;font-display:swap;src:url(fontes/manrope-latin-800-normal.woff2) format("woff2")}
+
 body{margin:0;background:#F3F5F4;font-family:Inter,system-ui,sans-serif}
 /* abertura: o primeiro quadro é igual à tela do sistema (fundo verde liso e o ícone grande no centro); depois o ícone encolhe, sobe e o nome aparece */
 html:has(#splash){background:#0B3D2E}
@@ -62,8 +72,7 @@ html:has(#splash){background:#0B3D2E}
   function showError(msg){var el=document.getElementById("error-banner");if(el){el.style.display="block";el.textContent="Erro ao carregar o Sallos:\n\n"+msg;}}
   window.addEventListener("error",function(e){if(e&&e.message)showError(e.message+"\n(linha "+e.lineno+")");});
 </script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="app.js?v=202611261906"></script>
+<script src="app.js?v=202611261918"></script>
 <script>
   if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("service-worker.js").catch(function () {}); }); }
 </script>

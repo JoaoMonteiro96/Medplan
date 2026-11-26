@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useR
 import * as ReactDOM from "react-dom/client";
 
 const STORAGE_KEY = "mediplan-data-v2";
-(function fontePremium() { try { if (typeof document === "undefined" || document.querySelector("link[data-fonte]")) return; const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap"; l.setAttribute("data-fonte", "manrope"); document.head.appendChild(l); } catch (e) {} })();
+// as fontes Manrope e Inter ficam no próprio app (pasta fontes/, carregadas pelo index.html)
 const GOLD = "#F59E0B";
 const TEAL = "#16A34A";
 const BRICK = "#DC2626";
@@ -1215,7 +1215,8 @@ const BRAPI_FREE = ["PETR4", "MGLU3", "VALE3", "ITUB4", "MXRF11", "HGLG11"];
 
 // Número que conta até o valor final ao aparecer ou mudar
 // aviso curto no rodapé, com "Desfazer"
-const avisar = (msg, desfazer) => { try { window.dispatchEvent(new CustomEvent("sallos-aviso", { detail: { msg, desfazer } })); } catch (e) {} };
+// avisar(msg, desfazer): aviso curto com "Desfazer". opc.acao troca o nome do botão; opc.fixo deixa o aviso até a pessoa tocar
+const avisar = (msg, desfazer, opc = {}) => { try { window.dispatchEvent(new CustomEvent("sallos-aviso", { detail: { msg, desfazer, ...opc } })); } catch (e) {} };
 const vibrar = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 // marca/desmarca e avisa; com silencioso=true não mostra aviso (usado no "Recebi todos")
 function comAviso(fn, feito, tipo, nome) {
@@ -1231,15 +1232,19 @@ function Aviso() {
   const [a, setA] = useState(null);
   const tm = useRef(null);
   useEffect(() => {
-    const h = (ev) => { clearTimeout(tm.current); setA({ ...ev.detail, k: Date.now() }); tm.current = setTimeout(() => setA(null), 4200); };
+    // com Desfazer, o aviso fica um pouco mais (6 s); sem botão, 4,2 s; enquanto o dedo ou o mouse estiver em cima, não some
+    const h = (ev) => { clearTimeout(tm.current); const d = ev.detail || {}; setA({ ...d, k: Date.now() }); if (!d.fixo) tm.current = setTimeout(() => setA(null), d.desfazer ? 6000 : 4200); };
     window.addEventListener("sallos-aviso", h); return () => { window.removeEventListener("sallos-aviso", h); clearTimeout(tm.current); };
   }, []);
   if (!a) return null;
+  const segura = () => clearTimeout(tm.current);
+  const solta = () => { if (!a.fixo) { clearTimeout(tm.current); tm.current = setTimeout(() => setA(null), 2500); } };
   return (
-    <div className="aviso" role="status" key={a.k}>
+    <div className="aviso" role="status" key={a.k} onPointerEnter={segura} onPointerDown={segura} onPointerLeave={solta} onFocus={segura} onBlur={solta}>
       <span className="aviso-ok" aria-hidden="true"><IconCheck size={14} color="#fff" /></span>
       <span className="aviso-t">{a.msg}</span>
-      {a.desfazer && <button type="button" onClick={() => { a.desfazer(); vibrar(6); setA(null); }}>Desfazer</button>}
+      {a.desfazer && <button type="button" onClick={() => { a.desfazer(); vibrar(6); setA(null); }}>{a.acao || "Desfazer"}</button>}
+      {a.fixo && <button type="button" className="aviso-fechar" aria-label="Fechar aviso" onClick={() => setA(null)}><IconX size={14} /></button>}
     </div>
   );
 }
@@ -2064,7 +2069,7 @@ const NAV_ALL = NAV_MAIN.concat(NAV_MORE);
 
 
 // ================= Nuvem (Supabase) =================
-const SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
+const SUPABASE_JS = "libs/supabase-2.45.4.js"; // cópia guardada no próprio app
 // Projeto padrão: quem abre o link já encontra a tela de criar conta, sem precisar colar endereço e chave.
 // A chave "publishable" é pública por natureza; quem protege os dados é a regra do banco (cada conta só lê e grava as próprias linhas).
 const CLOUD_DEFAULT = { url: "https://hhqxkizvcgnohklztkef.supabase.co", key: "sb_publishable_-UA-2TWP5dNL3NLhMjdRhQ_LcT7DWRV" };
@@ -2133,6 +2138,17 @@ const getCloudCfg = () => {
   return CLOUD_DEFAULT.url && CLOUD_DEFAULT.key ? CLOUD_DEFAULT : null;
 };
 const stableStr = (v) => JSON.stringify(v, (k, val) => (val && typeof val === "object" && !Array.isArray(val) ? Object.keys(val).sort().reduce((o, kk) => { o[kk] = val[kk]; return o; }, {}) : val));
+// gerador de PDF: só baixa quando a pessoa pede um PDF (cópia guardada no próprio app)
+let _pdfCarregando = null;
+function carregarJsPDF() {
+  if (window.jspdf) return Promise.resolve();
+  if (!_pdfCarregando) _pdfCarregando = new Promise((res, rej) => {
+    const sc = document.createElement("script"); sc.src = "libs/jspdf-2.5.1.min.js"; sc.onload = res;
+    sc.onerror = () => { _pdfCarregando = null; rej(new Error("sem internet")); };
+    document.head.appendChild(sc);
+  });
+  return _pdfCarregando;
+}
 let _sb = null, _sbKey = "";
 async function getSupabase(cfg) {
   const key = cfg.url + "|" + cfg.key;
@@ -2340,6 +2356,24 @@ function App() {
   const [selectedDay, setSelectedDay] = useState(null);
   const [navDir, setNavDir] = useState("fwd");
   useEffect(() => { registrarUso(activeTab); }, [activeTab]);
+  // versão nova baixada por trás: oferece atualizar na hora (sem isso, ela entra sozinha na próxima abertura)
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
+    const minha = (() => { const sc = document.querySelector('script[src*="app.js?v="]'); const m = sc && /v=(\d+)/.exec(sc.getAttribute("src")); return m ? m[1] : ""; })();
+    let avisado = false;
+    const h = (ev) => {
+      const d = ev.data || {};
+      if ((d.type === "sallos-nova-versao" || d.type === "sallos-versao") && d.v && minha && d.v !== minha && !avisado) {
+        avisado = true; avisar("Nova versão do Sallos pronta", () => window.location.reload(), { acao: "Atualizar", fixo: true });
+      }
+    };
+    const checar = () => { try { navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: "sallos-checar" }); } catch (e) {} };
+    const visivel = () => { if (document.visibilityState === "visible") setTimeout(checar, 2500); };
+    navigator.serviceWorker.addEventListener("message", h);
+    document.addEventListener("visibilitychange", visivel);
+    const t1 = setTimeout(checar, 3000), t2 = setTimeout(checar, 9000);
+    return () => { navigator.serviceWorker.removeEventListener("message", h); document.removeEventListener("visibilitychange", visivel); clearTimeout(t1); clearTimeout(t2); };
+  }, []);
   useEffect(() => {
     const t0 = setTimeout(enviarUso, 8000), t = setInterval(enviarUso, 120000);
     const sair = () => { if (document.visibilityState === "hidden") enviarUso(); };
@@ -3903,8 +3937,8 @@ function App() {
   }, [monthExpenseItems, monthIncomeItems, goals, viewMonth, limits]);
 
   // ---- relatório mensal em PDF ----
-  const generateMonthlyReport = () => {
-    if (!window.jspdf) { alert("A biblioteca de PDF ainda está carregando, tente novamente em instantes."); return; }
+  const generateMonthlyReport = async () => {
+    try { await carregarJsPDF(); } catch (e) { alert("Não deu para montar o PDF agora. Confira a internet e tente de novo."); return; }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const TIPOS = { plantao: "Plantão", mensal: "Cargo fixo", extra: "Recorrente", avulsa: "Avulsa" };
@@ -6195,6 +6229,7 @@ function App() {
           background: rgba(15,26,22,0.94); color: #fff; border-radius: 16px; padding: 10px 10px 10px 12px; box-shadow: 0 16px 36px -12px rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
           animation: avisoIn .42s var(--ease) both; font-size: 14px; }
         @media (min-width: 1100px) { .aviso { bottom: 28px; } }
+        .aviso .aviso-fechar { background: transparent; border: none; color: rgba(255,255,255,.7); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; padding: 0; }
         .aviso-ok { width: 26px; height: 26px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; flex-shrink: 0; animation: okPop .5s var(--ease) .05s both; }
         .aviso-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
         .aviso button { border: none; background: rgba(255,255,255,0.12); color: #6EE7B7; font: inherit; font-weight: 700; border-radius: 10px; padding: 7px 12px; cursor: pointer; flex-shrink: 0; }
