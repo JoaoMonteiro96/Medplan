@@ -24,6 +24,7 @@ TELAS = {
     "inicio": "Hoje", "calendario": "Agenda", "faturamento": "Recebimentos", "despesas": "Contas",
     "organizacao": "Organizar (antiga)", "investimentos": "Investimentos", "metas": "Metas", "visao": "Relatórios (antiga)",
     "contabilidade": "Contabilidade", "importar": "Importar", "backup": "Configurações",
+    "ferias": "Férias", "vale": "Vale a pena?", "metaplantoes": "Metas em plantões",
 }
 MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
 SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
@@ -52,8 +53,11 @@ def nuvem():
 
 def buscar(dias):
     url, chave = nuvem()
-    req = urllib.request.Request(url + "/rest/v1/rpc/resumo_uso", data=json.dumps({"dias": dias}).encode(),
-                                 headers={"apikey": chave, "Authorization": "Bearer " + chave, "Content-Type": "application/json"})
+    cab = {"apikey": chave, "Authorization": "Bearer " + chave, "Content-Type": "application/json"}
+    # a senha do relatório (x-relatorio-key) normalmente é posta pelo próprio ambiente do Claude; aqui só se vier por variável
+    if os.environ.get("RELATORIO_KEY"):
+        cab["x-relatorio-key"] = os.environ["RELATORIO_KEY"]
+    req = urllib.request.Request(url + "/rest/v1/rpc/resumo_uso", data=json.dumps({"dias": dias}).encode(), headers=cab)
     ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
     ctx = ssl.create_default_context(cafile=ca) if ca and os.path.exists(ca) else ssl.create_default_context()
     with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
@@ -74,7 +78,10 @@ def exemplo(dias):
     tela30 = [{"tela": t, "aparelhos": a * 2 + 3, "aberturas": v * 9} for t, a, v in base] + [{"tela": "visao", "aparelhos": 3, "aberturas": 5}]
     return {"de": (hoje - dt.timedelta(days=dias - 1)).isoformat(), "ate": hoje.isoformat(), "dias": dias,
             "aparelhos": 23, "aparelhos_antes": 19, "aberturas": 420, "aberturas_antes": 446, "novos": 4,
-            "aparelhos_30": 41, "aparelhos_total": 58, "por_dia": por_dia, "por_tela": tela, "por_tela_30": tela30}
+            "aparelhos_30": 41, "aparelhos_total": 58, "por_dia": por_dia, "por_tela": tela, "por_tela_30": tela30,
+            "volta": {"d1_base": 31, "d1": 17, "d7_base": 24, "d7": 11, "d30_base": 12, "d30": 5},
+            "passos": {"novos": 14, "guia": 11, "plantao": 9, "conta": 6, "recebi": 4},
+            "modos": {"simples": 15, "completo": 8}}
 
 
 def data_br(s):
@@ -212,18 +219,92 @@ def montar(r, saida):
         y -= 20
 
     usadas = {l["tela"] for l in r["por_tela"]}
-    paradas = [n for k, n in TELAS.items() if k not in usadas]
+    paradas = [n for k, n in TELAS.items() if k not in usadas and "antiga" not in n]
     if paradas and y > 70:
         y -= 18
         c.setFillColor(TINTA); c.setFont("Forte", 10); c.drawString(M, y, "Telas que ninguém abriu no período")
         y -= 15
         c.setFillColor(CINZA); c.setFont("Texto", 10); c.drawString(M, y, ", ".join(paradas))
 
-    c.setFillColor(CINZA); c.setFont("Texto", 7.5)
     agora = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3)))
-    c.drawString(M, 26, f"Gerado em {agora.day} de {MESES[agora.month - 1]} de {agora.year}, {agora:%H:%M} (Brasília)")
-    c.drawRightString(W - M, 26, "Contagem anônima: um código aleatório por aparelho")
+    def rodape():
+        c.setFillColor(CINZA); c.setFont("Texto", 7.5)
+        c.drawString(M, 26, f"Gerado em {agora.day} de {MESES[agora.month - 1]} de {agora.year}, {agora:%H:%M} (Brasília)")
+        c.drawRightString(W - M, 26, "Contagem anônima: um código aleatório por aparelho")
+    rodape()
+    if r.get("volta") or r.get("passos"):
+        c.showPage()
+        pagina_volta(c, r, W, H, M)
+        rodape()
     c.showPage(); c.save()
+
+
+def pct(a, b):
+    return f"{round(a * 100 / b)}%" if b else "—"
+
+
+def pagina_volta(c, r, W, H, M):
+    """2ª página: quem volta, primeiros passos e modo usado."""
+    c.setFillColor(BRANCO); c.rect(0, 0, W, H, fill=1, stroke=0)
+    y = H - 56
+    c.setFillColor(TINTA); c.setFont("Titulo", 20); c.drawString(M, y, "Quem volta e como começa")
+    y -= 18
+    c.setFillColor(CINZA); c.setFont("Texto", 10)
+    c.drawString(M, y, "Números mínimos: quem desligou a contagem em Ajustes não aparece. Celular e computador contam como 2.")
+    y -= 30
+
+    # ---- três cartões de volta ----
+    v = r.get("volta") or {}
+    cw, ch, gap = (W - 2 * M - 2 * 12) / 3, 92, 12
+    cards = [("Voltou no dia seguinte", v.get("d1", 0), v.get("d1_base", 0)),
+             ("Voltou na 2ª semana", v.get("d7", 0), v.get("d7_base", 0)),
+             ("Voltou depois de 1 mês", v.get("d30", 0), v.get("d30_base", 0))]
+    for i, (tit, a, b) in enumerate(cards):
+        x = M + i * (cw + gap)
+        c.setFillColor(VERDE_FUNDO); c.roundRect(x, y - ch, cw, ch, 10, fill=1, stroke=0)
+        c.setFillColor(CINZA); c.setFont("Forte", 9); c.drawString(x + 14, y - 22, tit)
+        c.setFillColor(TINTA); c.setFont("Numero", 26); c.drawString(x + 14, y - 54, pct(a, b))
+        c.setFillColor(CINZA); c.setFont("Texto", 8.5)
+        c.drawString(x + 14, y - 74, f"{num(a)} de {num(b)} que começaram" if b else "ainda sem gente suficiente")
+    y -= ch + 40
+
+    # ---- primeiros passos ----
+    p = r.get("passos") or {}
+    novos = p.get("novos", 0)
+    c.setFillColor(TINTA); c.setFont("Titulo", 13); c.drawString(M, y, "Primeiros passos")
+    c.setFillColor(CINZA); c.setFont("Texto", 9); c.drawRightString(W - M, y, "de quem começou nos últimos 30 dias")
+    y -= 22
+    etapas = [("Começaram a usar", novos), ("Terminaram o guia de abertura", p.get("guia", 0)),
+              ("Lançaram o 1º plantão", p.get("plantao", 0)), ("Colocaram a 1ª conta", p.get("conta", 0)),
+              ("Marcaram o 1º \"Caiu na conta\"", p.get("recebi", 0))]
+    bar_x, bar_w = M + 190, W - 2 * M - 190 - 90
+    for nome, val in etapas:
+        c.setFillColor(TINTA); c.setFont("Forte", 10); c.drawString(M, y, nome)
+        c.setFillColor(VERDE_FUNDO); c.roundRect(bar_x, y - 1, bar_w, 9, 4, fill=1, stroke=0)
+        if novos and val:
+            c.setFillColor(VERDE2); c.roundRect(bar_x, y - 1, max(9, bar_w * min(1, val / novos)), 9, 4, fill=1, stroke=0)
+        c.setFillColor(TINTA); c.setFont("Numero", 10)
+        c.drawRightString(W - M - 40, y, num(val)); c.setFillColor(CINZA); c.setFont("Texto", 9); c.drawRightString(W - M, y, pct(val, novos))
+        y -= 24
+    y -= 20
+
+    # ---- modo ----
+    m = r.get("modos") or {}
+    s_, co = m.get("simples", 0), m.get("completo", 0)
+    c.setFillColor(TINTA); c.setFont("Titulo", 13); c.drawString(M, y, "Modo usado")
+    c.setFillColor(CINZA); c.setFont("Texto", 9); c.drawRightString(W - M, y, "no período do relatório")
+    y -= 26
+    tot = s_ + co
+    largura = W - 2 * M
+    if tot:
+        ws = largura * s_ / tot
+        c.setFillColor(VERDE2); c.roundRect(M, y - 4, max(ws, 1), 16, 6, fill=1, stroke=0)
+        c.setFillColor(VERDE_CLARO); c.roundRect(M + ws, y - 4, max(largura - ws, 1), 16, 6, fill=1, stroke=0)
+        y -= 22
+        c.setFillColor(TINTA); c.setFont("Forte", 10)
+        c.drawString(M, y, f"Simples: {num(s_)} ({pct(s_, tot)})"); c.drawRightString(W - M, y, f"Completo: {num(co)} ({pct(co, tot)})")
+    else:
+        c.setFillColor(CINZA); c.setFont("Texto", 10); c.drawString(M, y, "Ainda sem dados do modo (começa a contar com a versão nova do app).")
 
 
 def main():

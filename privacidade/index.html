@@ -63,7 +63,7 @@
     <div class="tabela">
       <div><b>O que você lança</b><span>Plantões, hospitais e cargos, valores recebidos, contas, impostos, notas fiscais, investimentos, metas, férias e o número de WhatsApp do financeiro dos hospitais, se você salvar.</span></div>
       <div><b>Sua conta</b><span>E-mail e senha, se você criar conta. A senha é guardada embaralhada pelo serviço de login; ninguém do Sallos consegue vê-la.</span></div>
-      <div><b>Uso do app</b><span>Quais telas são abertas e quantas vezes por dia, ligadas a um código sorteado no aparelho. Não vai nenhum valor, nome ou e-mail. Dá para desligar em Configurações, Privacidade e trava.</span></div>
+      <div><b>Uso do app</b><span>Quais telas são abertas e quantas vezes por dia, o modo usado (Simples ou Completo) e se os primeiros passos já foram feitos (terminou o guia, lançou o primeiro plantão, a primeira conta, o primeiro recebimento), tudo ligado a um código sorteado no aparelho. Não vai nenhum valor, nome ou e-mail. Essa contagem não fica ligada à sua conta, por isso não é apagada quando você exclui a conta. Dá para desligar em Configurações, Privacidade e trava.</span></div>
       <div><b>Dados técnicos</b><span>Como em qualquer site, os servidores que entregam o app registram o endereço de internet (IP) e o tipo de aparelho.</span></div>
     </div>
     <p>O Sallos não pede CPF, dados de cartão, senha de banco nem informações de saúde de pacientes.</p>
@@ -79,7 +79,7 @@
     <ul>
       <li>Mostrar suas contas, plantões, impostos e investimentos, e guardar tudo entre seus aparelhos.</li>
       <li>Buscar cotações de ações e do dólar.</li>
-      <li>Entender quais telas são mais usadas, para melhorar o app.</li>
+      <li>Entender quais telas são mais usadas e se as pessoas voltam ao app, para melhorar o app.</li>
     </ul>
     <p>Usamos os dados para prestar o serviço que você pediu ao usar o app (Lei 13.709/2018, a LGPD, art. 7º, V) e, no caso da contagem de uso, pelo interesse em melhorar o app (art. 7º, IX), com a opção de desligar.</p>
 
@@ -88,11 +88,12 @@
     <div class="tabela">
       <div><b>Supabase</b><span>Banco de dados, login e pasta das notas fiscais (só para quem cria conta).</span></div>
       <div><b>GitHub Pages</b><span>Entrega as páginas do app e do site.</span></div>
-      <div><b>brapi e AwesomeAPI</b><span>Cotações. Recebem só o código dos ativos (como PETR4) ou o pedido da cotação do dólar, sem nada que identifique você.</span></div>
+      <div><b>brapi, AwesomeAPI e CoinGecko</b><span>Cotações de ações, fundos, dólar e criptomoedas. Recebem só o código dos ativos (como PETR4 ou BTC), sem nada que identifique você.</span></div>
+      <div><b>B3, Tesouro Direto e Banco Central</b><span>Preços, proventos, CDI e IPCA. Quem busca esses dados é o servidor do Sallos, e não o seu aparelho; eles não recebem nada sobre você.</span></div>
       <div><b>Google Fonts, jsDelivr e cdnjs</b><span>Entregam as letras e partes do programa, como em muitos sites.</span></div>
       <div><b>WhatsApp</b><span>Só quando você toca em Cobrar: o app abre o WhatsApp com a mensagem pronta, e quem envia é você.</span></div>
     </div>
-    <p>Alguns desses serviços podem guardar dados fora do Brasil, seguindo as regras da LGPD para isso. Também podemos ter que entregar dados se uma lei ou ordem judicial exigir.</p>
+    <p>Como em qualquer site, esses serviços recebem o endereço de internet (IP) do aparelho que faz o pedido. Alguns deles podem guardar dados fora do Brasil, seguindo as regras da LGPD para isso. Também podemos ter que entregar dados se uma lei ou ordem judicial exigir.</p>
 
     <h2>Por quanto tempo</h2>
     <p>Enquanto sua conta existir. Ao excluir a conta, os dados são apagados na hora do banco do Sallos; cópias de segurança automáticas do provedor podem levar alguns dias para sumir. Os dados que estão só no seu aparelho somem quando você exclui a conta, sai dela ou apaga os dados do navegador.</p>

@@ -325,3 +325,105 @@ alter table public.proventos_b3 enable row level security;  -- só a função l�
 select cron.unschedule(jobname) from cron.job where jobname = 'sallos-historico';
 select cron.schedule('sallos-historico', '0 11 * * 1-5',
   $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/historico', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{}'::jsonb, timeout_milliseconds := 120000) $$);
+
+-- ============================================================
+-- Proteções e contagem nova (26/11/2026)
+-- Rode este bloco inteiro de uma vez. Antes, crie os dois códigos no cofre (Vault) do Supabase:
+--   select vault.create_secret('<invente um código longo>', 'sallos_cron');        -- senha das tarefas automáticas
+--   select vault.create_secret('<invente outro código longo>', 'sallos_relatorio'); -- senha do relatório de uso
+-- O código 'sallos_cron' também vai em Edge Functions > Secrets com o nome CRON_SEGREDO.
+-- Enquanto um código não existir, a parte dele continua aberta como antes (nada para de funcionar na troca).
+-- ============================================================
+
+-- cabeçalhos que as tarefas automáticas mandam para as funções (com a senha do cofre)
+create or replace function public.sallos_cron_headers()
+returns jsonb language sql stable security definer set search_path = public, vault as $$
+  select jsonb_build_object('Content-Type', 'application/json', 'x-sallos-cron',
+    coalesce((select decrypted_secret from vault.decrypted_secrets where name = 'sallos_cron' limit 1), ''));
+$$;
+revoke all on function public.sallos_cron_headers() from public, anon, authenticated;
+
+select cron.unschedule(jobname) from cron.job where jobname in ('sallos-cotacoes', 'sallos-cotacoes-fechamento', 'sallos-rendafixa', 'sallos-historico');
+select cron.schedule('sallos-cotacoes', '0 14,16,18 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/cotacoes', headers := public.sallos_cron_headers(), body := '{"todos": true}'::jsonb) $$);
+select cron.schedule('sallos-cotacoes-fechamento', '30 21 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/cotacoes', headers := public.sallos_cron_headers(), body := '{"todos": true}'::jsonb) $$);
+select cron.schedule('sallos-rendafixa', '15 13,20 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/rendafixa', headers := public.sallos_cron_headers(), body := '{}'::jsonb, timeout_milliseconds := 120000) $$);
+select cron.schedule('sallos-historico', '0 11 * * 1-5',
+  $$ select net.http_post(url := 'https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/historico', headers := public.sallos_cron_headers(), body := '{}'::jsonb, timeout_milliseconds := 120000) $$);
+
+-- contagem de uso: limite por dia contra enchimento com aparelhos falsos
+create index if not exists uso_telas_dia on public.uso_telas (dia);
+create or replace function public.registrar_uso(p_aparelho text, p_linhas jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if jsonb_typeof(p_linhas) <> 'array' or jsonb_array_length(p_linhas) > 60 or char_length(p_aparelho) not between 8 and 64 then return; end if;
+  -- aparelho novo no dia só entra se o dia ainda tiver menos de 5.000 aparelhos
+  if not exists (select 1 from uso_telas where aparelho = p_aparelho and dia = current_date)
+     and (select count(distinct aparelho) from uso_telas where dia = current_date) >= 5000 then return; end if;
+  insert into public.uso_telas (aparelho, dia, tela, vezes)
+  select p_aparelho, (l->>'dia')::date, left(l->>'tela', 30), least(500, greatest(1, (l->>'vezes')::int))
+  from jsonb_array_elements(p_linhas) l
+  where (l->>'dia')::date between current_date - 30 and current_date + 1
+  on conflict on constraint uso_telas_pkey do update set vezes = greatest(public.uso_telas.vezes, excluded.vezes);
+end $$;
+revoke all on function public.registrar_uso(text, jsonb) from public;
+grant execute on function public.registrar_uso(text, jsonb) to anon, authenticated;
+
+-- resumo de uso: só totais, e só para quem manda a senha do relatório (cabeçalho x-relatorio-key)
+-- Linhas cuja tela começa com "_" não são telas: "_modo:simples" / "_modo:completo" (modo usado no dia)
+-- e "_m:guia", "_m:plantao", "_m:conta", "_m:recebi" (primeiros passos de cada aparelho, uma vez só).
+create or replace function public.resumo_uso(dias int default 3)
+returns jsonb language plpgsql stable security definer set search_path = public, vault as $$
+declare
+  n   int  := least(90, greatest(1, coalesce(dias, 3)));
+  ate date := current_date;
+  de  date := current_date - (least(90, greatest(1, coalesce(dias, 3))) - 1);
+  senha text := (select decrypted_secret from vault.decrypted_secrets where name = 'sallos_relatorio' limit 1);
+  veio  text := coalesce(current_setting('request.headers', true)::json ->> 'x-relatorio-key', '');
+begin
+  if senha is not null and senha <> '' and veio <> senha then raise exception 'sem permissão'; end if;
+  return (
+  with t as (select * from uso_telas where left(tela, 1) <> '_'),
+       primeiro as (select aparelho, min(dia) d0 from t group by aparelho),
+       marcos as (select aparelho, tela from uso_telas where left(tela, 3) = '_m:' group by aparelho, tela),
+       novos30 as (select aparelho from primeiro where d0 > ate - 30)
+  select jsonb_build_object(
+    'de', de, 'ate', ate, 'dias', n,
+    'aparelhos',          (select count(distinct aparelho) from t where dia between de and ate),
+    'aparelhos_antes',    (select count(distinct aparelho) from t where dia between de - n and de - 1),
+    'aberturas',          (select coalesce(sum(vezes), 0) from t where dia between de and ate),
+    'aberturas_antes',    (select coalesce(sum(vezes), 0) from t where dia between de - n and de - 1),
+    'novos',              (select count(*) from primeiro where d0 between de and ate),
+    'aparelhos_30',       (select count(distinct aparelho) from t where dia > ate - 30),
+    'aparelhos_total',    (select count(*) from primeiro),
+    'por_dia', coalesce((select jsonb_agg(jsonb_build_object('dia', d, 'aparelhos', a, 'aberturas', v) order by d)
+                 from (select dia d, count(distinct aparelho) a, sum(vezes) v from t where dia > ate - 14 group by dia) x), '[]'::jsonb),
+    'por_tela', coalesce((select jsonb_agg(jsonb_build_object('tela', tl, 'aparelhos', a, 'aberturas', v) order by a desc, v desc)
+                 from (select tela tl, count(distinct aparelho) a, sum(vezes) v from t where dia between de and ate group by tela) x), '[]'::jsonb),
+    'por_tela_30', coalesce((select jsonb_agg(jsonb_build_object('tela', tl, 'aparelhos', a, 'aberturas', v) order by a desc, v desc)
+                 from (select tela tl, count(distinct aparelho) a, sum(vezes) v from t where dia > ate - 30 group by tela) x), '[]'::jsonb),
+    -- quem volta: dos que começaram nos últimos 90 dias, quantos usaram de novo no dia seguinte, na 2ª semana e depois de 1 mês
+    'volta', jsonb_build_object(
+      'd1_base',  (select count(*) from primeiro where d0 between ate - 90 and ate - 1),
+      'd1',       (select count(*) from primeiro p where d0 between ate - 90 and ate - 1 and exists (select 1 from t where t.aparelho = p.aparelho and t.dia = p.d0 + 1)),
+      'd7_base',  (select count(*) from primeiro where d0 between ate - 90 and ate - 13),
+      'd7',       (select count(*) from primeiro p where d0 between ate - 90 and ate - 13 and exists (select 1 from t where t.aparelho = p.aparelho and t.dia between p.d0 + 7 and p.d0 + 13)),
+      'd30_base', (select count(*) from primeiro where d0 between ate - 90 and ate - 36),
+      'd30',      (select count(*) from primeiro p where d0 between ate - 90 and ate - 36 and exists (select 1 from t where t.aparelho = p.aparelho and t.dia between p.d0 + 30 and p.d0 + 36))),
+    -- primeiros passos de quem começou nos últimos 30 dias
+    'passos', jsonb_build_object(
+      'novos',    (select count(*) from novos30),
+      'guia',     (select count(*) from novos30 x where exists (select 1 from marcos m where m.aparelho = x.aparelho and m.tela = '_m:guia')),
+      'plantao',  (select count(*) from novos30 x where exists (select 1 from marcos m where m.aparelho = x.aparelho and m.tela = '_m:plantao')),
+      'conta',    (select count(*) from novos30 x where exists (select 1 from marcos m where m.aparelho = x.aparelho and m.tela = '_m:conta')),
+      'recebi',   (select count(*) from novos30 x where exists (select 1 from marcos m where m.aparelho = x.aparelho and m.tela = '_m:recebi'))),
+    -- modo usado no período
+    'modos', jsonb_build_object(
+      'simples',  (select count(distinct aparelho) from uso_telas where tela = '_modo:simples' and dia between de and ate),
+      'completo', (select count(distinct aparelho) from uso_telas where tela = '_modo:completo' and dia between de and ate))
+  ));
+end $$;
+revoke all on function public.resumo_uso(int) from public;
+grant execute on function public.resumo_uso(int) to anon, authenticated;

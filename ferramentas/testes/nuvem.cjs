@@ -2,6 +2,7 @@
 const { chromium } = require('playwright');
 const { servidor, dadosDeTeste } = require('../comum.cjs');
 const DB = new Map(); let relogio = Date.parse('2026-11-22T10:00:00Z'); const consultas = [];
+let rpcFalha = false;
 const agora = () => new Date(relogio += 1000).toISOString();
 const MOCK = `(() => {
   const ses = { user: { id: 'u1', email: 'teste@exemplo.com' }, access_token: 'x' };
@@ -13,14 +14,16 @@ const MOCK = `(() => {
     then(ok, no) { return call(q).then(ok, no); } }; return b; };
   window.supabase = { createClient: () => ({
     auth: { getSession: async () => ({ data: { session: ses } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }), signOut: async () => ({}) },
-    from: builder, rpc: async () => ({ data: null, error: null }),
-    storage: { from: () => ({ list: async () => ({ data: [] }), remove: async () => ({}) }) },
+    from: builder, rpc: (n) => call({ rpc: n }),
+    storage: { from: () => ({ list: async (pasta, o) => ({ data: (window.__notas || []).slice(0, (o && o.limit) || 100).map((name) => ({ name })), error: null }),
+      remove: async (l) => { window.__notas = (window.__notas || []).filter((n) => !l.includes('u1/' + n)); return { data: null, error: null }; } }) },
   }) };
 })();`;
 async function rota(r) {
   const q = JSON.parse(r.request().postData() || '{}'); consultas.push(q);
   let resp = { data: null, error: null };
-  if (q.table === 'records') {
+  if (q.rpc) { if (rpcFalha) resp.error = { message: 'função não encontrada' }; else DB.clear(); }
+  else if (q.table === 'records') {
     if (q.op === 'upsert') q.rows.forEach((x) => DB.set(x.collection + '|' + x.id, { ...x, updated_at: agora() }));
     else if (q.op === 'delete') DB.clear();
     else { let l = [...DB.values()]; q.filtros.forEach(([f, c, v]) => { if (f === 'gt') l = l.filter((x) => x[c] > v); }); l.sort((a, b) => (a.collection + a.id).localeCompare(b.collection + b.id)); resp.data = l.slice(q.range[0], q.range[1] + 1); }
@@ -83,10 +86,24 @@ async function rota(r) {
   await B.p.evaluate(() => { const r = [...document.querySelectorAll('button, [role=button]')].find((x) => /Nuvem e conta/.test(x.textContent)); r && r.click(); });
   await B.p.waitForTimeout(800);
   const temBotao = await B.p.$('#cc-excluir'); ok(!!temBotao, 'botão Excluir minha conta aparece');
+  await B.p.evaluate(() => { window.__notas = Array.from({ length: 250 }, (_, i) => 'nota-' + i + '.pdf'); });
   if (temBotao) { await temBotao.click(); await B.p.waitForTimeout(1500); }
   ok(DB.size === 0, 'nuvem vazia depois de excluir');
+  ok(await B.p.evaluate(() => (window.__notas || []).length === 0), 'apagou as 250 notas fiscais (mais de 100)');
+  ok(await B.p.evaluate(() => /conta e seus dados foram excluídos/.test(document.body.innerText)), 'aviso de conta excluída');
   const resto = await B.p.evaluate(() => [localStorage.getItem('mediplan-data-v2'), localStorage.getItem('mediplan-sync-cursor'), localStorage.getItem('mediplan-owner')]);
   ok(resto.every((x) => !x || x === 'null' || !JSON.parse(x) || (JSON.parse(x).shifts || []).length === 0), 'aparelho limpo: ' + JSON.stringify(resto).slice(0, 120));
+  // 6) excluir quando a parte do login falha: apaga os dados e avisa que o login ficou
+  rpcFalha = true;
+  A.p.on('dialog', (d) => d.type() === 'prompt' ? d.accept('EXCLUIR') : d.accept());
+  await A.p.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /engrenagem|Configura/i.test(x.getAttribute('aria-label') || '')); b && b.click(); });
+  await A.p.waitForTimeout(800);
+  await A.p.evaluate(() => { const r = [...document.querySelectorAll('button, [role=button]')].find((x) => /Nuvem e conta/.test(x.textContent)); r && r.click(); });
+  await A.p.waitForTimeout(800);
+  const botaoA = await A.p.$('#cc-excluir');
+  if (botaoA) { await botaoA.click(); await A.p.waitForTimeout(1200); }
+  ok(await A.p.evaluate(() => /login não/.test(document.body.innerText)), 'avisa que o login não foi apagado quando a função falha');
+  ok(DB.size === 0, 'mesmo assim apagou os dados da nuvem');
   ok(!A.erros.length && !B.erros.length, 'sem erros na página ' + A.erros.concat(B.erros).join(' | '));
   
   console.log(falhas ? `${falhas} falha(s)` : 'Tudo certo'); await nav.close(); s.fechar();

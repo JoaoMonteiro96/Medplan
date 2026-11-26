@@ -13,7 +13,7 @@ function chaveAdmin(): string {
   return "";
 }
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, chaveAdmin(), { auth: { persistSession: false } });
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Content-Type": "application/json" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-sallos-cron", "Content-Type": "application/json" };
 const resp = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: cors });
 
 const DATASET = "df56aa42-484a-4a59-8184-7676580c81e3"; // "Taxas dos Títulos Ofertados pelo Tesouro Direto"
@@ -96,8 +96,14 @@ async function ipca() {
   return { linhas: rows.length };
 }
 
+// Senha das tarefas automáticas: o agendador do Supabase manda o cabeçalho x-sallos-cron com o valor do
+// segredo CRON_SEGREDO (guardado no painel, em Edge Functions). Sem esse segredo, a função aceita qualquer
+// chamada, para nada parar durante a troca.
+const CRON_SEGREDO = Deno.env.get("CRON_SEGREDO") ?? "";
+const doAgendador = (req: Request) => !CRON_SEGREDO || req.headers.get("x-sallos-cron") === CRON_SEGREDO;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return resp("ok");
+  if (!doAgendador(req)) return resp({ erro: "sem permissão" }, 401);
   const out: Record<string, unknown> = {};
   try { out.tesouro = await tesouro(); } catch (e) { out.tesouro = { erro: String(e) }; }
   try { out.cdi = await cdi(); } catch (e) { out.cdi = { erro: String(e) }; }

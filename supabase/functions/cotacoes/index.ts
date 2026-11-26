@@ -11,7 +11,7 @@ function chaveAdmin(): string {
 }
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, chaveAdmin(), { auth: { persistSession: false } });
 const TOKEN = Deno.env.get("BRAPI_TOKEN") ?? "";
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Content-Type": "application/json" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-sallos-cron", "Content-Type": "application/json" };
 const resp = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: cors });
 
 // pregão da B3, em horário de Brasília (UTC-3)
@@ -21,8 +21,20 @@ function pregao() {
   return dia >= 1 && dia <= 5 && min >= 590 && min <= 1125;
 }
 
+// Senha das tarefas automáticas: o agendador do Supabase manda o cabeçalho x-sallos-cron com o valor do
+// segredo CRON_SEGREDO (guardado no painel, em Edge Functions). Sem esse segredo, a função aceita qualquer
+// chamada, para nada parar durante a troca.
+const CRON_SEGREDO = Deno.env.get("CRON_SEGREDO") ?? "";
+const doAgendador = (req: Request) => !CRON_SEGREDO || req.headers.get("x-sallos-cron") === CRON_SEGREDO;
+// quem chama pelo app precisa estar logado (o app manda o login da pessoa)
+async function logado(req: Request) {
+  const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!jwt || jwt.startsWith("sb_")) return false;
+  try { const { data } = await sb.auth.getUser(jwt); return !!data?.user; } catch (_e) { return false; }
+}
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return resp("ok");
+  if (!doAgendador(req) && !(await logado(req))) return resp({ erro: "sem permissão" }, 401);
   if (!TOKEN) return resp({ erro: "Falta o segredo BRAPI_TOKEN" }, 500);
   const desde = new Date(Date.now() - 30 * 864e5).toISOString();
   const { data: ped } = await sb.from("cotacoes_pedidos").select("ticker").gte("visto_em", desde);

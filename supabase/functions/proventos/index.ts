@@ -9,7 +9,7 @@ function chaveAdmin(): string {
   return "";
 }
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, chaveAdmin(), { auth: { persistSession: false } });
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Content-Type": "application/json" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-sallos-cron", "Content-Type": "application/json" };
 const resp = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: cors });
 const b64 = (o: unknown) => btoa(JSON.stringify(o));
 const iso = (br: string) => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(br || "").trim()); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
@@ -51,18 +51,27 @@ async function buscar(t: string) {
   return { proventos: lista(cd), nome: c.tradingName || "" };
 }
 
+// Senha das tarefas automáticas: o agendador do Supabase manda o cabeçalho x-sallos-cron com o valor do
+// segredo CRON_SEGREDO (guardado no painel, em Edge Functions). Sem esse segredo, a função aceita qualquer
+// chamada, para nada parar durante a troca.
+const CRON_SEGREDO = Deno.env.get("CRON_SEGREDO") ?? "";
+const doAgendador = (req: Request) => !CRON_SEGREDO || req.headers.get("x-sallos-cron") === CRON_SEGREDO;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return resp("ok");
   const u = new URL(req.url);
   const t = (u.searchParams.get("t") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
   log.length = 0;
-  if (!t) return resp({ erro: "informe ?t=TICKER" }, 400);
+  if (!/^[A-Z]{4}\d{1,2}$/.test(t)) return resp({ erro: "informe ?t=TICKER (ex.: PETR4, MXRF11)" }, 400);
+  const debug = u.searchParams.has("debug") && !!CRON_SEGREDO && doAgendador(req);
   const { data: c } = await sb.from("proventos_b3").select("dados,em").eq("ticker", t).maybeSingle();
-  if (c && !u.searchParams.has("debug") && Date.now() - new Date(c.em).getTime() < 12 * 3600e3) return resp(c.dados);
+  if (c && !debug && Date.now() - new Date(c.em).getTime() < 12 * 3600e3) return resp(c.dados);
+  // limite de buscas novas na B3: no máximo 200 por hora (o resto recebe o que já está guardado)
+  const { count } = await sb.from("proventos_b3").select("ticker", { count: "exact", head: true }).gte("em", new Date(Date.now() - 3600e3).toISOString());
+  if ((count ?? 0) >= 200) return resp(c ? c.dados : { proventos: [], aviso: "tente de novo em alguns minutos" });
   try {
     const dados = await buscar(t);
     dados.proventos.sort((a, b) => String(b.data_com).localeCompare(String(a.data_com)));
-    if (u.searchParams.has("debug")) return resp({ ...dados, log });
+    if (debug) return resp({ ...dados, log });
     // só guarda quando veio alguma coisa (se a B3 falhar, tenta de novo na próxima vez)
     // a B3 só mostra uns 12 meses: junta com o que já estava guardado, para o histórico crescer
     const chave = (x: Prov) => `${x.data_com}|${x.tipo}|${x.valor}`;

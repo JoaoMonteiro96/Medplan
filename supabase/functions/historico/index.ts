@@ -13,7 +13,7 @@ function chaveAdmin(): string {
   return "";
 }
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, chaveAdmin(), { auth: { persistSession: false } });
-const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Content-Type": "application/json" };
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-sallos-cron", "Content-Type": "application/json" };
 const resp = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: cors });
 const BASE = "https://bvmf.bmfbovespa.com.br/InstDados/SerHist/";
 
@@ -64,10 +64,24 @@ async function gravar(nome: string) {
 }
 const nomeDia = (dia: string) => `COTAHIST_D${dia.slice(8, 10)}${dia.slice(5, 7)}${dia.slice(0, 4)}.ZIP`;
 
+// Senha das tarefas automáticas: o agendador do Supabase manda o cabeçalho x-sallos-cron com o valor do
+// segredo CRON_SEGREDO (guardado no painel, em Edge Functions). Sem esse segredo, a função aceita qualquer
+// chamada, para nada parar durante a troca.
+const CRON_SEGREDO = Deno.env.get("CRON_SEGREDO") ?? "";
+const doAgendador = (req: Request) => !CRON_SEGREDO || req.headers.get("x-sallos-cron") === CRON_SEGREDO;
+// aceita só AAAA-MM e AAAA-MM-DD de 2020 até hoje
+function dataOk(v: string | null, tam: number) {
+  if (!v) return false;
+  if (tam === 7 ? !/^\d{4}-(0[1-9]|1[0-2])$/.test(v) : !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(v)) return false;
+  const d = new Date(v + (tam === 7 ? "-01" : "") + "T12:00:00Z");
+  return !isNaN(d.getTime()) && d.getUTCFullYear() >= 2020 && d.getTime() <= Date.now() + 864e5;
+}
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return resp("ok");
+  if (!doAgendador(req)) return resp({ erro: "sem permissão" }, 401);
   const u = new URL(req.url);
   const mes = u.searchParams.get("mes"), dia = u.searchParams.get("dia");
+  if ((mes && !dataOk(mes, 7)) || (dia && !dataOk(dia, 10))) return resp({ erro: "use mes=AAAA-MM ou dia=AAAA-MM-DD" }, 400);
   try {
     if (mes) { const nome = `COTAHIST_M${mes.slice(5, 7)}${mes.slice(0, 4)}.ZIP`; return resp({ arquivo: nome, linhas: await gravar(nome) }); }
     if (dia) return resp({ arquivo: nomeDia(dia), linhas: await gravar(nomeDia(dia)) });

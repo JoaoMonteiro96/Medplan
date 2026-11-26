@@ -1728,6 +1728,7 @@ function BoasVindas({ onFim }) {
 const dataCurta = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}/${m}`; };
 const semCurta = (iso) => ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][new Date(iso + "T12:00:00").getDay()];
 function FeriasSheet({ lista = [], calcular, onSalvar, onApagar, onTirar, onClose }) {
+  useEffect(() => { registrarUso("ferias"); }, []);
   const hoje = todayStr();
   const padrao = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + 1); const i = dateStr(d.getFullYear(), d.getMonth(), 1); return [i, addDaysIso(i, 14)]; };
   const prox = lista.find((f) => f.fim >= hoje) || null;
@@ -1855,6 +1856,32 @@ function ApagarPlantoesSheet({ vinculo, shifts = [], onApagar, onClose }) {
         </div>
         {(vinculo.fixos || []).some((f) => !f.fim) && <div className="field-hint">O plantão fixo para de se repetir.</div>}
         <button type="button" className="btn apl-btn" id="apl-ok" disabled={n === 0} onClick={() => { onApagar(modo); onClose(); }}><IconTrash size={15} />{n ? `Apagar ${pl(n)}` : "Nada para apagar"}</button>
+      </div>
+    </div>
+  );
+}
+
+// pergunta única: como a empresa da pessoa paga imposto (troca os 27,5% de partida por uma taxa típica)
+const IMPOSTO_TIPICO = [
+  ["simples", "Simples Nacional", 6, "a maioria dos médicos com empresa"],
+  ["presumido", "Lucro Presumido", 16.33, "IRPJ, CSLL, PIS, Cofins e ISS"],
+];
+// imposto que a própria pessoa ainda tem de pagar no mês: fica de fora o que já vem com imposto pago (Pix como sócio, carteira, pró-labore)
+const impostoAPagar = (itens) => Math.max(0, (itens || []).filter((i) => i.forma !== "socio" && i.forma !== "clt").reduce((a, i) => a + (Number(i.gross) || 0) - (Number(i.net) || 0), 0));
+function ImpostoPergunta({ atual, onEscolher, onCalcular, onFechar }) {
+  return (
+    <div className="card rm imp-perg" id="imposto-pergunta">
+      <div className="rm-h"><div><span>Para acertar o imposto</span><h3>Como sua empresa paga imposto?</h3></div><button type="button" className="rm-x" aria-label="Agora não" onClick={onFechar}><IconX size={16} /></button></div>
+      <div className="imp-ops">
+        {IMPOSTO_TIPICO.map(([k, nome, pct, sub]) => (
+          <button key={k} type="button" className="imp-op" data-regime={k} onClick={() => onEscolher(pct, nome)}>
+            <b>{nome}</b><small>{sub}</small><span className="mono">cerca de {pct.toLocaleString("pt-BR")}%</span>
+          </button>
+        ))}
+      </div>
+      <div className="imp-pe">
+        <button type="button" className="btn btn-ghost sm" onClick={onCalcular}>Calcular com meus números</button>
+        <span>Hoje o app usa {(Number(atual) || 0).toLocaleString("pt-BR")}%.</span>
       </div>
     </div>
   );
@@ -2062,6 +2089,13 @@ function registrarUso(tela) {
     f[k] = Math.min(500, (f[k] || 0) + 1); localStorage.setItem(USO_FILA, JSON.stringify(f));
   } catch (e) {}
 }
+// primeiros passos (uma vez por aparelho) e modo do dia: entram na contagem como "_m:..." e "_modo:...", sem nenhum valor
+const USO_MARCOS = "mediplan-uso-marcos";
+function registrarMarco(nome) {
+  if (!usoLigado()) return;
+  try { const feitos = JSON.parse(localStorage.getItem(USO_MARCOS) || "{}"); if (feitos[nome]) return; feitos[nome] = 1; localStorage.setItem(USO_MARCOS, JSON.stringify(feitos)); } catch (e) { return; }
+  registrarUso("_m:" + nome);
+}
 let usoEnviando = false, usoUltimo = "";
 async function enviarUso() {
   if (usoEnviando || !usoLigado() || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
@@ -2160,12 +2194,12 @@ const AUTH_CSS = `
   .auth-foot { margin-top: 18px; padding-top: 14px; border-top: 1px solid #E7EBF0; font-size: 12.5px; color: #94A3B8; }
 `;
 
-function AuthScreen({ cfg, onSkip, recovery, onRecovered }) {
+function AuthScreen({ cfg, onSkip, recovery, onRecovered, aviso }) {
   const [mode, setMode] = useState(recovery ? "nova" : "entrar");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const [msg, setMsg] = useState(aviso ? { text: aviso, err: false } : null);
   const run = async (fn) => { setBusy(true); setMsg(null); try { await fn(await getSupabase(cfg)); } catch (e) { setMsg({ err: true, text: authMsg(e) }); } finally { setBusy(false); } };
   const back = window.location.origin + window.location.pathname;
   const submit = () => {
@@ -2409,6 +2443,7 @@ function App() {
     catch (e) { window.alert(e.message || "Não foi possível anexar."); }
   };
   const [authNeeded, setAuthNeeded] = useState(false);
+  const [saidaAviso, setSaidaAviso] = useState(""); // aviso mostrado na tela de entrar (ex.: depois de excluir a conta)
   const [recovery, setRecovery] = useState(false);
   const [cloud, setCloud] = useState({ status: getCloudCfg() ? "loading" : "off", msg: "" });
   const syncedRef = useRef(null);
@@ -2639,23 +2674,37 @@ function App() {
       const resp = window.prompt("Para confirmar, escreva EXCLUIR");
       if ((resp || "").trim().toUpperCase() !== "EXCLUIR") return;
       setCloud({ status: "saving" });
+      let loginFicou = false;
       try {
         const sb = await getSupabase(cloudCfg);
         const uid = sessionRef.current && sessionRef.current.user.id;
         if (!uid) throw new Error("sem sessão");
-        try { const { data } = await sb.storage.from(ANEXO_BUCKET).list(uid, { limit: 1000 }); const arqs = (data || []).map((f) => `${uid}/${f.name}`); if (arqs.length) await sb.storage.from(ANEXO_BUCKET).remove(arqs); } catch (e) {}
-        const { error } = await sb.from("records").delete().eq("user_id", uid);
-        if (error) throw error;
-        try { await sb.rpc("excluir_minha_conta"); } catch (e) {}
+        // notas fiscais: apaga de 100 em 100 até a pasta ficar vazia (sem limite de quantidade)
+        for (let volta = 0; volta < 200; volta++) {
+          const { data, error } = await sb.storage.from(ANEXO_BUCKET).list(uid, { limit: 100 });
+          if (error) throw error;
+          const arqs = (data || []).filter((f) => f && f.name).map((f) => `${uid}/${f.name}`);
+          if (!arqs.length) break;
+          const { error: e2 } = (await sb.storage.from(ANEXO_BUCKET).remove(arqs)) || {};
+          if (e2) throw e2;
+        }
+        // apaga dados e login de uma vez; se a função falhar, apaga ao menos os dados e avisa que o login ficou
+        const r = await sb.rpc("excluir_minha_conta");
+        if (r && r.error) {
+          const { error } = await sb.from("records").delete().eq("user_id", uid);
+          if (error) throw error;
+          loginFicou = true;
+        }
         try { await sb.auth.signOut(); } catch (e) {}
-      } catch (e) { setCloud({ status: "offline", msg: "Não deu para excluir agora. Confira a internet e tente de novo." }); return; }
+      } catch (e) { setCloud({ status: "offline", msg: "Não deu para terminar a exclusão. Confira a internet e tente de novo." }); avisar("Não deu para excluir agora. Confira a internet e tente de novo."); return; }
       pulledRef.current = false; syncedRef.current = null;
       COLLECTIONS.forEach((c) => settersRef.current[c]([]));
       settersRef.current.settings({});
       [STORAGE_KEY, OWNER_KEY, SYNCED_KEY, CURSOR_KEY, "mediplan-resumo-visto", "mediplan-guia", "mediplan-guia-off"].forEach((k) => lsSet(k, null));
       try { indexedDB.deleteDatabase("mediplan-anexos"); } catch (e) {}
+      setSaidaAviso(loginFicou ? "Seus dados foram apagados, mas o login não. Entre de novo e toque em Excluir outra vez." : "Sua conta e seus dados foram excluídos.");
       setSession(null); setAuthNeeded(true);
-      avisar("Conta e dados excluídos");
+      avisar(loginFicou ? "Seus dados foram apagados, mas o login não. Entre de novo e toque em Excluir outra vez." : "Conta e dados excluídos");
     },
   };
   const cloudLabel = { synced: "Salvo na nuvem", saving: "Salvando…", loading: "Carregando…", offline: "Sem conexão: salvo no aparelho", auth: "Entre na sua conta", off: "Salvo só neste aparelho" }[cloud.status] || "";
@@ -2796,6 +2845,9 @@ function App() {
     return Math.round((contab.regime === "presumido" ? calcPresumido(p) : calcSimples(p)).carga * 100) / 100;
   }, [contab]);
   useEffect(() => { if (loaded && contabCarga !== null && Number(taxRateGeral) !== contabCarga) setTaxRateGeral(contabCarga); }, [contabCarga, taxRateGeral, loaded]);
+  // pergunta uma vez como a empresa paga imposto, só para quem ainda está nos 27,5% de partida e recebe por nota da própria empresa
+  const perguntarImposto = loaded && contab.modo !== "contab" && !contab.impostoOk && Number(taxRateGeral) === 27.5
+    && vinculos.some((v) => formaDe(v) === "pj" && (v.taxOverride === undefined || v.taxOverride === null || v.taxOverride === ""));
   const monthShifts = shifts.filter((s) => inMonth(s.date, viewYear, viewMonth));
   const monthPresencas = presencas.filter((p) => inMonth(p.date, viewYear, viewMonth));
   const monthIncomeItems = buildIncomeItems(viewYear, viewMonth);
@@ -3005,6 +3057,12 @@ function App() {
   // modo do app: quem já tem dados e nunca escolheu continua no Completo; quem chega agora vê o guia e escolhe
   const totalDadosApp = vinculos.length + shifts.length + expenses.length + recurringExpenses.length + investments.length + oneOffIncomes.length;
   const modoApp = contab.modoApp || (totalDadosApp > 0 ? "completo" : "simples");
+  // contagem anônima: modo usado no dia e primeiros passos (só o fato, nunca valores)
+  useEffect(() => { if (loaded) registrarUso("_modo:" + modoApp); }, [loaded, modoApp]);
+  useEffect(() => { if (loaded && shifts.length > 0) registrarMarco("plantao"); }, [loaded, shifts.length]);
+  useEffect(() => { if (loaded && expenses.length + recurringExpenses.length > 0) registrarMarco("conta"); }, [loaded, expenses.length, recurringExpenses.length]);
+  const algumRecebido = shifts.some((x) => x.recebido) || vinculos.some((v) => v.recebidoMonths && Object.values(v.recebidoMonths).some(Boolean));
+  useEffect(() => { if (loaded && algumRecebido) registrarMarco("recebi"); }, [loaded, algumRecebido]);
   const simples = modoApp === "simples";
   // o guia só aparece depois de a nuvem terminar de baixar: quem entra numa conta que já tem dados não vê
   const [bvFeito, setBvFeito] = useState(false);
@@ -3877,7 +3935,7 @@ function App() {
   }
 
   if (cloudCfg && !cloudSkip && authNeeded && (!session || recovery)) {
-    return <AuthScreen key={recovery ? "rec" : "auth"} cfg={cloudCfg} recovery={recovery} onSkip={cloudActions.skip} onRecovered={() => { setRecovery(false); setAuthNeeded(false); }} />;
+    return <AuthScreen key={recovery ? "rec" : "auth"} cfg={cloudCfg} recovery={recovery} onSkip={cloudActions.skip} onRecovered={() => { setRecovery(false); setAuthNeeded(false); }} aviso={saidaAviso} />;
   }
 
   return (
@@ -5541,6 +5599,13 @@ function App() {
         .rm-grid > div { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; min-width: 0; } .rm-grid small { display: block; font-size: 12px; color: var(--text-dim); } .rm-grid b { font-size: 15.5px; font-weight: 800; white-space: nowrap; }
         .rm-grid b.in { color: #15803D; } .rm-grid b.neg { color: #B91C1C; } :root[data-theme="dark"] .rm-grid b.in { color: #6EE7B7; }
         .rm-l { margin-top: 10px; font-size: 13.5px; color: var(--text-dim); } .rm-l b { color: var(--text); }
+        .imp-ops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .imp-op { text-align: left; border: 1.5px solid var(--border); background: var(--surface-2); border-radius: 12px; padding: 12px; min-height: 44px; cursor: pointer; color: var(--text); font: inherit; display: grid; gap: 2px; min-width: 0; }
+        .imp-op b { font-family: "Manrope", "Inter", sans-serif; font-size: 15px; } .imp-op small { font-size: 12px; color: var(--text-dim); } .imp-op span { font-size: 13px; font-weight: 700; color: #0E5640; margin-top: 4px; }
+        :root[data-theme="dark"] .imp-op span { color: #6EE7B7; }
+        .imp-op:hover, .imp-op:focus-visible { border-color: #0E5640; }
+        .imp-pe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; font-size: 13px; color: var(--text-dim); }
+        @media (max-width: 380px) { .imp-ops { grid-template-columns: 1fr; } }
         /* cobrar pelo WhatsApp */
         .conf-bts { display: flex; gap: 6px; align-items: center; }
         @media (max-width: 520px) { .conf-it.tem-cob { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 8px; } .conf-it.tem-cob .conf-v { grid-column: 3; grid-row: 1; font-size: 14px; } .conf-it.tem-cob .conf-bts { grid-column: 2 / -1; grid-row: 2; flex-direction: row; justify-content: flex-end; } }
@@ -6321,6 +6386,8 @@ function App() {
             monthExpenseItems={monthExpenseItems} limits={limits} monthShiftsCount={monthShifts.length} insights={insights}
             desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12} hojeInfo={hojeInfo} simples={simples} onCobrar={setCobrarId} resumoMes={resumoMes} fecharResumo={fecharResumo}
             workPrev={workPrev} blocosHoje={contab.hojeBlocos} setBlocosHoje={(v) => setContab((p) => ({ ...p, hojeBlocos: v }))}
+            impostoPergunta={perguntarImposto ? <ImpostoPergunta atual={taxRateGeral} onCalcular={() => { setContab((p) => ({ ...p, impostoOk: true })); goTab("contabilidade"); }} onFechar={() => setContab((p) => ({ ...p, impostoOk: true }))}
+              onEscolher={(pct, nome) => { const antes = taxRateGeral; setTaxRateGeral(pct); setContab((p) => ({ ...p, impostoOk: true })); avisar(`Imposto ajustado para ${pct.toLocaleString("pt-BR")}% (${nome})`, () => { setTaxRateGeral(antes); setContab((p) => ({ ...p, impostoOk: false })); }); }} /> : null}
             workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
@@ -6416,7 +6483,7 @@ function App() {
       )}
 
       <Aviso />
-      {bvAberto && <BoasVindas onFim={(m) => { trocarModo(m); setBvFeito(true); }} />}
+      {bvAberto && <BoasVindas onFim={(m) => { trocarModo(m); setBvFeito(true); registrarMarco("guia"); }} />}
       <input ref={reanexarRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={(e) => reanexar(e.target.files && e.target.files[0])} />
       <button className="fab2" aria-label="Novo lançamento" onClick={() => setQuickOpen(true)}><IconPlus size={26} color="#fff" /></button>
 
@@ -8152,7 +8219,7 @@ const fmtHoras = (h) => (Math.round((Number(h) || 0) * 10) / 10).toLocaleString(
 // despesa dedutível: marcada à mão ou, sem marcação, saúde e educação
 const ehDedutivel = (e) => (e.dedutivel !== undefined && e.dedutivel !== null ? !!e.dedutivel : ["saude", "educacao"].includes(e.category));
 // IRPF anual do ano-calendário 2026 (declaração de 2027), com a redução da Lei 15.270/2025
-const IRPF_ANUAL_2026 = [[28467.20, 0, 0], [33919.80, 7.5, 2135.04], [45012.60, 15, 4679.03], [55976.16, 22.5, 8054.97], [Infinity, 27.5, 10853.78]];
+const IRPF_ANUAL_2026 = [[29145.60, 0, 0], [33919.80, 7.5, 2185.92], [45012.60, 15, 4729.92], [55976.16, 22.5, 8105.88], [Infinity, 27.5, 10904.76]]; // = tabela mensal de 2026 x 12
 const IR_DEP_ANUAL = 2275.08, IR_EDU_LIMITE = 3561.50, IR_SIMPLIFICADO_LIMITE = 16754.34;
 function irAnual(rend, deducoes) {
   const simp = Math.min(rend * 0.2, IR_SIMPLIFICADO_LIMITE);
@@ -8877,6 +8944,7 @@ function PagarAgoraMini({ p, onVer }) {
 }
 // ---- "Vale a pena esse plantão?": quanto entra, quanto dá por hora e como fica perto da média e da meta ----
 function ValePlantao({ vinculos = [], netOf, info, onClose }) {
+  useEffect(() => { registrarUso("vale"); }, []);
   const locais = vinculos.filter((v) => v.tipo === "plantao");
   const [vid, setVid] = useState(locais[0] ? locais[0].id : "");
   const [valor, setValor] = useState("");
@@ -8935,7 +9003,7 @@ function ValePlantao({ vinculos = [], netOf, info, onClose }) {
   );
 }
 
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false, onCobrar, resumoMes = null, fecharResumo, workPrev = null, blocosHoje = null, setBlocosHoje = () => {} }) {
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false, onCobrar, resumoMes = null, fecharResumo, workPrev = null, blocosHoje = null, setBlocosHoje = () => {}, impostoPergunta = null }) {
   const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
@@ -8991,7 +9059,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
 
   const metaG = goals[0] ? (() => { const g = goals[0]; const at = g.fonte === "carteira" ? (portfolio.totalValue || 0) : g.fonte === "patrimonio" ? Math.max(0, patrimonioTotal) : Number(g.valorAtual) || 0; return { nome: g.nome, cor: g.cor, pct: Math.min(100, (at / Math.max(g.valorAlvo, 1)) * 100) }; })() : null;
   const brutoMesH = monthIncomeItems.reduce((a, i) => a + (Number(i.gross) || 0), 0), jaCaiuH = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + (Number(i.net) || 0), 0);
-  const dBlocos = { hora: workCur ? workCur.hourly : 0, horaAnt: workPrev ? workPrev.hourly : 0, imposto: Math.max(0, brutoMesH - curStats.net), patrimonio: patrimonioTotal, carteira: portfolio.totalValue || totalInvestedAllTime, meta: metaG,
+  const dBlocos = { hora: workCur ? workCur.hourly : 0, horaAnt: workPrev ? workPrev.hourly : 0, imposto: impostoAPagar(monthIncomeItems), patrimonio: patrimonioTotal, carteira: portfolio.totalValue || totalInvestedAllTime, meta: metaG,
     saldo: saldoRealizado, sobra: curStats.net - curStats.expTotal, receitas: curStats.net, receitasAnt: prevStats.net, despesas: curStats.expTotal, despesasAnt: prevStats.expTotal, investido: curStats.invested || 0,
     receber: Math.max(0, curStats.net - jaCaiuH), nReceber: monthIncomeItems.filter((i) => !i.recebido).length, pagar: totalPendingExpenses, nPagar: monthExpenseItems.filter((e) => !e.paid).length,
     ir: { hora: () => setActiveTab("faturamento"), imposto: () => setActiveTab("contabilidade"), patrimonio: () => setActiveTab("investimentos"), meta: () => setActiveTab("metas"), receber: () => setActiveTab("faturamento"), pagar: () => setActiveTab("despesas"), despesas: () => setActiveTab("despesas"), receitas: () => setActiveTab("faturamento"), investido: () => setActiveTab("investimentos"), sobra: () => setActiveTab("despesas") } };
@@ -9000,6 +9068,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
     <div className="hj" id="hoje-novo">
       <div className="hj-ola"><small>{ehMesAtual ? dataHoje : `${MONTHS_PT[viewMonth]} de ${viewYear}`}</small><h2>{hello}</h2></div>
       {guia}
+      {impostoPergunta}
       {ehMesAtual && <ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} />}
       <HojeAneis a={aneisMes} simples={simples} atual={ehMesAtual} saldo={saldoRealizado} saldoTit={ehMesAtual ? "Saldo em caixa" : "Saldo em caixa hoje"} dir={ehMesAtual ? ["Previsto no fim do mês", saldoRealizado + dBlocos.receber - dBlocos.pagar] : [`Sobra de ${MONTHS_PT[viewMonth].toLowerCase()}`, curStats.net - curStats.expTotal]} />
       {ehMesAtual && hojeInfo && <ProximoPlantao p={hojeInfo.proximo} onVer={() => setActiveTab("calendario")} />}
@@ -9013,8 +9082,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   const prevNome = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
   // modo Simples: só o mês em três números (entra, sai, sobra) e quanto separar para o imposto
   if (simples) {
-    const brutoMes = monthIncomeItems.reduce((a, i) => a + (Number(i.gross) || 0), 0);
-    const impostoMes = Math.max(0, brutoMes - curStats.net);
+    const impostoMes = impostoAPagar(monthIncomeItems);
     const sobraMes = curStats.net - curStats.expTotal;
     const jaCaiu = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + (Number(i.net) || 0), 0);
     const mesNome = MONTHS_PT[viewMonth].toLowerCase();
@@ -9478,6 +9546,7 @@ function PrintImport({ commitPrint, investments = [], goTab }) {
 const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 // a meta contada em plantões: quantos plantões de cada hospital pagam o que falta
 function MetaEmPlantoes({ falta, porMes, porMesTxt, hospitais }) {
+  useEffect(() => { registrarUso("metaplantoes"); }, []);
   if (!hospitais.length || falta <= 0) return null;
   return (
     <div className="gpl">

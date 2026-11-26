@@ -57,6 +57,9 @@ ok("Presumido comum: adicional de IRPJ = 1.200", p2.itens.find((i) => i.id === "
 // IRPF anual
 const a = api.irAnual(120000, 0);
 ok("IRPF anual: 120 mil, desconto simplificado limitado a 16.754,34", perto(a.simp, 16754.34));
+// 120.000 - 16.754,34 = 103.245,66 de base; 27,5% - 10.904,76 (tabela mensal de 2026 x 12) = 17.487,80
+ok("IRPF anual: tabela de 2026 (mensal x 12), 120 mil devem 17.487,80", perto(a.devido, 17487.80), String(a.devido));
+ok("IRPF anual: faixa isenta até 29.145,60 (2.428,80 x 12)", api.irAnual(36432, 0).bruto === 0, String(api.irAnual(36432, 0).bruto));
 ok("IRPF anual: renda de 50 mil (isenta pela redução) paga 0", api.irAnual(50000, 0).devido === 0, String(api.irAnual(50000, 0).devido));
 
 // Líquido por forma de recebimento

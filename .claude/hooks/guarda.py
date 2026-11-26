@@ -15,8 +15,13 @@ TRABALHO = re.compile(r"^(ccr-|claude/|release/)")
 LIBERADO_PIP = {"reportlab"}  # o relatório de uso automático instala isso sozinho, sem ninguém para confirmar
 
 
-def segredo(caminho):
-    """Arquivo de segredo pelo nome (não pelo conteúdo)."""
+EXT_ARQ = (".json", ".txt", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".key", ".env", ".js", ".ts", ".py", ".sh")
+
+
+def segredo(caminho, no_terminal=False):
+    """Arquivo de segredo pelo nome (não pelo conteúdo).
+    No terminal, "secret" só conta se a palavra parece mesmo um arquivo (com pasta ou extensão de arquivo),
+    para não confundir nomes do banco como vault.decrypted_secrets."""
     b = os.path.basename(caminho.rstrip("/")).lower()
     if not b:
         return False
@@ -26,11 +31,16 @@ def segredo(caminho):
         return True
     if b.startswith("id_rsa") or b.startswith("id_ed25519") or b.startswith("id_ecdsa"):
         return True
-    return "secret" in b
+    if "secret" not in b:
+        return False
+    if not no_terminal:
+        return True
+    return "/" in caminho or b.endswith(EXT_ARQ) or "." not in b
 
 
 def parece_caminho(tok):
-    return "/" in tok or "." in tok
+    # caminho de arquivo: só letras, números e . _ - ~ / $ (texto com parênteses, vírgulas etc. não é caminho)
+    return bool(re.fullmatch(r"[\w.\-~/$]+", tok)) and ("/" in tok or "." in tok)
 
 
 def pedacos(cmd):
@@ -59,7 +69,7 @@ def avaliar_bash(cmd, cwd):
     for seg in pedacos(cmd):
         for t in palavras(seg):
             t2 = t.split("=", 1)[-1] if t.startswith("-") else t
-            if not re.search(r"\s", t2) and parece_caminho(t2) and segredo(t2):
+            if not re.search(r"\s", t2) and parece_caminho(t2) and segredo(t2, no_terminal=True):
                 return "deny", f"Arquivo de segredo ({t2}). Segredos ficam com o João, no painel do Supabase."
     for seg in pedacos(cmd):
         w = palavras(seg)
