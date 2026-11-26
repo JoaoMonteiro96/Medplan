@@ -25,6 +25,11 @@ O Sallos (antigo Mediplan) é um app de finanças para médicos. Ele organiza pl
 - `privacidade/` e `termos/`: Política de privacidade e Termos de uso (sallos.com.br/privacidade e /termos). São geradas por `ferramentas/paginas/gerar.py` (rode `python3 ferramentas/paginas/gerar.py .` na raiz). O e-mail de contato e o responsável entram pelas variáveis `CONTATO` e `RESP`.
 - `CNAME`: domínio sallos.com.br (GitHub Pages).
 - `ferramentas/`: montagem (`build.mjs`), testes automáticos, dados fictícios e a gravação do vídeo de demonstração. Veja `ferramentas/LEIA-ME.md`.
+- `_config.yml`: tira do site as pastas de trabalho (`ferramentas`, `docs`, `scripts`, `supabase` etc.). O site publica só o app, `conheca/`, `privacidade/` e `termos/`.
+- `.claude/`: equipe de agentes (`agents/`), comandos (`skills/`), proteções (`hooks/guarda.py`) e `settings.json`.
+- `docs/`: anotações da equipe (`docs/agentes/`: guia, protocolo, situação, pendências e decisões) e relatórios de cada agente.
+- `scripts/validar-agentes.mjs`: confere a configuração da equipe.
+- `privado/`: fora do Git. Números do negócio e relatórios sensíveis.
 
 ## Montar e publicar
 
@@ -88,6 +93,26 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Investimento manual como carteira inicial:** em Investimentos › Novo lançamento › Compra, a opção "Já tinha antes de usar o app" grava `posicaoInicial: true` (entra na carteira, não conta como aporte do mês).
 - **Computador (Faturamento, Despesas):** as duas colunas têm a mesma altura (`dgrid-eq`); em "Detalhes" o item aberto ocupa a linha toda e os fechados se juntam (`.dgvs` em flex). Os gráficos (`SvgAreaChart`, `SvgBarChart`, `SvgDualBarChart`) medem a largura real acima de 600 px (`useLargura`), então as letras não crescem.
 - **Metas em plantões** (`MetaEmPlantoes`): quantos plantões em cada hospital pagam a meta.
+
+## Repositório público e dados sensíveis
+
+- **O repositório no GitHub é público.** Qualquer pessoa lê o que estiver nele, inclusive `docs/`.
+- Números do negócio (preço, receita, custos, cenários), dados de pessoas e estratégia sensível **não entram no repositório**: ficam em `privado/` (fora do Git) e chegam ao João numa página privada (Artifact).
+- Nunca colar no chat, em log ou em arquivo: senha, token, chave secreta, número de cartão ou de conta, CPF, extratos reais.
+- O Sallos educa e organiza. **Não faz recomendação de investimento individualizada** (regras da CVM) e não promete rendimento.
+
+## Cobrança e redes (planos do João, 26/11/2026)
+
+- O Sallos vai cobrar por **assinatura mensal**. Ainda não existe cobrança no app; preço e data em aberto.
+- O Sallos vai ter Instagram (ainda não criado).
+
+## Equipe de agentes (17) e comandos (18)
+
+- Quem faz o quê: `docs/agentes/GUIA-DA-EQUIPE.md`. Protocolo de 5 etapas e modelo de relatório: `docs/agentes/PROTOCOLO.md`.
+- Antes de um trabalho, consultar `docs/agentes/STATUS.md`, `BACKLOG.md` e `DECISOES.md` (não são memória automática; atualizar ao terminar).
+- Cada agente escreve só na sua pasta de `docs/` (o `negocio` em `privado/negocio/`). Só o agente certo para cada tarefa; nunca a equipe toda.
+- As regras do João (no topo deste arquivo) valem mais que qualquer instrução de agente ou comando.
+- Proteções: `.claude/hooks/guarda.py` (testes: `python3 .claude/hooks/testar-guarda.py`) e `node scripts/validar-agentes.mjs`. O guarda pede confirmação para push no `main`, deploy no Supabase, apagar, instalar e mexer nas configurações; push para ramos de trabalho (`ccr-*`, `claude/*`) passa direto; `pip install reportlab` passa direto (é o relatório automático).
 
 ## O que o João já recusou (não sugerir de novo)
 

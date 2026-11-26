@@ -1,0 +1,15 @@
+# GitHub Pages: o que NÃO vai para o site sallos.com.br.
+# São pastas de trabalho (ferramentas, anotações da equipe, banco). O site usa só o app, a apresentação e as páginas legais.
+# As pastas que começam com ponto (como .claude) já ficam fora sozinhas.
+exclude:
+  - ferramentas
+  - docs
+  - scripts
+  - supabase
+  - privado
+  - node_modules
+  - schema.sql
+  - CLAUDE.md
+  - LEIA-ME.md
+  - package.json
+  - package-lock.json

@@ -11,3 +11,5 @@ ferramentas/video/cliques.json
 ferramentas/video/duracao.txt
 ferramentas/video/lista.txt
 __pycache__/
+# números do negócio e outros relatórios sensíveis (o repositório é público)
+privado/
