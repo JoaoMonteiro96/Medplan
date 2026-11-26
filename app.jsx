@@ -863,7 +863,7 @@ function useArrasto(n, indice, setActive) {
     const vw = (svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width) || 600;
     const i = indice(((ev.clientX - r.left) / r.width) * vw);
     if (i === null || i < 0 || i >= n) return;
-    if (ultimo.current !== i) { ultimo.current = i; setActive(i); if (arrastando.current) { try { navigator.vibrate && navigator.vibrate(4); } catch (e) {} } }
+    if (ultimo.current !== i) { ultimo.current = i; setActive(i); if (arrastando.current) vibrar(4); }
   };
   return {
     onPointerDown: (ev) => { arrastando.current = true; mover(ev); },
@@ -1217,7 +1217,9 @@ const BRAPI_FREE = ["PETR4", "MGLU3", "VALE3", "ITUB4", "MXRF11", "HGLG11"];
 // aviso curto no rodapé, com "Desfazer"
 // avisar(msg, desfazer): aviso curto com "Desfazer". opc.acao troca o nome do botão; opc.fixo deixa o aviso até a pessoa tocar
 const avisar = (msg, desfazer, opc = {}) => { try { window.dispatchEvent(new CustomEvent("sallos-aviso", { detail: { msg, desfazer, ...opc } })); } catch (e) {} };
-const vibrar = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+// vibração curta ao tocar; a pessoa pode desligar em Configurações › Aparência (mediplan-vibrar-off)
+const vibraLigado = () => { try { return localStorage.getItem("mediplan-vibrar-off") !== "1"; } catch (e) { return true; } };
+const vibrar = (ms = 8) => { try { vibraLigado() && navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 // marca/desmarca e avisa; com silencioso=true não mostra aviso (usado no "Recebi todos")
 function comAviso(fn, feito, tipo, nome) {
   return (silencioso) => {
@@ -1750,7 +1752,7 @@ function FeriasSheet({ lista = [], calcular, onSalvar, onApagar, onTirar, onClos
   const anoDif = (m) => m.ano !== new Date().getFullYear();
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet fer-sheet" role="dialog" aria-label="Férias" id="ferias-sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet fer-sheet" role="dialog" aria-modal="true" aria-label="Férias" id="ferias-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="fer-h">
           <span className="fer-ic" aria-hidden="true"><IconSol size={20} /></span>
@@ -1829,7 +1831,7 @@ function CobrarSheet({ vinculo, itens = [], onSalvarNumero, onClose }) {
   const enviar = () => { const d = soDigitos(num); if (d !== soDigitos(vinculo.cobrarWhats)) onSalvarNumero(vinculo.id, d); window.open(linkWhats(d, texto), "_blank", "noopener"); onClose(); };
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet cob" role="dialog" aria-label={"Cobrar " + vinculo.nome} id="cobrar-sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet cob" role="dialog" aria-modal="true" aria-label={"Cobrar " + vinculo.nome} id="cobrar-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="cob-h"><span className="legend-dot" style={{ background: vinculo.cor }} /><div className="sheet-title" style={{ margin: 0 }}>Cobrar {vinculo.nome}</div></div>
         <div className="cob-lista">{itens.map((it) => <div key={it.key}><span>{it.tipo === "plantao" ? "Plantão " + (String(it.dateLabel || "").match(/\d{2}\/\d{2}/) || [""])[0] : it.dateLabel}<small>devia ter caído em {fmtDatePt(it.dateIso).slice(0, 5)}</small></span><b className="mono">{fmtBRL(Number(it.gross) || Number(it.net) || 0)}</b></div>)}</div>
@@ -1852,7 +1854,7 @@ function ApagarPlantoesSheet({ vinculo, shifts = [], onApagar, onClose }) {
   const pl = (k) => k === 1 ? "1 plantão" : `${k} plantões`;
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet apl" role="dialog" aria-label={"Apagar plantões de " + vinculo.nome} id="apagar-pl" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet apl" role="dialog" aria-modal="true" aria-label={"Apagar plantões de " + vinculo.nome} id="apagar-pl" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="cob-h"><span className="legend-dot" style={{ background: vinculo.cor }} /><div className="sheet-title" style={{ margin: 0 }}>Apagar plantões de {vinculo.nome}</div></div>
         <div className="apl-ops" role="radiogroup">
@@ -1864,6 +1866,55 @@ function ApagarPlantoesSheet({ vinculo, shifts = [], onApagar, onClose }) {
       </div>
     </div>
   );
+}
+
+// caixinha do imposto na Hoje: a parte de imposto do que já caiu na conta, com "Já separei" (mesma marcação da tela Impostos)
+function CaixinhaHoje({ itens = [], separado = {}, onSeparar }) {
+  const recebidos = itens.filter((i) => (i.forma === "pj" || i.forma === "aluguel") && i.recebido && (Number(i.gross) || 0) - (Number(i.net) || 0) > 0.004);
+  const alvo = recebidos.reduce((a, i) => a + (i.gross - i.net), 0);
+  if (alvo <= 0.004) return null;
+  const falta = recebidos.filter((i) => !separado[i.key]);
+  const valorFalta = falta.reduce((a, i) => a + (i.gross - i.net), 0);
+  const pct = Math.round(((alvo - valorFalta) / alvo) * 100);
+  return (
+    <div className={`card cx-hoje ${falta.length ? "" : "ok"}`} id="caixinha-hoje">
+      <div className="cx-h-t">
+        <span className="cx-h-ic" aria-hidden="true"><IconCalc size={16} /></span>
+        <span>{falta.length ? <>Separe <b className="mono">{fmtBRL(valorFalta)}</b> para o imposto</> : <>Imposto do que caiu separado</>}<small>{pct}% de <span className="mono">{fmtBRL(alvo)}</span> guardado</small></span>
+        {falta.length > 0 && <button type="button" className="btn btn-primary sm" onClick={() => onSeparar(falta.map((i) => i.key))}>Já separei</button>}
+      </div>
+      <span className="hj-bar" aria-hidden="true"><i style={{ width: pct + "%", background: "#0E5640" }} /></span>
+    </div>
+  );
+}
+
+// um convite por vez na Hoje: começar (sem dados), ligar lembretes e mandar para um colega (depois do 1º recebimento). Cada um some com "Agora não".
+const CONVITE_COLEGA = "Estou usando o Sallos para organizar meus plantões, o que tenho para receber, as contas e o imposto. Dá uma olhada: https://sallos.com.br/conheca";
+function ConviteHoje({ vazio, guiaAberto, onPlantao, algumRecebido, notifOn, onLigarNotif }) {
+  const [off, setOff] = useState(() => ({ lembrete: lsGet("mediplan-convite-lembrete") === "1", colega: lsGet("mediplan-convite-colega") === "1" }));
+  const fechar = (k) => { lsSet("mediplan-convite-" + k, "1"); setOff((p) => ({ ...p, [k]: true })); };
+  const [msg, setMsg] = useState("");
+  if (vazio && !guiaAberto) return (
+    <div className="card cv-hoje" id="convite-comecar">
+      <div className="cv-t"><b>Comece pelo seu próximo plantão</b><small>O hospital é cadastrado junto. Em seguida o app mostra quanto vai cair e quando.</small></div>
+      <button type="button" className="btn btn-primary" onClick={onPlantao}>Lançar meu primeiro plantão</button>
+    </div>
+  );
+  if (!algumRecebido) return null;
+  if (!notifOn && !off.lembrete && notifSuporte()) return (
+    <div className="card cv-hoje" id="convite-lembrete">
+      <div className="cv-t"><b>Quer um aviso um dia antes?</b><small>De cada conta que vence e de cada pagamento que vai cair. O aviso não mostra valores.</small></div>
+      {msg && <div className="field-hint">{msg}</div>}
+      <div className="cv-b"><button type="button" className="btn btn-primary sm" onClick={async () => { const m = await onLigarNotif(); if (m) setMsg(m); else fechar("lembrete"); }}>Ligar lembretes</button><button type="button" className="btn btn-ghost sm" onClick={() => fechar("lembrete")}>Agora não</button></div>
+    </div>
+  );
+  if (!off.colega) return (
+    <div className="card cv-hoje" id="convite-colega">
+      <div className="cv-t"><b>Conhece um colega que dá plantão?</b><small>Mande o Sallos para ele pelo WhatsApp.</small></div>
+      <div className="cv-b"><a className="btn btn-primary sm" href={"https://wa.me/?text=" + encodeURIComponent(CONVITE_COLEGA)} target="_blank" rel="noopener" onClick={() => { registrarUso("_m:indicou"); fechar("colega"); }}>Mandar pelo WhatsApp</a><button type="button" className="btn btn-ghost sm" onClick={() => fechar("colega")}>Agora não</button></div>
+    </div>
+  );
+  return null;
 }
 
 // pergunta única: como a empresa da pessoa paga imposto (troca os 27,5% de partida por uma taxa típica)
@@ -2007,7 +2058,7 @@ function MonthPicker({ year, setYear, viewYear, viewMonth, statsOf, onPick, onCl
   const short = (v) => (Math.abs(v) >= 1000 ? (v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil" : Math.round(v).toLocaleString("pt-BR"));
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet mp-sheet" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" className="sheet mp-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="mp-head">
           <button className="mp-arrow" onClick={() => setYear(year - 1)} aria-label="Ano anterior"><IconChevronLeft size={18} /></button>
@@ -2866,7 +2917,8 @@ function App() {
     return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).map((i) => ({ ...i,
       t1: i.tipo === "despesa" ? `Vence amanhã: ${i.nome}` : `Amanhã você recebe: ${i.nome}`,
       t0: i.tipo === "despesa" ? `Vence hoje: ${i.nome}` : `Hoje você recebe: ${i.nome}`,
-      body: i.tipo === "despesa" ? `${fmtBRL(i.valor)} · vencimento em ${fmtDatePt(i.date)}` : `${fmtBRL(i.valor)} líquidos · previsto para ${fmtDatePt(i.date)}` }));
+      // sem valores: o aviso aparece na tela bloqueada; o valor fica dentro do app
+      body: i.tipo === "despesa" ? `Vencimento em ${fmtDatePt(i.date)}. Toque para ver no Sallos.` : `Previsto para ${fmtDatePt(i.date)}. Toque para ver no Sallos.` }));
   }, [expenses, recurringExpenses, shifts, vinculos, extraRecurringIncomes, oneOffIncomes, taxRateGeral]);
   useEffect(() => { if (!loaded) return undefined; const tm = setTimeout(() => syncLembretes(notifOn, lembretes), 600); return () => clearTimeout(tm); }, [loaded, notifOn, lembretes]);
 
@@ -3734,7 +3786,7 @@ function App() {
     if (avgExpAll > 0) {
       const liquid = Math.max(0, saldoRealizado) + portfolio.positions.filter((p) => p.category === "Reserva de oportunidade" || p.category === "Renda Fixa").reduce((a, p) => a + p.value, 0);
       const months = liquid / avgExpAll;
-      list.push({ id: "reserva", tone: months >= 6 ? "good" : months >= 3 ? "warn" : "bad", title: `Sua reserva cobre ${months.toFixed(1).replace(".", ",")} meses de despesas`,
+      list.push({ id: "reserva", meses: months, tone: months >= 6 ? "good" : months >= 3 ? "warn" : "bad", title: `Sua reserva cobre ${months.toFixed(1).replace(".", ",")} meses de despesas`,
         text: `${fmtBRL(liquid)} em caixa, renda fixa e reserva, para uma despesa média de ${fmtBRL(avgExpAll)} por mês. ${months >= 6 ? "Acima dos 6 meses que costumam ser recomendados." : "Uma referência comum é ter 6 meses guardados."}` });
     }
 
@@ -4001,7 +4053,7 @@ function App() {
 
         .hero-bar { max-width: 1020px; margin: 0 auto 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
         .hero-stat { display: flex; flex-direction: column; gap: 2px; }
-        .hero-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+        .hero-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
         .hero-value { font-size: 15px; font-weight: 700; }
 
         .backup-bar { max-width: 1020px; margin: 0 auto 14px; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -4027,7 +4079,7 @@ function App() {
 
         .stat-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 10px; margin-bottom: 14px; }
         .stat-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
-        .stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 6px; }
+        .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 6px; }
         .stat-value { font-size: 17px; font-weight: 600; }
         .stat-value.gold { color: var(--gold); } .stat-value.teal { color: var(--teal); } .stat-value.brick { color: var(--brick); }
 
@@ -4043,7 +4095,7 @@ function App() {
         .vinculo-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
         .vinculo-row:last-child { border-bottom: none; }
         .vinculo-left { display: flex; align-items: center; gap: 10px; min-width: 180px; }
-        .badge-tipo { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; }
+        .badge-tipo { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; }
         .badge-tipo.plantao { background: rgba(189,138,61,0.15); color: var(--gold); }
         .badge-tipo.mensal { background: rgba(76,146,132,0.15); color: var(--teal); }
         .badge-tipo.pontual { background: rgba(122,147,160,0.18); color: #7A93A0; }
@@ -4084,7 +4136,7 @@ function App() {
         .cal-cell.selected { border-color: var(--gold); background: var(--surface-3); }
         .cal-cell.today .cal-day-num { color: var(--gold); }
         .cal-day-num { font-size: 12px; font-weight: 600; color: var(--text-dim); }
-        .cal-chip { font-size: 10px; border-radius: 4px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #0d1416; font-weight: 600; }
+        .cal-chip { font-size: 11px; border-radius: 4px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #0d1416; font-weight: 600; }
 
         .day-panel { margin-top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
         .day-panel-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
@@ -4123,7 +4175,7 @@ function App() {
         .list-row-right { display: flex; align-items: center; gap: 12px; }
         .amount { font-size: 15px; font-weight: 600; }
 
-        .badge { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; border: none; cursor: pointer; }
+        .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; border: none; cursor: pointer; }
         .badge-paid { background: rgba(76,146,132,0.15); color: var(--teal); }
         .badge-pending { background: rgba(188,109,87,0.15); color: var(--brick); }
 
@@ -4158,8 +4210,8 @@ function App() {
         .hero-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; box-shadow: 0 1px 2px rgba(38,53,50,0.04); }
         .hero-value { font-size: 14.5px; }
         .section-card, .chart-card, .day-panel, .list-row { box-shadow: 0 1px 2px rgba(38,53,50,0.04); }
-        .field input, .field select { min-height: 42px; }
-        .btn { min-height: 42px; }
+        .field input, .field select { min-height: 44px; }
+        .btn { min-height: 44px; }
         .btn-primary { box-shadow: 0 2px 6px rgba(189,138,61,0.28); }
         .field-hint { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
         .field-hint b { color: var(--teal); }
@@ -4198,9 +4250,9 @@ function App() {
         .exp-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
         .exp-amount { font-weight: 700; font-size: 15px; }
         .exp-card.paid .exp-title { text-decoration: line-through; text-decoration-color: rgba(38,53,50,0.3); }
-        .badge-late { background: rgba(188,109,87,0.2); color: var(--brick); font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; text-transform: uppercase; }
+        .badge-late { background: rgba(188,109,87,0.2); color: var(--brick); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; text-transform: uppercase; }
         .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-        .cat-btn { background: var(--surface-2); border: 1.5px solid var(--border); border-radius: 14px; padding: 8px 2px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--text-dim); }
+        .cat-btn { background: var(--surface-2); border: 1.5px solid var(--border); border-radius: 14px; padding: 8px 2px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--text-dim); }
         .cat-btn .em { font-size: 22px; line-height: 1.1; }
         .cat-btn.active { border-color: var(--teal); background: rgba(76,146,132,0.1); color: var(--text); }
         .filter-row { display: flex; gap: 6px; margin-bottom: 12px; }
@@ -4230,11 +4282,11 @@ function App() {
           .tabs { display: none; }
           .hero-bar { grid-template-columns: 1fr 1fr; padding: 12px; gap: 10px 14px; }
           .bottom-nav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(255,255,255,0.97); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 16px rgba(38,53,50,0.07); }
-          .bn-btn { flex: 1; background: transparent; border: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; color: var(--text-dim); font-size: 10.5px; font-weight: 600; cursor: pointer; border-radius: 12px; }
+          .bn-btn { flex: 1; background: transparent; border: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; color: var(--text-dim); font-size: 11px; font-weight: 600; cursor: pointer; border-radius: 12px; }
           .bn-btn.active { color: var(--teal); }
           .bn-btn.active svg { stroke-width: 2.4; }
           .cal-cell { min-height: 56px; padding: 4px; }
-          .cal-chip { font-size: 9px; padding: 1px 3px; }
+          .cal-chip { font-size: 10px; padding: 1px 3px; }
         }
         @media (min-width: 721px) { .exp-cat-scroll { flex-wrap: wrap; overflow: visible; } }
 
@@ -4243,7 +4295,7 @@ function App() {
         @media (min-width: 721px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
         .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px; box-shadow: 0 1px 2px rgba(38,53,50,0.04); position: relative; overflow: hidden; }
         .kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--kpi, var(--teal)); }
-        .kpi .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 600; }
+        .kpi .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 600; }
         .kpi .val { font-size: 18px; font-weight: 700; margin-top: 6px; }
         .kpi .sub { font-size: 11.5px; margin-top: 3px; color: var(--text-dim); }
         .pos-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(38,53,50,0.04); }
@@ -4258,7 +4310,7 @@ function App() {
         .pill.up { background: rgba(76,146,132,0.15); color: var(--teal); }
         .pill.down { background: rgba(188,109,87,0.15); color: var(--brick); }
         .pos-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
-        .pos-grid .l { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); }
+        .pos-grid .l { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); }
         .pos-grid .d { font-size: 13px; font-weight: 600; margin-top: 2px; }
         .pos-grid input { width: 100%; min-width: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 6px; font-size: 13px; font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
         .tipo-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -4302,7 +4354,7 @@ function App() {
         .hero-num { font-size: 36px; font-weight: 700; letter-spacing: -0.03em; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
         .hero-spark { margin: 0 -20px; opacity: .9; }
         .hero-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.18); }
-        .hero-metrics span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; opacity: .72; margin-bottom: 3px; }
+        .hero-metrics span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; opacity: .72; margin-bottom: 3px; }
         .hero-metrics b { font-size: 14.5px; }
 
         .stackbar { display: flex; width: 100%; border-radius: 999px; overflow: hidden; gap: 2px; background: var(--surface-3); }
@@ -4318,7 +4370,7 @@ function App() {
         .delta { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
         .delta.good { background: rgba(76,146,132,0.13); color: var(--teal); } .delta.bad { background: rgba(188,109,87,0.13); color: var(--brick); }
         .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
-        .mini-grid span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin-bottom: 3px; }
+        .mini-grid span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin-bottom: 3px; }
         .mini-grid b { font-size: 16px; display: block; margin-bottom: 4px; }
         .mini-grid .field input { padding: 6px 8px; min-height: 36px; }
 
@@ -4333,7 +4385,7 @@ function App() {
         .rank-val { font-size: 13px; }
         .mini-ico { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
-        .donut-center span { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); } .donut-center b { font-size: 13.5px; }
+        .donut-center span { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); } .donut-center b { font-size: 13.5px; }
         .segmented.sm { padding: 2px; margin-bottom: 0; } .segmented.sm .seg-btn { padding: 5px 12px; font-size: 12px; }
 
         .line-item { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
@@ -4356,12 +4408,12 @@ function App() {
 
         .cal-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
         .cal-summary > div { background: var(--surface); border-radius: 16px; padding: 12px; box-shadow: 0 1px 2px rgba(16,40,35,0.05); }
-        .cal-summary span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin-bottom: 3px; } .cal-summary b { font-size: 18px; }
+        .cal-summary span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin-bottom: 3px; } .cal-summary b { font-size: 18px; }
         .cal-cell { border: none; border-radius: 14px; box-shadow: 0 1px 2px rgba(16,40,35,0.04); align-items: flex-start; }
         .cal-cell.selected { background: #fff; box-shadow: 0 0 0 2px var(--teal); }
         .cal-cell.today .cal-day-num { color: #fff; background: var(--teal); border-radius: 999px; padding: 1px 6px; }
         .cal-dots { display: flex; gap: 3px; flex-wrap: wrap; } .cal-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .cal-hours { font-size: 10.5px; font-weight: 700; color: var(--text-dim); margin-top: auto; }
+        .cal-hours { font-size: 11px; font-weight: 700; color: var(--text-dim); margin-top: auto; }
 
         .exp-summary { border-radius: 24px; }
         .exp-card { padding: 12px 14px; }
@@ -4483,7 +4535,7 @@ function App() {
         .chart-box { position: relative; }
         .chart-tip { position: absolute; top: -4px; transform: translate(-50%, -100%); background: #10263A; color: #fff; border-radius: 8px; padding: 8px 10px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; min-width: 130px; z-index: 5; pointer-events: none; box-shadow: 0 6px 18px rgba(8,20,32,0.3); }
         .chart-tip b { font-weight: 700; } .chart-tip span { display: flex; align-items: center; gap: 6px; justify-content: space-between; } .chart-tip span i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-        .chart-tip span b { margin-left: auto; } .chart-tip em { font-style: normal; font-size: 10.5px; opacity: .7; margin-top: 2px; }
+        .chart-tip span b { margin-left: auto; } .chart-tip em { font-style: normal; font-size: 11px; opacity: .7; margin-top: 2px; }
         .bar-anim { transform-box: fill-box; animation: barGrow .6s cubic-bezier(.2,.8,.2,1) both; }
         @keyframes barGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
         .area-anim { animation: fadeIn .8s ease both; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -4640,7 +4692,7 @@ function App() {
         .segmented .seg-btn.active { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(15,23,42,0.12); }
         .tipo-btn { border-radius: 10px; }
         .field label { font-size: 12.5px; color: #475569; font-weight: 500; }
-        .field input, .field select { border-radius: 10px; min-height: 42px; border-color: var(--border); }
+        .field input, .field select { border-radius: 10px; min-height: 44px; border-color: var(--border); }
         .cat-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
         .cat-btn { border: 1px solid var(--border); border-radius: 12px; background: #fff; font-size: 11.5px; color: #475569; padding: 8px 2px; }
         .cat-btn .em { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
@@ -4712,13 +4764,13 @@ function App() {
         .mp-cell:hover { border-color: var(--teal); } .mp-cell.sel { border: 2px solid var(--teal); background: #F0FDF4; padding: 9px; }
         .mp-cell.empty { opacity: .55; }
         .mp-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; } .mp-top b { font-size: 13.5px; }
-        .mp-now { font-size: 10px; font-weight: 700; color: #15803D; background: #DCFCE7; border-radius: 999px; padding: 1px 6px; }
+        .mp-now { font-size: 11px; font-weight: 700; color: #15803D; background: #DCFCE7; border-radius: 999px; padding: 1px 6px; }
         .mp-now.fut { color: #64748B; background: var(--surface-3); }
         .mp-bars { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; } .mp-bars i { display: block; height: 4px; border-radius: 4px; min-width: 2px; }
         .mp-row { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-dim); line-height: 1.6; } .mp-row b { font-size: 12px; }
         .mp-row.bal { border-top: 1px dashed var(--border); margin-top: 3px; padding-top: 3px; } .mp-row.bal span { color: var(--text); font-weight: 600; }
         .mp-foot { font-size: 12px; color: var(--text-dim); margin-top: 12px; text-align: center; }
-        @media (max-width: 720px) { .mp-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; } .mp-cell { padding: 8px; } .mp-cell.sel { padding: 7px; } .mp-top b { font-size: 12.5px; } .mp-row { font-size: 10.5px; } .mp-row b { font-size: 11px; } .mp-totals b { font-size: 12.5px; } .month-pill .mp-open { min-width: 92px; font-size: 12.5px; padding: 0 6px; } }
+        @media (max-width: 720px) { .mp-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; } .mp-cell { padding: 8px; } .mp-cell.sel { padding: 7px; } .mp-top b { font-size: 12.5px; } .mp-row { font-size: 11px; } .mp-row b { font-size: 11px; } .mp-totals b { font-size: 12.5px; } .month-pill .mp-open { min-width: 92px; font-size: 12.5px; padding: 0 6px; } }
 
         /* ================= v11: barra de páginas no topo, transições e animações ================= */
         .sidebar, .bottom-nav { display: none !important; }
@@ -4840,7 +4892,7 @@ function App() {
         .wr-col:hover { background: var(--surface-2); } .wr-colv { font-size: 12px; font-weight: 700; color: var(--text); }
         .wr-bar { width: 100%; max-width: 44px; height: 84px; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 8px; overflow: hidden; }
         .wr-bar i { display: block; width: 100%; background: #86EFAC; border-radius: 8px; transform-origin: bottom; animation: barGrow .6s cubic-bezier(.2,.8,.2,1) backwards; } .wr-col.cur .wr-bar i { background: var(--teal); }
-        .wr-coll { font-size: 11.5px; font-weight: 600; } .wr-col.cur .wr-coll { color: var(--text); } .wr-colh { font-size: 10.5px; min-height: 14px; }
+        .wr-coll { font-size: 11.5px; font-weight: 600; } .wr-col.cur .wr-coll { color: var(--text); } .wr-colh { font-size: 11px; min-height: 14px; }
         .wr-note, .note-warn { background: #FFFBEB; border: 1px solid #FDE68A; color: #78350F; border-radius: 12px; padding: 10px 14px; font-size: 13px; line-height: 1.5; margin: 12px 0 0; }
         .note-warn { margin: 0 0 16px; }
         .mp-row.hr { border-top: 1px dashed var(--border); margin-top: 3px; padding-top: 3px; }
@@ -4955,7 +5007,7 @@ function App() {
         .pl-chips { margin-top: 8px; } .pl-chips .chip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
         .pl-rep { border-top: 1px dashed var(--border); margin: 4px 0 12px; padding-top: 10px; } .pl-rep .escala-q:first-child { margin-top: 0; }
         .add-box input[type=text], .add-box input:not([type]) { background: #fff; }
-        .serie-tag { font-size: 10.5px; font-weight: 700; color: #1D4ED8; background: #DBEAFE; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+        .serie-tag { font-size: 11px; font-weight: 700; color: #1D4ED8; background: #DBEAFE; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
       
         /* ================= v27: calendário pela cor do dinheiro ================= */
         .cal-cell.fx-in1, .fx-legend i.fx-in1 { background-color: rgba(22,163,74,.12); } .cal-cell.fx-in2, .fx-legend i.fx-in2 { background-color: rgba(22,163,74,.26); } .cal-cell.fx-in3, .fx-legend i.fx-in3 { background-color: rgba(22,163,74,.46); }
@@ -4985,7 +5037,7 @@ function App() {
         .anx-open { flex: 1; min-width: 0; display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; text-align: left; border: none; background: none; font: inherit; color: var(--text); cursor: pointer; padding: 4px 0; }
         .anx-open > span { grid-row: span 2; font-size: 17px; align-self: center; }
         .anx-open b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .anx-open small { font-size: 11.5px; color: var(--text-dim); }
-        .xl-anx { font-size: 12px; } .xl-ded { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #6D28D9; background: #EDE9FE; border-radius: 5px; padding: 1px 5px; vertical-align: 1px; }
+        .xl-anx { font-size: 12px; } .xl-ded { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; color: #6D28D9; background: #EDE9FE; border-radius: 5px; padding: 1px 5px; vertical-align: 1px; }
         .ded-lista { margin-top: 10px; border-top: 1px solid var(--border); }
         .ded-it { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
         .ded-it small { display: block; color: var(--text-dim); font-size: 12px; } .ded-r { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; } .ded-sem { color: #B45309 !important; font-weight: 600; }
@@ -4999,7 +5051,7 @@ function App() {
         .ded-add { margin-bottom: 12px; }
         .ded-av { border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; } .ded-av-t { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
         .ded-av .chip-row { display: flex; gap: 6px; flex-wrap: wrap; } .ded-av > .field { margin-bottom: 14px; }
-        .ded-so { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #0F766E; background: #CCFBF1; border-radius: 5px; padding: 1px 5px; vertical-align: 1px; }
+        .ded-so { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; color: #0F766E; background: #CCFBF1; border-radius: 5px; padding: 1px 5px; vertical-align: 1px; }
         :root[data-theme="dark"] .ded-so { background: rgba(20,184,166,.18); color: #5EEAD4; }
         .ded-rm { font-size: 12px; color: var(--text-dim) !important; }
         /* ================= v48: importar com novas fontes de carteira ================= */
@@ -5011,7 +5063,7 @@ function App() {
         .cart-f.on { border-color: var(--teal); background: rgba(22,160,107,0.06); }
         .cart-f-ic { width: 36px; height: 36px; border-radius: 10px; background: rgba(22,160,107,.09); display: grid; place-items: center; flex: none; } .cart-f-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .cart-f-t b { font-size: 14px; } .cart-f-t small { font-size: 12.5px; color: var(--text-dim); line-height: 1.35; }
-        .cart-f-t i { font-style: normal; font-size: 10.5px; font-weight: 700; color: #15803D; background: #DCFCE7; border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+        .cart-f-t i { font-style: normal; font-size: 11px; font-weight: 700; color: #15803D; background: #DCFCE7; border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
         .cart-colar { width: 100%; font: inherit; font-size: 14px; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--surface); color: var(--text); resize: vertical; }
         .cl-fx { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px 10px; font-size: 13px; color: var(--text-dim); }
         .cl-fx > span small { display: block; font-size: 11.5px; color: var(--text-dim); opacity: .85; }
@@ -5504,7 +5556,7 @@ function App() {
           .dock.v2 .dk-btn { flex: 1 1 0; width: auto; min-width: 0; height: 58px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none !important; color: #64748B; }
           .dock.v2 .dk-ic { display: grid; place-items: center; width: 46px; height: 28px; border-radius: 14px; transition: background .25s var(--ease, ease), color .25s; }
           .dock.v2 .dk-btn.on { color: #15803D; } .dock.v2 .dk-btn.on .dk-ic { background: #E6F4EC; }
-          .dk-rot { font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap; } .dock.v2 .dk-btn.on .dk-rot { font-weight: 700; }
+          .dk-rot { font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; } .dock.v2 .dk-btn.on .dk-rot { font-weight: 700; }
           .dk-novo { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 18px; border: none; background: linear-gradient(160deg, #22C55E, #15803D); box-shadow: 0 10px 22px -8px rgba(22,163,74,.75); display: grid; place-items: center; cursor: pointer; margin: 0 2px; transition: transform .15s; }
           .dk-novo:active { transform: scale(.92); } .dk-novo:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
           .fab2 { display: none !important; }
@@ -5602,7 +5654,7 @@ function App() {
         @keyframes calVai { from { transform: translateX(28px); opacity: .35; } to { transform: none; opacity: 1; } }
         @keyframes calVolta { from { transform: translateX(-28px); opacity: .35; } to { transform: none; opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .calendar-grid.cal-vai, .calendar-grid.cal-volta { animation: none; } }
-        .app .cal-cell .cal-ev { display: block; width: 100%; margin-top: auto; padding: 1px 4px; border-radius: 5px; background: #EDE9FE; color: #5B21B6; font-size: 9.5px; font-weight: 700; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+        .app .cal-cell .cal-ev { display: block; width: 100%; margin-top: auto; padding: 1px 4px; border-radius: 5px; background: #EDE9FE; color: #5B21B6; font-size: 11px; font-weight: 700; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
         :root[data-theme="dark"] .app .cal-cell .cal-ev { background: rgba(167,139,250,.22); color: #DDD6FE; }
         @media (max-width: 380px) { .app .cal-cell .cal-ev { font-size: 0; height: 5px; padding: 0; border-radius: 3px; background: #8B5CF6; } :root[data-theme="dark"] .app .cal-cell .cal-ev { background: #A78BFA; } }
         .cal-lines .cl-ev { color: #6D28D9; font-weight: 700; } :root[data-theme="dark"] .cal-lines .cl-ev { color: #C4B5FD; }
@@ -5699,7 +5751,7 @@ function App() {
         .bvi-tit-ic { display: inline-flex; align-items: center; gap: 6px; } .bvi-tit-ic svg { color: #0284C7; }
         .bvi-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 4px; }
         .bvi-cal span { height: 26px; border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 600; color: #475569; background: #F8FAFC; }
-        .bvi-cal span.w { background: none; height: 16px; color: #94A3B8; font-size: 10.5px; }
+        .bvi-cal span.w { background: none; height: 16px; color: #94A3B8; font-size: 11px; }
         .bvi-cal span.in { background: rgba(22,163,74,.22); } .bvi-cal span.in2 { background: rgba(22,163,74,.42); color: #14532D; }
         .bvi-cal span.out { background: rgba(220,38,38,.16); } .bvi-cal span.out2 { background: rgba(220,38,38,.3); }
         .bvi-cal span.fer { box-shadow: inset 0 -3px 0 #0EA5E9; background-image: linear-gradient(rgba(14,165,233,.14), rgba(14,165,233,.14)); }
@@ -6192,7 +6244,7 @@ function App() {
         .app .cal-cell.selected, .app .cal-cell.selected[class*="fx-"] { box-shadow: 0 0 0 2px #0E5640; border-color: transparent; }
         .app .cal-dot, .app .cal-dot.esc { width: 7px; height: 7px; border-radius: 50%; }
         .app .cal-dot.esc { opacity: 0.55; }
-        .app .cal-hours, .app .cal-cell[class*="fx-"] .cal-hours { font-size: 10.5px; font-weight: 600; color: var(--text-dim); }
+        .app .cal-hours, .app .cal-cell[class*="fx-"] .cal-hours { font-size: 11px; font-weight: 600; color: var(--text-dim); }
         /* modelo A: barra fina no pé do dia */
         .app .cal-cell.ferias, .app .cal-cell.ferias[class*="fx-"] { background: #F0F9FF; border-color: #BAE6FD; }
         .app .cal-cell.ferias::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #0EA5E9; }
@@ -6210,7 +6262,7 @@ function App() {
         .app .cal-m-b .cal-cell[class*="fx-"] { border-color: transparent; }
         /* modelo C: o valor do dia escrito, sem cor de fundo */
         .app .cal-val { display: none; }
-        .app .cal-m-c .cal-val { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 10.5px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; margin-top: auto; }
+        .app .cal-m-c .cal-val { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 11px; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; margin-top: auto; }
         .app .cal-m-c .cal-val.in { color: #15803D; } .app .cal-m-c .cal-val.out { color: #B91C1C; }
         .app .cal-m-c .cal-cell.fut .cal-val { opacity: 0.55; }
         .app .cal-m-c .cal-cell .cal-hours { margin-top: 0; }
@@ -6229,6 +6281,14 @@ function App() {
           background: rgba(15,26,22,0.94); color: #fff; border-radius: 16px; padding: 10px 10px 10px 12px; box-shadow: 0 16px 36px -12px rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
           animation: avisoIn .42s var(--ease) both; font-size: 14px; }
         @media (min-width: 1100px) { .aviso { bottom: 28px; } }
+        .mt-marcos { margin: 2px 0 12px; } .mt-mc-l { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; } .mt-mc { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--surface-3); color: var(--text-dim); } .mt-mc.ok { color: #fff; } .mt-marcos small { font-size: 13px; color: var(--text-dim); }
+        .cx-hoje { padding: 14px 16px; display: grid; gap: 10px; } .cx-h-t { display: flex; align-items: center; gap: 10px; } .cx-h-t > span:nth-child(2) { flex: 1; min-width: 0; font-size: 14.5px; } .cx-h-t small { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+        .cx-h-ic { width: 34px; height: 34px; border-radius: 11px; background: #E3F0EA; color: #0E5640; display: grid; place-items: center; flex-shrink: 0; } :root[data-theme="dark"] .cx-h-ic { background: rgba(110,231,183,.12); color: #6EE7B7; }
+        .cx-hoje.ok .cx-h-t > span:nth-child(2) { color: var(--text-dim); }
+        .cv-hoje { padding: 16px; display: grid; gap: 12px; } .cv-t b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 16px; } .cv-t small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 3px; }
+        .cv-b { display: flex; gap: 8px; flex-wrap: wrap; } .cv-b .btn { text-decoration: none; }
+        .desk-extras { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 18px; align-items: start; } .desk-extras > .card { margin: 0; }
+        .vib-op { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; min-height: 44px; font-size: 14px; cursor: pointer; } .vib-op input { width: 22px; height: 22px; accent-color: #0E5640; flex-shrink: 0; }
         .aviso .aviso-fechar { background: transparent; border: none; color: rgba(255,255,255,.7); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; padding: 0; }
         .aviso-ok { width: 26px; height: 26px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; flex-shrink: 0; animation: okPop .5s var(--ease) .05s both; }
         .aviso-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
@@ -6359,6 +6419,7 @@ function App() {
         .hj-bl span small { font-size: 11.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .hj-pill { align-self: flex-start; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; } .hj-pill.up { background: #DCFCE7; color: #15803D; } .hj-pill.dn { background: #FEE2E2; color: #B91C1C; }
         .hj-bar { display: block; height: 6px; border-radius: 9px; background: #E7ECE9; overflow: hidden; } .hj-bar i { display: block; height: 100%; border-radius: 9px; }
+        .hj-bar.hj-res { position: relative; overflow: visible; margin-top: 6px; } .hj-res em { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text-dim); opacity: .45; border-radius: 2px; }
         .hj-bl-ed { margin-bottom: 12px; flex-wrap: wrap; } .hj-bl-ed .chip { display: inline-flex; align-items: center; gap: 4px; }
         .hj-pdf { margin-top: 16px; width: 100%; }
         @media (max-width: 360px) { .hj-bl b { font-size: 18px; } .hj-tk-b { width: 104px; } .hj-tk-b b { font-size: 17px; } }
@@ -6421,8 +6482,16 @@ function App() {
             monthExpenseItems={monthExpenseItems} limits={limits} monthShiftsCount={monthShifts.length} insights={insights}
             desk={desk} fluxoDia={fluxoDia} monthIncomeItems={monthIncomeItems} vincData={netByVinculo} history12={history12} hojeInfo={hojeInfo} simples={simples} onCobrar={setCobrarId} resumoMes={resumoMes} fecharResumo={fecharResumo}
             workPrev={workPrev} blocosHoje={contab.hojeBlocos} setBlocosHoje={(v) => setContab((p) => ({ ...p, hojeBlocos: v }))}
+            convite={{ algumRecebido, notifOn, onLigarNotif: async () => {
+              let pm = Notification.permission;
+              if (pm === "default") { try { pm = await Notification.requestPermission(); } catch (e) { pm = Notification.permission; } }
+              if (pm !== "granted") return "O celular bloqueou os avisos. Para liberar, toque no cadeado ao lado do endereço do site, depois em Permissões e Notificações.";
+              setNotifOn(true); notifTeste(); avisar("Lembretes ligados"); return "";
+            } }}
+            separado={contab.separado || {}} onSeparar={(keys) => { setContab((p) => ({ ...p, separado: { ...(p.separado || {}), ...Object.fromEntries(keys.map((k) => [k, true])) } })); vibrar(6);
+              avisar("Imposto separado", () => setContab((p) => { const n = { ...(p.separado || {}) }; keys.forEach((k) => { delete n[k]; }); return { ...p, separado: n }; })); }}
             impostoPergunta={perguntarImposto ? <ImpostoPergunta atual={taxRateGeral} onCalcular={() => { setContab((p) => ({ ...p, impostoOk: true })); goTab("contabilidade"); }} onFechar={() => setContab((p) => ({ ...p, impostoOk: true }))}
-              onEscolher={(pct, nome) => { const antes = taxRateGeral; setTaxRateGeral(pct); setContab((p) => ({ ...p, impostoOk: true })); avisar(`Imposto ajustado para ${pct.toLocaleString("pt-BR")}% (${nome})`, () => { setTaxRateGeral(antes); setContab((p) => ({ ...p, impostoOk: false })); }); }} /> : null}
+              onEscolher={(pct, nome) => { const antes = taxRateGeral; setTaxRateGeral(pct); setContab((p) => ({ ...p, impostoOk: true })); avisar(`Imposto ajustado para ${pct.toLocaleString("pt-BR")}%`, () => { setTaxRateGeral(antes); setContab((p) => ({ ...p, impostoOk: false })); }); }} /> : null}
             workCard={<WorkRateCard compact cur={workCur} prev={workPrev} history={workHistory} monthName={MONTHS_PT[viewMonth]} prevName={prevMonthName} onCalendar={() => goTab("calendario")} onDetails={() => goTab("faturamento")} goMonth={goMonth} />} workCur={workCur}
           />
         )}
@@ -6588,7 +6657,7 @@ function AddSheet({ inicial, onClose, onDespesa, onOutro, vinculos, taxaPadrao, 
   useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet add-sheet" role="dialog" aria-label={titulo} onClick={(e) => e.stopPropagation()}>
+      <div className="sheet add-sheet" role="dialog" aria-modal="true" aria-label={titulo} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="add-top">{kind && !inicial && <button type="button" className="link-btn" onClick={() => setKind(null)}>‹ Voltar</button>}<div className="sheet-title" style={{ margin: 0 }}>{titulo}</div></div>
         {!kind && (
@@ -6693,7 +6762,7 @@ function QuickCargoFixo({ onClose, onSave, monthKey }) {
   const [escolhido, setEscolhido] = useState("");
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90vh", overflowY: "auto" }}>
+      <div role="dialog" aria-modal="true" className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90vh", overflowY: "auto" }}>
         <div className="sheet-handle" />
         <div className="sheet-title">Novo cargo fixo</div>
         <p className="add-sub">Escolha o tipo ou digite um nome. O salário do mês entra sozinho e a escala aparece no calendário.</p>
@@ -6840,7 +6909,7 @@ function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
       <div className="form-grid">
         <div className="field"><label>Nome</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Aluguel da sala" /></div>
         <div className="field"><label>{tipoReceita === "prolabore" ? "Quanto cai na conta por mês" : "Valor por mês"}</label><MoneyInput value={amount} onChange={(x) => { setAmount(x); setErro(""); }} /></div>
-        <div className="field"><label>Cai todo dia</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDia(e.target.value)} /></div>
+        <div className="field"><label>Cai todo dia</label><input type="number" inputMode="numeric" min="1" max="31" value={diaRecebimento} onChange={(e) => setDia(e.target.value)} /></div>
         {tipoReceita === "outro" && <div className="field"><label>Imposto (%), se tiver</label><input type="number" inputMode="decimal" min="0" value={taxOverride} placeholder="0" onChange={(e) => setTax(e.target.value)} /></div>}
       </div>
       {tipoReceita === "aluguel" && v > 0 && <div className="rc-res"><div><span>Aluguel</span><b className="mono">{fmtBRL(v)}</b></div><div><span>Carnê-leão estimado</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(leao)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(v - leao)}</b></div></div>}
@@ -6860,7 +6929,7 @@ function ShiftEditForm({ shift, onSubmit, onCancel, onDelete }) {
     <div className="mini-form">
       <div className="form-grid">
         <div className="field"><label>Valor bruto (R$)</label><MoneyInput value={gross} onChange={setGross} /></div>
-        <div className="field"><label>Horas</label><input type="number" min="0" value={hours} onChange={(e) => setHours(e.target.value)} /></div>
+        <div className="field"><label>Horas</label><input type="number" inputMode="numeric" min="0" value={hours} onChange={(e) => setHours(e.target.value)} /></div>
         <div className="field"><label>Data do plantão</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div className="field" style={{ gridColumn: "1 / -1" }}><label>Paga em quanto tempo?</label><PrazoPicker unit="dias" value={prazo} onChange={setPrazo} /></div>
       </div>
@@ -6954,7 +7023,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
         {tipo === "mensal" && (
           <>
             <div className="field"><label>{forma === "clt" ? "Quanto cai na sua conta por mês" : forma === "socio" ? (Number(String(taxSocio).replace(",", ".")) > 0 ? "Valor bruto por mês" : "Quanto cai no Pix por mês") : "Valor por mês (bruto, da nota)"}</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
-            <div className="field"><label>Cai todo dia</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
+            <div className="field"><label>Cai todo dia</label><input type="number" inputMode="numeric" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
             {forma === "pj" && Number(valorMensal) > 0 && String(taxOverride).trim() !== "" && <div className="rc-res" style={{ gridColumn: "1 / -1" }}><div><span>Valor da nota</span><b className="mono">{fmtBRL(Number(valorMensal))}</b></div><div><span>Imposto</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(Number(valorMensal) * (Number(String(taxOverride).replace(",", ".")) || 0) / 100)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(Number(valorMensal) * (1 - (Number(String(taxOverride).replace(",", ".")) || 0) / 100))}</b></div></div>}
             {forma === "socio" && Number(valorMensal) > 0 && <BrutoLiquido bruto={Number(valorMensal)} pct={taxSocio} />}
             {forma === "clt" && (
@@ -7005,7 +7074,7 @@ function VinculoManager({ vinculos, addVinculo, removeVinculo, updateVinculoTax,
                 {prazoOptions(v.tipo === "mensal" ? "meses" : "dias", v.tipo === "mensal" ? (v.prazoMeses || 0) : (v.prazoPadrao || 0)).map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
               </select>
               <span className="tax-box-label">Tributação:</span>
-              <input className="tax-mini" type="number" value={v.taxOverride ?? ""} placeholder="geral" onChange={(e) => updateVinculoTax(v.id, e.target.value)} />
+              <input className="tax-mini" type="number" inputMode="decimal" value={v.taxOverride ?? ""} placeholder="geral" onChange={(e) => updateVinculoTax(v.id, e.target.value)} />
               <button className="btn-icon" onClick={() => { if (window.confirm(`Remover o vínculo "${v.nome}"? Os lançamentos associados também serão removidos.`)) removeVinculo(v.id); }}><IconTrash size={15} /></button>
             </div>
           </div>
@@ -7058,8 +7127,8 @@ function ExtraIncomeManager({ extraRecurringIncomes, addExtraRecurringIncome, re
           <div className="form-grid">
             <div className="field"><label>Descrição</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Aluguel de consultório" /></div>
             <div className="field"><label>Valor (R$)</label><MoneyInput value={amount} onChange={setAmount} /></div>
-            <div className="field"><label>Dia de recebimento</label><input type="number" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
-            <div className="field"><label>Tributação (%) — opcional</label><input type="number" value={taxOverride} onChange={(e) => setTaxOverride(e.target.value)} placeholder="usa a geral" /></div>
+            <div className="field"><label>Dia de recebimento</label><input type="number" inputMode="numeric" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
+            <div className="field"><label>Tributação (%) — opcional</label><input type="number" inputMode="decimal" value={taxOverride} onChange={(e) => setTaxOverride(e.target.value)} placeholder="usa a geral" /></div>
             <div className="field" style={{ gridColumn: "1 / -1" }}><label>Quando esse valor é pago?</label><PrazoPicker unit="meses" value={prazoMeses} onChange={setPrazoMeses} /></div>
           </div>
           <button className="btn btn-primary" onClick={submit}><IconPlus size={15} /> Salvar receita recorrente</button>
@@ -7687,7 +7756,18 @@ function ThemeCard({ tema, setTema }) {
           <button key={k} type="button" data-tema={k} className={`chip sm ${tema === k ? "active" : ""}`} aria-pressed={tema === k} onClick={() => setTema(k)}>{l}</button>
         ))}
       </div>
+      <VibrarOpcao />
     </div>
+  );
+}
+function VibrarOpcao() {
+  const [on, setOn] = useState(vibraLigado);
+  if (typeof navigator === "undefined" || !navigator.vibrate) return null;
+  return (
+    <label className="vib-op" htmlFor="cfg-vibrar">
+      <span>Vibrar ao tocar e ao arrastar nos gráficos</span>
+      <input id="cfg-vibrar" type="checkbox" checked={on} onChange={(e) => { const v = e.target.checked; setOn(v); lsSet("mediplan-vibrar-off", v ? null : "1"); if (v) vibrar(10); }} />
+    </label>
   );
 }
 
@@ -7746,7 +7826,7 @@ function BackupTab({ modo = "completo", onModo, contabAba = true, setContabAba, 
       <div className="day-panel-title"><span>Imposto padrão</span></div>
       <div className="tax-box" style={{ marginBottom: 0 }}>
         <span className="tax-box-label">Tributação geral (usada quando um vínculo não tem taxa própria)</span>
-        <input id="cfg-tax" type="number" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value)} step="0.1" disabled={!!contabAuto} />
+        <input id="cfg-tax" type="number" inputMode="decimal" value={taxRateGeral} onChange={(e) => setTaxRateGeral(e.target.value)} step="0.1" disabled={!!contabAuto} />
         <span className="tax-box-label">%</span>
       </div>
       {contabAuto && <div className="field-hint">Calculada pela aba Contabilidade. Para digitar uma porcentagem, escolha “Porcentagem fixa” lá.</div>}
@@ -8024,7 +8104,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
         <div className="field"><label>Imposto já descontado no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Aparece no informe de rendimentos que a empresa envia em fevereiro.</div></div>
         <div className="field"><label>INSS pago no ano (R$)</label><MoneyInput value={ir.inss === undefined || ir.inss === "" ? "" : ir.inss} placeholder={sug.inss ? Math.round(sug.inss).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("inss", v)} /></div>
         <div className="field"><label>Previdência privada PGBL (R$)</label><MoneyInput value={ir.pgbl === undefined ? "" : ir.pgbl} onChange={(v) => setIr("pgbl", v)} /></div>
-        <div className="field"><label>Dependentes</label><input type="number" min="0" value={ir.dependentes || ""} placeholder="0" onChange={(e) => setIr("dependentes", e.target.value)} /></div>
+        <div className="field"><label>Dependentes</label><input type="number" inputMode="numeric" min="0" value={ir.dependentes || ""} placeholder="0" onChange={(e) => setIr("dependentes", e.target.value)} /></div>
       </div>
       <div className="ct-ir-res">
         <div className="kv-line"><span>Imposto do ano</span><b className="mono">{fmtBRL(irr.devido)}</b></div>
@@ -8117,7 +8197,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
         {boleto && (
           <div className="ct-bol">
             <div className="field"><label htmlFor="ct-bol-v">Valor do boleto (R$)</label><MoneyInput id="ct-bol-v" value={contab.boletoValor === undefined ? "" : contab.boletoValor} onChange={(v) => set("boletoValor", v)} placeholder="em branco: o app estima" /></div>
-            <div className="field"><label htmlFor="ct-bol-d">Vence todo dia</label><input id="ct-bol-d" type="number" min="1" max="31" value={contab.boletoDia || 20} onChange={(e) => set("boletoDia", e.target.value)} /></div>
+            <div className="field"><label htmlFor="ct-bol-d">Vence todo dia</label><input id="ct-bol-d" type="number" inputMode="numeric" min="1" max="31" value={contab.boletoDia || 20} onChange={(e) => set("boletoDia", e.target.value)} /></div>
           </div>
         )}
   </div>
@@ -8898,7 +8978,7 @@ function ParaConfirmar({ itens = [], pagar, onCobrar }) {
 const BLOCOS_HOJE = [
   ["hora", "Ganho por hora"], ["imposto", "Separar p/ imposto"], ["patrimonio", "Patrimônio investido"], ["meta", "Meta"],
   ["saldo", "Saldo em caixa"], ["sobra", "Sobra do mês"], ["receber", "Falta receber"], ["pagar", "Falta pagar"],
-  ["receitas", "Receitas do mês"], ["despesas", "Despesas do mês"], ["investido", "Investido no mês"],
+  ["receitas", "Receitas do mês"], ["despesas", "Despesas do mês"], ["investido", "Investido no mês"], ["reserva", "Reserva em meses"],
 ];
 const BLOCOS_SO_COMPLETO = ["patrimonio", "investido"];
 function HojeBlocos({ escolha, setEscolha, simples, d }) {
@@ -8921,6 +9001,12 @@ function HojeBlocos({ escolha, setEscolha, simples, d }) {
     if (k === "receitas") { v = fmtCurto(d.receitas); if (d.receitasAnt > 0) { const p = ((d.receitas - d.receitasAnt) / d.receitasAnt) * 100; extra = <span className={`hj-pill ${p >= 0 ? "up" : "dn"}`}>{p >= 0 ? "+" : "−"}{Math.abs(p).toFixed(0)}%</span>; } }
     if (k === "despesas") { v = fmtCurto(d.despesas); if (d.despesasAnt > 0) { const p = ((d.despesas - d.despesasAnt) / d.despesasAnt) * 100; extra = <span className={`hj-pill ${p <= 0 ? "up" : "dn"}`}>{p >= 0 ? "+" : "−"}{Math.abs(p).toFixed(0)}%</span>; } }
     if (k === "investido") v = fmtCurto(d.investido);
+    if (k === "reserva") {
+      // quantos meses de contas o dinheiro guardado paga (caixa, renda fixa e reserva); marcas em 3 e 6 meses
+      if (d.reservaMeses === null || d.reservaMeses === undefined) { v = "—"; extra = <small>lance as contas do mês</small>; }
+      else { const m = d.reservaMeses, w = Math.min(100, (m / 6) * 100); v = (m >= 10 ? Math.round(m) : m.toFixed(1).replace(".", ",")) + (m >= 0.95 && m < 1.05 ? " mês" : " meses");
+        extra = <><small>{m >= 6 ? "acima dos 6 meses" : `faltam ${(6 - m).toFixed(1).replace(".", ",")} para 6 meses`}</small><span className="hj-bar hj-res" aria-hidden="true"><i style={{ width: w + "%", background: m >= 6 ? "#16A34A" : m >= 3 ? "#0E5640" : "#D97706" }} /><em style={{ left: "50%" }} /></span></>; }
+    }
     return <button type="button" key={k} className="card hj-bl" data-bloco={k} onClick={d.ir && d.ir[k] ? d.ir[k] : undefined}><small>{nome}</small><span><b className="mono">{v}</b>{extra}</span></button>;
   };
   return (
@@ -8997,7 +9083,7 @@ function ValePlantao({ vinculos = [], netOf, info, onClose }) {
   const meta = info.meta;
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet vale" role="dialog" aria-label="Vale a pena esse plantão?" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet vale" role="dialog" aria-modal="true" aria-label="Vale a pena esse plantão?" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="sheet-title" style={{ marginTop: 0 }}>Vale a pena esse plantão?</div>
         {locais.length > 0 && (
@@ -9038,7 +9124,7 @@ function ValePlantao({ vinculos = [], netOf, info, onClose }) {
   );
 }
 
-function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false, onCobrar, resumoMes = null, fecharResumo, workPrev = null, blocosHoje = null, setBlocosHoje = () => {}, impostoPergunta = null }) {
+function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, totalInvestedAllTime, totalNet, totalPendingExpenses, alerts, history12, goals, generateMonthlyReport, setActiveTab, curStats, prevStats, portfolio, chartMonths, setChartMonths, goMonth, quickGo, setup, monthExpenseItems, limits, monthShiftsCount, insights, workCard, workCur, desk, fluxoDia, monthIncomeItems = [], vincData = [], hojeInfo = null, simples = false, onCobrar, resumoMes = null, fecharResumo, workPrev = null, blocosHoje = null, setBlocosHoje = () => {}, impostoPergunta = null, separado = {}, onSeparar = null, convite = null }) {
   const gv = useGv();
   const todayIso = todayStr();
   const h = new Date().getHours();
@@ -9096,6 +9182,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   const brutoMesH = monthIncomeItems.reduce((a, i) => a + (Number(i.gross) || 0), 0), jaCaiuH = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + (Number(i.net) || 0), 0);
   const dBlocos = { hora: workCur ? workCur.hourly : 0, horaAnt: workPrev ? workPrev.hourly : 0, imposto: impostoAPagar(monthIncomeItems), patrimonio: patrimonioTotal, carteira: portfolio.totalValue || totalInvestedAllTime, meta: metaG,
     saldo: saldoRealizado, sobra: curStats.net - curStats.expTotal, receitas: curStats.net, receitasAnt: prevStats.net, despesas: curStats.expTotal, despesasAnt: prevStats.expTotal, investido: curStats.invested || 0,
+    reservaMeses: (insights.find((x) => x.id === "reserva") || {}).meses ?? null,
     receber: Math.max(0, curStats.net - jaCaiuH), nReceber: monthIncomeItems.filter((i) => !i.recebido).length, pagar: totalPendingExpenses, nPagar: monthExpenseItems.filter((e) => !e.paid).length,
     ir: { hora: () => setActiveTab("faturamento"), imposto: () => setActiveTab("contabilidade"), patrimonio: () => setActiveTab("investimentos"), meta: () => setActiveTab("metas"), receber: () => setActiveTab("faturamento"), pagar: () => setActiveTab("despesas"), despesas: () => setActiveTab("despesas"), receitas: () => setActiveTab("faturamento"), investido: () => setActiveTab("investimentos"), sobra: () => setActiveTab("despesas") } };
   const aneisMes = { recebido: jaCaiuH, previsto: curStats.net, pagas: monthExpenseItems.filter((e) => e.paid).reduce((a, e) => a + (Number(e.amount) || 0), 0), contas: monthExpenseItems.reduce((a, e) => a + (Number(e.amount) || 0), 0), investido: Math.max(0, curStats.invested || 0) };
@@ -9108,12 +9195,22 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       <HojeAneis a={aneisMes} simples={simples} atual={ehMesAtual} saldo={saldoRealizado} saldoTit={ehMesAtual ? "Saldo em caixa" : "Saldo em caixa hoje"} dir={ehMesAtual ? ["Previsto no fim do mês", saldoRealizado + dBlocos.receber - dBlocos.pagar] : [`Sobra de ${MONTHS_PT[viewMonth].toLowerCase()}`, curStats.net - curStats.expTotal]} />
       {ehMesAtual && hojeInfo && <ProximoPlantao p={hojeInfo.proximo} onVer={() => setActiveTab("calendario")} />}
       {ehMesAtual && hojeInfo && <ParaConfirmar itens={hojeInfo.itens} pagar={hojeInfo.pagar} onCobrar={onCobrar} />}
+      {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
+      {ehMesAtual && convite && !impostoPergunta && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
       {alerts.length > 0 && <Avisos alerts={alerts} />}
       <InsightsCaixa items={insights} />
       <HojeBlocos escolha={blocosHoje} setEscolha={setBlocosHoje} simples={simples} d={dBlocos} />
       {!simples && <button className="btn btn-ghost hj-pdf" onClick={generateMonthlyReport}><IconFileText size={15} /> Baixar relatório do mês (PDF)</button>}
     </div>
   );
+  // no computador: a mesma pergunta do imposto, a caixinha e os convites, lado a lado
+  const extrasDesk = (impostoPergunta || (ehMesAtual && (onSeparar || convite))) ? (
+    <div className="desk-extras">
+      {impostoPergunta}
+      {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
+      {ehMesAtual && convite && !impostoPergunta && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
+    </div>
+  ) : null;
   const prevNome = MONTHS_PT[(viewMonth + 11) % 12].toLowerCase();
   // modo Simples: só o mês em três números (entra, sai, sobra) e quanto separar para o imposto
   if (simples) {
@@ -9129,6 +9226,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         <div className="desk">
           <div className="greet"><h2>{hello}!</h2><p>{ehMesAtual ? dataHoje : `Este é o resumo de ${mesNome} de ${viewYear}.`}</p></div>
           {guia}
+          {extrasDesk}
           {alerts.length > 0 && <Avisos alerts={alerts} />}
           <InsightsCaixa items={insights} />
           {ehMesAtual && <ResumoMes r={resumoMes} simples={simples} onFechar={fecharResumo} />}
@@ -9178,6 +9276,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       <div className="desk">
         <div className="greet"><h2>{hello}!</h2></div>
         {guia}
+        {extrasDesk}
         {alerts.length > 0 && (
           <Avisos alerts={alerts} />
         )}
@@ -9298,7 +9397,7 @@ function ExpenseEditForm({ item, onSubmit, onCancel, onDelete }) {
         <div className="field" style={{ gridColumn: "1 / -1" }}><label>Descrição</label><input value={description} onChange={(e) => { setDescription(e.target.value); setErro(""); }} /></div>
         <div className="field"><label>Valor (R$)</label><MoneyInput value={amount} onChange={(v) => { setAmount(v); setErro(""); }} /></div>
         {rec
-          ? <div className="field"><label>Vence todo dia</label><input type="number" min="1" max="31" value={dia} onChange={(e) => setDia(e.target.value)} /></div>
+          ? <div className="field"><label>Vence todo dia</label><input type="number" inputMode="numeric" min="1" max="31" value={dia} onChange={(e) => setDia(e.target.value)} /></div>
           : <div className="field"><label>Vencimento</label><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>}
         <div className="field" style={{ gridColumn: "1 / -1" }}><label>Categoria</label>
           <select value={category} onChange={(e) => { setCategory(e.target.value); if (item.dedutivel === undefined) setDedutivel(["saude", "educacao"].includes(e.target.value)); }}>{EXP_CATS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
@@ -9704,6 +9803,21 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch, hospitais = [] }) {
   );
 }
 
+// marcos da meta: 25%, 50%, 75% e 100%, e quanto falta para o próximo (sem contagem que pune)
+function MetaMarcos({ atual, alvo, cor }) {
+  if (!(alvo > 0)) return null;
+  const pct = (Math.max(0, atual) / alvo) * 100;
+  const prox = [25, 50, 75, 100].find((m) => pct < m);
+  return (
+    <div className="mt-marcos" aria-label="Marcos da meta">
+      <div className="mt-mc-l">
+        {[25, 50, 75, 100].map((m) => <span key={m} className={`mt-mc ${pct >= m ? "ok" : ""}`} style={pct >= m ? { background: cor || "#0E5640" } : null}>{pct >= m && <IconCheck size={12} color="#fff" />}{m === 100 ? "Meta" : m + "%"}</span>)}
+      </div>
+      <small>{prox ? <>Faltam <b className="mono">{fmtBRL(Math.max(0, (alvo * prox) / 100 - atual))}</b> para {prox === 100 ? "completar a meta" : `chegar a ${prox}%`}</> : "Meta completa"}</small>
+    </div>
+  );
+}
+
 function GoalsTab({ onVale = null, valoresPlantao = [], goals, addGoal, removeGoal, contributeGoal, valorDaMeta, setGoalFonte, setGoalPatch, aporteMedio = 0, monthExpenseItems = [], limits = {}, setLimit, viewYear, viewMonth }) {
   const FONTES = [["manual", "Eu informo"], ["carteira", "Meus investimentos"], ["patrimonio", "Meu patrimônio"]];
   const [showForm, setShowForm] = useState(goals.length === 0);
@@ -9775,6 +9889,7 @@ function GoalsTab({ onVale = null, valoresPlantao = [], goals, addGoal, removeGo
                     onDelete={() => { if (window.confirm(`Excluir a meta "${g.nome}"?`)) { removeGoal(g.id); setAberta(null); setEditando(null); } }} />
                 ) : (
                   <>
+                    <MetaMarcos atual={atual} alvo={Number(g.valorAlvo) || 0} cor={g.cor} />
                     {g.prazo && <div className="mt-prazo">Prazo: {fmtDatePt(g.prazo)}</div>}
                     <GoalProjection g={g} atual={atual} aporteSugerido={aporteMedio} hospitais={valoresPlantao} onPatch={(p) => setGoalPatch(g.id, p)} />
                     <div className="field" style={{ marginTop: 12 }}>
@@ -9914,7 +10029,7 @@ function CalendarTab({ cells, entriesByDay, selectedDay, setSelectedDay, viewYea
       )}
 
       {selectedDay && (
-        <div className="sheet-backdrop" onClick={() => setSelectedDay(null)}><div className="sheet tall" onClick={(e) => e.stopPropagation()}><div className="sheet-handle" />
+        <div className="sheet-backdrop" onClick={() => setSelectedDay(null)}><div role="dialog" aria-modal="true" className="sheet tall" onClick={(e) => e.stopPropagation()}><div className="sheet-handle" />
         <div className="day-panel flat">
           <div className="day-panel-title dia-tit"><span>{(() => { const dt = new Date(viewYear, viewMonth, selectedDay); const s2 = dt.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" }); return s2.charAt(0).toUpperCase() + s2.slice(1); })()}</span>
             {fxSel && <b className={`dia-tot mono ${fxSel.entra - fxSel.sai >= 0 ? "in" : "out"}`}>{fxSel.entra - fxSel.sai >= 0 ? "+ " : "− "}{fmtBRL(Math.abs(fxSel.entra - fxSel.sai))}</b>}

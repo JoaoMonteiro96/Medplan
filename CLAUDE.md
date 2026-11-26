@@ -17,7 +17,8 @@ O Sallos (antigo Mediplan) é um app de finanças para médicos. Ele organiza pl
 - `app.jsx`: o app inteiro (React, um arquivo só). É o código-fonte; edite aqui.
 - `app.js`: o app montado a partir do `app.jsx`. **Não edite à mão**: gere com `npm run build`.
 - `index.html`: abertura com a marca (splash), o esqueleto de carregamento e o carregamento do app.
-- `service-worker.js`: deixa o app funcionar como aplicativo e sem internet.
+- `service-worker.js`: deixa o app funcionar como aplicativo e sem internet. Desde 26/11/2026 abre na hora com a cópia guardada (página + `app.js?v=`) e busca a nova por trás; o app pergunta a versão guardada (`sallos-checar`) e mostra "Nova versão do Sallos pronta" com Atualizar.
+- `fontes/` (Manrope e Inter em woff2) e `libs/` (jsPDF, carregado só ao gerar PDF, e supabase-js): guardados no próprio app, sem Google Fonts nem CDN no app.
 - `manifest.json`, `sallos-*.png`: ícones e dados de instalação.
 - `conheca/`: página de apresentação (sallos.com.br/conheca), com imagens e o vídeo de demonstração. Visual de 23/11/2026: topo escuro de "monitor" (grade e linha de batimento), celulares em 3D com etiquetas de vidro; recursos com o celular fixo que troca de tela ao rolar (computador) e carrossel (celular). A página é gerada: edite `ferramentas/paginas/conheca-molde.html` (visual) e a lista `CAPS` em `ferramentas/paginas/conheca.py` (recursos) e rode `python3 ferramentas/paginas/conheca.py ferramentas/paginas/conheca-molde.html conheca/index.html`.
 - `schema.sql`: tabelas, regras de acesso, pasta de notas e tarefas automáticas do Supabase.
@@ -44,6 +45,8 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 ## Testes que sempre fazer
 
 - `node ferramentas/testes/larguras.cjs`: confere as larguras **344 px** (Galaxy Z Fold fechado), 360, 390, **412** (celular do João), 430, 600, 690 (Fold aberto) e 1440 (computador), nos temas claro e escuro, nos modos Simples e Completo e no guia de pessoa nova. Tem que terminar com "Tudo certo".
+- `node ferramentas/testes/offline.cjs`: app com o service worker ligado: abre sem internet, com as fontes, e mostra "Nova versão" quando há versão nova.
+- `node ferramentas/testes/calculos.cjs`: contas de dinheiro (imposto, pró-labore, Simples, presumido, IR anual, metas, férias).
 - `node ferramentas/testes/nuvem.cjs`: testa a nuvem com um Supabase de mentira (envio, download só do que mudou, mudança sem internet, excluir conta). Rode sempre que mexer na sincronização.
 - `node ferramentas/testes/telas.cjs simples` (ou `completo`, `novo`): fotos das telas em `ferramentas/saida/` para mandar ao João. Olhe as fotos antes de mandar.
 - Nada pode sair da tela na horizontal. Números grandes não podem ficar cortados.
@@ -64,7 +67,10 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - `mediplan-sync-cursor`: até quando o aparelho já baixou da nuvem (`{ u: conta, t: data }`). Com ele, o app baixa só o que mudou (`pullChanges`); sem ele, baixa tudo (`pullFromCloud`).
 - `mediplan-resumo-visto`: mês (`AAAA-MM`) cujo resumo a pessoa já fechou.
 - `cobrarWhats` dentro de cada vínculo (hospital): WhatsApp do financeiro, salvo pelo botão Cobrar.
-- `mediplan-uso-fila`, `mediplan-uso-id`, `mediplan-uso-off`: contagem anônima de uso das telas (a pessoa pode desligar em Ajustes → Privacidade).
+- `mediplan-uso-fila`, `mediplan-uso-id`, `mediplan-uso-off`: contagem anônima de uso das telas (a pessoa pode desligar em Ajustes → Privacidade). Também vão `_modo:simples`/`_modo:completo` (modo do dia), `_m:guia`, `_m:plantao`, `_m:conta`, `_m:recebi`, `_m:indicou` (primeiros passos, uma vez por aparelho, controlados por `mediplan-uso-marcos`) e as telas internas `ferias`, `vale`, `metaplantoes`.
+- `mediplan-vibrar-off`: vibração desligada (Configurações › Aparência).
+- `mediplan-convite-lembrete`, `mediplan-convite-colega`: convites da Hoje já dispensados.
+- `contab.impostoOk`: a pessoa já respondeu "Como sua empresa paga imposto?" (Simples ≈ 6%, Presumido ≈ 16,33%) ou fechou a pergunta. Só aparece para quem está nos 27,5% de partida e recebe por nota da própria empresa.
 
 ## Como o app está organizado (novembro de 2026)
 
@@ -139,6 +145,8 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - Relatório de uso em PDF (`ferramentas/relatorio/relatorio.py`): usa a função `resumo_uso(dias)` (só totais, no fim do `schema.sql`). Uma tarefa agendada do Claude ("Relatório de uso do Sallos", ambiente "medplan") gera e manda para o João a cada 3 dias, às 7h45. A função foi rodada no projeto em 22/11/2026.
 
 ## Pendências do João
+
+- **Supabase (proteções de 26/11/2026):** rodar o bloco "Proteções e contagem nova" do fim do `schema.sql`, criar no cofre (Vault) os códigos `sallos_cron` e `sallos_relatorio`, pôr `CRON_SEGREDO` em Edge Functions › Secrets, publicar as 4 funções novas (`supabase/functions/`) e guardar a senha do relatório no ambiente "medplan" (cabeçalho `x-relatorio-key`). Até lá tudo continua funcionando, só sem as senhas.
 
 - Mandar o e-mail de contato (sugestão: privacidade@sallos.com.br) e o responsável (nome e CPF ou empresa e CNPJ) para completar a Política de privacidade e os Termos.
 
