@@ -8794,7 +8794,7 @@ function ParaConfirmar({ itens = [], pagar, onCobrar }) {
 }
 
 const BLOCOS_HOJE = [
-  ["hora", "Ganho por hora"], ["imposto", "Separar p/ imposto"], ["patrimonio", "Patrimônio"], ["meta", "Meta"],
+  ["hora", "Ganho por hora"], ["imposto", "Separar p/ imposto"], ["patrimonio", "Patrimônio investido"], ["meta", "Meta"],
   ["saldo", "Saldo em caixa"], ["sobra", "Sobra do mês"], ["receber", "Falta receber"], ["pagar", "Falta pagar"],
   ["receitas", "Receitas do mês"], ["despesas", "Despesas do mês"], ["investido", "Investido no mês"],
 ];
@@ -8810,7 +8810,7 @@ function HojeBlocos({ escolha, setEscolha, simples, d }) {
     let v = null, extra = null;
     if (k === "hora") { v = d.hora > 0 ? "R$ " + Math.round(d.hora) : "—"; if (d.hora > 0 && d.horaAnt > 0) { const p = ((d.hora - d.horaAnt) / d.horaAnt) * 100; extra = <span className={`hj-pill ${p >= 0 ? "up" : "dn"}`}>{p >= 0 ? "+" : "−"}{Math.abs(p).toFixed(0)}%</span>; } }
     if (k === "imposto") { v = fmtCurto(d.imposto); extra = <small>do que entra no mês</small>; }
-    if (k === "patrimonio") { v = fmtCurto(d.patrimonio); extra = <small>carteira {fmtCurto(d.carteira)}</small>; }
+    if (k === "patrimonio") v = fmtCurto(d.carteira);
     if (k === "meta") { if (!d.meta) { v = "—"; extra = <small>nenhuma meta</small>; } else { v = Math.round(d.meta.pct) + "%"; extra = <><small className="hj-bl-meta">{d.meta.nome}</small><span className="hj-bar"><i style={{ width: d.meta.pct + "%", background: d.meta.cor || "#16A34A" }} /></span></>; } }
     if (k === "saldo") v = fmtCurto(d.saldo);
     if (k === "sobra") { v = fmtCurto(d.sobra); if (d.receitas > 0) extra = <small>{Math.round((d.sobra / d.receitas) * 100)}% da receita</small>; }
