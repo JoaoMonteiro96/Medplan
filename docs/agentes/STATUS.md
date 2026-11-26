@@ -14,14 +14,17 @@ Atualizado em 26/11/2026. Quem mantém: orquestrador (ou a conversa principal), 
 - `ferramentas/testes/larguras.cjs`: larguras, temas, modos e guia.
 - `ferramentas/testes/nuvem.cjs`: sincronização com um Supabase de mentira.
 - `ferramentas/testes/telas.cjs`: fotos das telas.
-- **Não existem ainda:** testes dos cálculos (imposto, renda fixa, parcelas, centavos).
+- `ferramentas/testes/calculos.cjs` (novo, 26/11/2026): 27 verificações dos cálculos de dinheiro (imposto da empresa, pró-labore, Simples, presumido, metas em plantões, "Vale a pena", férias). Só lê o `app.jsx`. Na rodada de 26/11, `larguras.cjs`, `nuvem.cjs` e `calculos.cjs` terminaram com "Tudo certo" (rodados pelo testador); `telas.cjs completo` gerou as fotos (rodado pela tipografia).
+- **Não existem ainda:** testes de parcelas do cartão, dólar na tela e renda fixa, e teste com o modo offline (service worker) ligado.
 
 ## Equipe
 
-- 17 agentes e 18 comandos criados em 26/11/2026. Nenhum relatório ainda.
+- 17 agentes e 18 comandos criados em 26/11/2026.
+- Primeira rodada geral de diagnóstico feita em 26/11/2026 (16 relatórios). Lista consolidada e os 10 primeiros itens em `docs/agentes/RODADA-2026-11-26.md`. O relatório de negócio está em `privado/` (fora do Git).
 
 ## Ainda não existe
 
 - Cobrança (assinatura mensal planejada).
+- Canal de contato e ajuda (as páginas de Privacidade e Termos ainda dizem "será publicado em breve").
 - Instagram do Sallos (o João vai criar).
 - App nas lojas (App Store, Google Play).
