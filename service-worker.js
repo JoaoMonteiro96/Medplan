@@ -1,6 +1,6 @@
 // Sallos: abre na hora com a cópia guardada e busca a versão nova por trás. Quando chega versão nova,
 // avisa o app ("Nova versão pronta") e a próxima abertura já usa a nova. Sem internet, usa a cópia guardada.
-const CACHE_NAME = "mediplan-202611262103";
+const CACHE_NAME = "mediplan-202611262117";
 const REM_CACHE = "mediplan-lembretes"; // lista de lembretes gravada pelo app; não é apagada nas atualizações
 const FONTES = ["inter-latin-400", "inter-latin-500", "inter-latin-600", "inter-latin-700", "inter-latin-800", "manrope-latin-500", "manrope-latin-600", "manrope-latin-700", "manrope-latin-800"].map((f) => "./fontes/" + f + "-normal.woff2");
 const ASSETS = ["./index.html", "./manifest.json", "./sallos-192.png", "./sallos-512.png", "./sallos-180.png", "./sallos-32.png", "./sallos-badge.png", "./libs/supabase-2.45.4.js", ...FONTES];

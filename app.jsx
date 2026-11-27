@@ -6257,6 +6257,7 @@ function App() {
         .cv-hoje { padding: 16px; display: grid; gap: 12px; } .cv-t b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 16px; } .cv-t small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 3px; }
         .cv-b { display: flex; gap: 8px; flex-wrap: wrap; } .cv-b .btn { text-decoration: none; }
         .desk-extras { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 18px; align-items: start; } .desk-extras > .card { margin: 0; }
+        #vd-desde { height: auto; min-height: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; padding-top: 10px; padding-bottom: 10px; }
         .vd-hist { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-dim); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; } .vd-hist b { color: var(--text); }
         .fg-todo-ic { width: 30px; height: 30px; border-radius: 10px; background: #E3F0EA; color: #0E5640; display: grid; place-items: center; flex-shrink: 0; } :root[data-theme="dark"] .fg-todo-ic { background: rgba(110,231,183,.12); color: #6EE7B7; }
         .fg-todo-in { padding: 0 0 6px 14px; border-left: 2px solid var(--border); margin: 0 12px 10px 22px; }
@@ -6891,10 +6892,10 @@ function ValorDesde({ ini, campo, valor, mesRef, desde, setDesde }) {
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label htmlFor="vd-desde">O valor novo vale a partir de</label>
           <select id="vd-desde" value={desde} onChange={(e) => setDesde(e.target.value)}>
-            {meses.map((m) => <option key={m} value={m}>{mesRotulo(m)} em diante{m === ref ? " (este mês)" : ""}</option>)}
-            <option value="">Todos os meses (corrigir o valor antigo)</option>
+            {meses.map((m) => <option key={m} value={m}>{mesRotulo(m)}{m === ref ? " · este mês" : ""}</option>)}
+            <option value="">Todos os meses</option>
           </select>
-          <div className="field-hint">Os meses antes continuam com {fmtBRL(antes)}.</div>
+          <div className="field-hint">{desde ? <>Os meses antes continuam com {fmtBRL(antes)}.</> : "Corrige o valor em todos os meses, inclusive os que já passaram."}</div>
         </div>
       )}
     </>
