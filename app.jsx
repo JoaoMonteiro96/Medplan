@@ -8047,7 +8047,8 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const somaG = (l) => l.reduce((a, i) => a + (Number(i.gross) || 0), 0), somaT = (l) => l.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
   const anoAluguel = yearIncomeItems.filter((i) => i.forma === "aluguel");
   // valores automáticos do IR, montados com o que já está no app (cada um diz de onde veio)
-  const sug = { rend: pl * 12 + somaG(anoNaoPJ), inss: vItem("inss") * 12, retido: vItem("irrf") * 12 + somaT(anoClt) + somaT(anoAluguel), pgbl: Number(app.pgblAno) || 0 };
+  const irAuto = ir.auto !== false; // "Preencher com os dados do app" (pode desligar)
+  const sug = irAuto ? { rend: pl * 12 + somaG(anoNaoPJ), inss: vItem("inss") * 12, retido: vItem("irrf") * 12 + somaT(anoClt) + somaT(anoAluguel), pgbl: Number(app.pgblAno) || 0 } : {};
   const fontes = {
     rend: [pl > 0 && `pró-labore 12 × ${fmtBRL(pl)}`, somaG(anoClt) > 0 && `carteira assinada ${fmtBRL(somaG(anoClt))}`, somaG(anoAluguel) > 0 && `aluguel ${fmtBRL(somaG(anoAluguel))}`].filter(Boolean),
     retido: [vItem("irrf") > 0 && `imposto do pró-labore 12 × ${fmtBRL(vItem("irrf"))}`, somaT(anoClt) > 0 && `descontado na carteira ${fmtBRL(somaT(anoClt))}`, somaT(anoAluguel) > 0 && `carnê-leão do aluguel ${fmtBRL(somaT(anoAluguel))}`].filter(Boolean),
@@ -8181,23 +8182,27 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
         <MoneyInput value={manual ? ir[k] : (auto > 0 ? Math.round(auto * 100) / 100 : "")} onChange={(v) => setIr(k, v)} />
         {manual && auto > 0 && Math.abs(numOf(ir[k]) - auto) > 0.5
           ? <button type="button" className="link-btn ir-volta" onClick={() => setIr(k, "")}>Voltar ao automático ({fmtBRL(auto)})</button>
-          : !manual && fontes[k] && fontes[k].length > 0 && <div className="field-hint">{fontes[k].join(" + ")}</div>}
+          : !manual && auto > 0 && fontes[k] && fontes[k].length > 0 && <div className="field-hint">{fontes[k].join(" + ")}</div>}
       </div>
     );
   };
   const irBody = (
     <div className="ct-ir">
       <div className="form-grid">
-        <div className="field ir-campo" data-ir="pl">
+        <label className="vib-op ir-auto" htmlFor="ir-auto" style={{ gridColumn: "1 / -1", marginTop: 0 }}>
+          <span>Preencher com os dados do app</span>
+          <input id="ir-auto" type="checkbox" checked={irAuto} onChange={(e) => setIr("auto", e.target.checked)} />
+        </label>
+        {irAuto && <div className="field ir-campo" data-ir="pl">
           <label htmlFor="ir-pl">Seu pró-labore por mês (R$)</label>
           <MoneyInput id="ir-pl" value={contab.proLabore || ""} onChange={(v) => setContab((p) => ({ ...p, proLabore: v === "" ? "" : String(v) }))} />
           <div className="field-hint">{pl > 0 ? "O mesmo de Impostos › Ajustar os impostos." : "O “salário” que a sua empresa paga a você. Com ele, o app calcula o resto."}</div>
-        </div>
+        </div>}
         {irCampo("rend", "Quanto você recebeu no ano (R$)")}
         {irCampo("retido", "Imposto já pago no ano (R$)")}
         {irCampo("inss", "INSS pago no ano (R$)")}
         {irCampo("pgbl", "Previdência privada PGBL (R$)")}
-        {anoIsento.length > 0 && (
+        {irAuto && anoIsento.length > 0 && (
           <div className="field ir-campo" data-ir="isento">
             <label>Recebido sem imposto no ano <span className="ir-tag">automático</span></label>
             <div className="ir-fixo mono">{fmtBRL(anoIsento.reduce((a, i) => a + (Number(i.forma === "socio" ? i.net : i.gross) || 0), 0))}</div>
