@@ -1,9 +1,12 @@
 // Sallos: abre na hora com a cópia guardada e busca a versão nova por trás. Quando chega versão nova,
 // avisa o app ("Nova versão pronta") e a próxima abertura já usa a nova. Sem internet, usa a cópia guardada.
-const CACHE_NAME = "mediplan-202611262158";
+const CACHE_NAME = "mediplan-202611262221";
 const REM_CACHE = "mediplan-lembretes"; // lista de lembretes gravada pelo app; não é apagada nas atualizações
+// partes do programa com a versão no nome (libs/): ficam guardadas entre as atualizações do app, sem baixar de novo
+const LIB_CACHE = "sallos-libs-1";
+const LIBS_JA = ["./libs/supabase-2.45.4.js", "./libs/pdf-3.11.174.min.js", "./libs/pdf-3.11.174.worker.min.js", "./libs/xlsx-0.18.5.full.min.js", "./libs/jspdf-2.5.1.min.js"];
 const FONTES = ["inter-latin-400", "inter-latin-500", "inter-latin-600", "inter-latin-700", "inter-latin-800", "manrope-latin-500", "manrope-latin-600", "manrope-latin-700", "manrope-latin-800"].map((f) => "./fontes/" + f + "-normal.woff2");
-const ASSETS = ["./index.html", "./manifest.json", "./sallos-192.png", "./sallos-512.png", "./sallos-180.png", "./sallos-32.png", "./sallos-badge.png", "./libs/supabase-2.45.4.js", ...FONTES];
+const ASSETS = ["./index.html", "./manifest.json", "./sallos-192.png", "./sallos-512.png", "./sallos-180.png", "./sallos-32.png", "./sallos-badge.png", ...FONTES];
 const versaoDe = (html) => { const m = /app\.js\?v=(\d+)/.exec(html || ""); return m ? m[1] : ""; };
 // guarda a página e o app desta versão (o app.js com o número da versão, para nunca misturar versões)
 self.addEventListener("install", (e) => {
@@ -16,10 +19,13 @@ self.addEventListener("install", (e) => {
     const v = versaoDe(html);
     if (v) await c.add(new Request("./app.js?v=" + v, { cache: "no-cache" }));
     await Promise.all(ASSETS.filter((a) => a !== "./index.html").map((a) => c.add(new Request(a, { cache: "no-cache" })).catch(() => {})));
+    // leitores de PDF e planilha e o resto do programa: só baixa o que ainda não está guardado (a leitura de foto, mais pesada, guarda no primeiro uso)
+    const lc = await caches.open(LIB_CACHE);
+    await Promise.all(LIBS_JA.map(async (a) => { if (!(await lc.match(a))) await lc.add(a).catch(() => {}); }));
   })());
   self.skipWaiting();
 });
-self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE_NAME && k !== REM_CACHE).map((k) => caches.delete(k))))); self.clients.claim(); });
+self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE_NAME && k !== REM_CACHE && k !== LIB_CACHE).map((k) => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
@@ -51,7 +57,8 @@ self.addEventListener("fetch", (e) => {
   }
   // fontes e bibliotecas guardadas no app: a cópia guardada primeiro
   if (mesma && (url.pathname.includes("/fontes/") || url.pathname.includes("/libs/"))) {
-    e.respondWith(caches.match(req).then((g) => g || fetch(req).then((res) => { if (res.ok) { const copy = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(req, copy)); } return res; })));
+    const destino = url.pathname.includes("/libs/") ? LIB_CACHE : CACHE_NAME;
+    e.respondWith(caches.match(req, { ignoreSearch: true }).then((g) => g || fetch(req).then((res) => { if (res.ok) { const copy = res.clone(); caches.open(destino).then((c) => c.put(req, copy)); } return res; })));
     return;
   }
   // o resto: rede primeiro, cópia guardada sem internet

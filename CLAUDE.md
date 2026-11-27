@@ -18,7 +18,7 @@ O Sallos (antigo Mediplan) é um app de finanças para médicos. Ele organiza pl
 - `app.js`: o app montado a partir do `app.jsx`. **Não edite à mão**: gere com `npm run build`.
 - `index.html`: abertura com a marca (splash), o esqueleto de carregamento e o carregamento do app.
 - `service-worker.js`: deixa o app funcionar como aplicativo e sem internet. Desde 26/11/2026 abre na hora com a cópia guardada (página + `app.js?v=`) e busca a nova por trás; o app pergunta a versão guardada (`sallos-checar`) e mostra "Nova versão do Sallos pronta" com Atualizar.
-- `fontes/` (Manrope e Inter em woff2) e `libs/` (jsPDF, carregado só ao gerar PDF, e supabase-js): guardados no próprio app, sem Google Fonts nem CDN no app.
+- `fontes/` (Manrope e Inter em woff2) e `libs/` (jsPDF, supabase-js e, desde 27/11/2026, os leitores do Importar: pdf.js 3.11.174, xlsx 0.18.5 e tesseract.js 5.1.1 com o núcleo e o português `tessdata-por-best-int`): guardados no próprio app, sem Google Fonts nem CDN no app. O service worker guarda `libs/` numa gaveta própria (`sallos-libs-1`) que não é apagada nas atualizações; PDF e planilha são baixados na instalação, a leitura de foto no primeiro uso.
 - `manifest.json`, `sallos-*.png`: ícones e dados de instalação.
 - `conheca/`: página de apresentação (sallos.com.br/conheca), com imagens e o vídeo de demonstração. Visual de 23/11/2026: topo escuro de "monitor" (grade e linha de batimento), celulares em 3D com etiquetas de vidro; recursos com o celular fixo que troca de tela ao rolar (computador) e carrossel (celular). A página é gerada: edite `ferramentas/paginas/conheca-molde.html` (visual) e a lista `CAPS` em `ferramentas/paginas/conheca.py` (recursos) e rode `python3 ferramentas/paginas/conheca.py ferramentas/paginas/conheca-molde.html conheca/index.html`.
 - `schema.sql`: tabelas, regras de acesso, pasta de notas e tarefas automáticas do Supabase.
@@ -46,6 +46,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 
 - `node ferramentas/testes/larguras.cjs`: confere as larguras **344 px** (Galaxy Z Fold fechado), 360, 390, **412** (celular do João), 430, 600, 690 (Fold aberto) e 1440 (computador), nos temas claro e escuro, nos modos Simples e Completo e no guia de pessoa nova. Tem que terminar com "Tudo certo".
 - `node ferramentas/testes/offline.cjs`: app com o service worker ligado: abre sem internet, com as fontes, e mostra "Nova versão" quando há versão nova.
+- `node ferramentas/testes/importar-offline.cjs`: leitores do Importar (PDF, planilha e foto) carregam do próprio app e funcionam sem internet.
 - `node ferramentas/testes/calculos.cjs`: contas de dinheiro (imposto, pró-labore, Simples, presumido, IR anual, metas, férias).
 - `node ferramentas/testes/nuvem.cjs`: testa a nuvem com um Supabase de mentira (envio, download só do que mudou, mudança sem internet, excluir conta). Rode sempre que mexer na sincronização.
 - `node ferramentas/testes/telas.cjs simples` (ou `completo`, `novo`): fotos das telas em `ferramentas/saida/` para mandar ao João. Olhe as fotos antes de mandar.
@@ -69,6 +70,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - `cobrarWhats` dentro de cada vínculo (hospital): WhatsApp do financeiro, salvo pelo botão Cobrar.
 - `mediplan-uso-fila`, `mediplan-uso-id`, `mediplan-uso-off`: contagem anônima de uso das telas (a pessoa pode desligar em Ajustes → Privacidade). Também vão `_modo:simples`/`_modo:completo` (modo do dia), `_m:guia`, `_m:plantao`, `_m:conta`, `_m:recebi`, `_m:indicou` (primeiros passos, uma vez por aparelho, controlados por `mediplan-uso-marcos`) e as telas internas `ferias`, `vale`, `metaplantoes`.
 - `mediplan-vibrar-off`: vibração desligada (Configurações › Aparência).
+- `mediplan-lembrete-carteira`: mês (`AAAA-MM`) em que a pessoa tocou "Já coloquei" no lembrete "Hora de atualizar a carteira" (Hoje, modo Completo). O lembrete some também quando entra investimento no mês; nos lembretes do celular, chega no dia 1.
 - `mediplan-convite-lembrete`, `mediplan-convite-colega`: convites da Hoje já dispensados.
 
 ## Como o app está organizado (novembro de 2026)

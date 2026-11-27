@@ -425,8 +425,10 @@ Object.keys(ASSET_RAW).forEach((ty) => ASSET_RAW[ty].split(";").forEach((row) =>
 const ASSET_NAME = Object.fromEntries(ASSET_DB.map((a) => [a.t, a.n]));
 
 // IMPORT-PARSERS-START
-const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+// leitores do Importar guardados no próprio app (pasta libs/): funcionam sem internet depois de baixados uma vez
+const libUrl = (c) => new URL(c, document.baseURI).href;
+const PDFJS_URL = "libs/pdf-3.11.174.min.js";
+const PDFJS_WORKER = "libs/pdf-3.11.174.worker.min.js";
 const MON_MAP = { jan: 0, fev: 1, feb: 1, mar: 2, abr: 3, apr: 3, mai: 4, may: 4, jun: 5, jul: 6, ago: 7, aug: 7, set: 8, sep: 8, out: 9, oct: 9, nov: 10, dez: 11, dec: 11 };
 const pad2 = (n) => String(n).padStart(2, "0");
 const stripAcc = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -617,7 +619,7 @@ async function loadPdfJs() {
     sc.onerror = () => rej(new Error("Não consegui carregar o leitor de PDF. Verifique a internet e tente de novo."));
     document.head.appendChild(sc);
   });
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = libUrl(PDFJS_WORKER);
   return window.pdfjsLib;
 }
 
@@ -641,7 +643,7 @@ async function readTextSmart(file) {
 }
 
 
-const XLSX_URL = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+const XLSX_URL = "libs/xlsx-0.18.5.full.min.js";
 async function loadXlsx() {
   if (window.XLSX) return window.XLSX;
   await new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = XLSX_URL; sc.onload = res; sc.onerror = () => rej(new Error("Não consegui carregar o leitor de Excel. Verifique a internet e tente de novo.")); document.head.appendChild(sc); });
@@ -1917,6 +1919,20 @@ function ConviteHoje({ vazio, guiaAberto, onPlantao, algumRecebido, notifOn, onL
   return null;
 }
 
+// lembrete de todo mês: atualizar a carteira (compras e aportes). Some quando entra investimento no mês ou com "Já coloquei".
+function LembreteCarteira({ investiuNoMes, onImportar }) {
+  const mk = todayStr().slice(0, 7);
+  const [feito, setFeito] = useState(() => lsGet("mediplan-lembrete-carteira") === mk);
+  if (feito || investiuNoMes) return null;
+  const mesAnt = MONTHS_PT[(new Date().getMonth() + 11) % 12].toLowerCase();
+  return (
+    <div className="card cv-hoje" id="lembrete-carteira">
+      <div className="cv-t"><b>Hora de atualizar a carteira</b><small>Coloque as compras e os aportes de {mesAnt}: importe da corretora ou da B3, ou lance à mão.</small></div>
+      <div className="cv-b"><button type="button" className="btn btn-primary sm" onClick={onImportar}>Importar agora</button><button type="button" className="btn btn-ghost sm" onClick={() => { lsSet("mediplan-lembrete-carteira", mk); setFeito(true); }}>Já coloquei</button></div>
+    </div>
+  );
+}
+
 // imposto que a própria pessoa ainda tem de pagar no mês: fica de fora o que já vem com imposto pago (Pix como sócio, carteira, pró-labore)
 const impostoAPagar = (itens) => Math.max(0, (itens || []).filter((i) => i.forma !== "socio" && i.forma !== "clt").reduce((a, i) => a + (Number(i.gross) || 0) - (Number(i.net) || 0), 0));
 
@@ -2891,12 +2907,18 @@ function App() {
       buildExpenseItems(y, m).forEach((e) => { if (!e.paid && e.amount > 0 && e.dateIso >= hoje && e.dateIso <= fim) out.push({ key: e.key, date: e.dateIso, tipo: "despesa", nome: e.description, valor: e.amount }); });
       buildIncomeItems(y, m).forEach((i) => { if (!i.recebido && i.net > 0 && i.dateIso && i.dateIso >= hoje && i.dateIso <= fim) out.push({ key: i.key, date: i.dateIso, tipo: "receita", nome: i.nome, valor: i.net }); });
     }
-    return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).map((i) => ({ ...i,
+    // dia 1 de cada mês: atualizar a carteira (só no modo Completo, onde a carteira aparece)
+    if ((contab.modoApp || "completo") !== "simples") for (let k = 0; k < 2; k++) {
+      const d1 = new Date(t.getFullYear(), t.getMonth() + k, 1), iso = dateStr(d1.getFullYear(), d1.getMonth(), 1);
+      if (iso >= hoje) out.push({ key: "carteira-" + iso.slice(0, 7), date: iso, tipo: "carteira", nome: "carteira" });
+    }
+    return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).map((i) => i.tipo === "carteira" ? { ...i,
+      t1: "Amanhã: atualizar a carteira", t0: "Hora de atualizar a carteira", body: "Coloque as compras e os aportes do mês no Sallos." } : ({ ...i,
       t1: i.tipo === "despesa" ? `Vence amanhã: ${i.nome}` : `Amanhã você recebe: ${i.nome}`,
       t0: i.tipo === "despesa" ? `Vence hoje: ${i.nome}` : `Hoje você recebe: ${i.nome}`,
       // sem valores: o aviso aparece na tela bloqueada; o valor fica dentro do app
       body: i.tipo === "despesa" ? `Vencimento em ${fmtDatePt(i.date)}. Toque para ver no Sallos.` : `Previsto para ${fmtDatePt(i.date)}. Toque para ver no Sallos.` }));
-  }, [expenses, recurringExpenses, shifts, vinculos, extraRecurringIncomes, oneOffIncomes, taxRateGeral]);
+  }, [expenses, recurringExpenses, shifts, vinculos, extraRecurringIncomes, oneOffIncomes, taxRateGeral, contab.modoApp]);
   useEffect(() => { if (!loaded) return undefined; const tm = setTimeout(() => syncLembretes(notifOn, lembretes), 600); return () => clearTimeout(tm); }, [loaded, notifOn, lembretes]);
 
   const monthKey = monthKeyOf(viewYear, viewMonth);
@@ -7595,7 +7617,7 @@ function LembretesCard({ on, setOn, itens }) {
             <div className="lb-list" id="lb-list">
               <b>Próximos avisos (chegam um dia antes da data)</b>
               {prox.length === 0 && <span>Nada a pagar ou a receber nos próximos 40 dias.</span>}
-              {prox.map((i) => <span key={i.key + i.date}><i className={i.tipo === "despesa" ? "out" : "in"} />{fmtDatePt(i.date).slice(0, 5)} · {i.tipo === "despesa" ? "vence" : "cai"} {i.nome} · {fmtBRL(i.valor)}</span>)}
+              {prox.map((i) => <span key={i.key + i.date}><i className={i.tipo === "despesa" ? "out" : "in"} />{fmtDatePt(i.date).slice(0, 5)} · {i.tipo === "carteira" ? "atualizar a carteira" : <>{i.tipo === "despesa" ? "vence" : "cai"} {i.nome} · {fmtBRL(i.valor)}</>}</span>)}
               {itens.length > prox.length && <span>e mais {itens.length - prox.length}.</span>}
             </div>
           )}
@@ -9299,6 +9321,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       {ehMesAtual && hojeInfo && <ProximoPlantao p={hojeInfo.proximo} onVer={() => setActiveTab("calendario")} />}
       {ehMesAtual && hojeInfo && <ParaConfirmar itens={hojeInfo.itens} pagar={hojeInfo.pagar} onCobrar={onCobrar} />}
       {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
+      {ehMesAtual && !simples && <LembreteCarteira investiuNoMes={(curStats.invested || 0) > 0} onImportar={() => setActiveTab("importar")} />}
       {ehMesAtual && convite && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
       {alerts.length > 0 && <Avisos alerts={alerts} />}
       <InsightsCaixa items={insights} />
@@ -9310,6 +9333,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
   const extrasDesk = (ehMesAtual && (onSeparar || convite)) ? (
     <div className="desk-extras">
       {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
+      {ehMesAtual && !simples && <LembreteCarteira investiuNoMes={(curStats.invested || 0) > 0} onImportar={() => setActiveTab("importar")} />}
       {ehMesAtual && convite && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
     </div>
   ) : null;
@@ -9625,7 +9649,7 @@ const mesesAteMeta = (g, atual, aporteSugerido) => {
 };
 
 // ---- print da corretora: o texto é lido no próprio aparelho (Tesseract), sem enviar a imagem para ninguém ----
-const TESS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+const TESS_URL = "libs/tesseract-5.1.1/tesseract.min.js";
 async function loadTesseract() {
   if (window.Tesseract) return window.Tesseract;
   await new Promise((res, rej) => {
@@ -9655,7 +9679,7 @@ async function lerPrint(file, onProg) {
   const imagem = await prepararPrint(file);
   if (window.__mediplanOCR) return window.__mediplanOCR(imagem, file);
   const T = await loadTesseract();
-  const worker = await T.createWorker("por", 1, { logger: (m) => { if (m && m.status === "recognizing text" && onProg) onProg(m.progress || 0); } });
+  const worker = await T.createWorker("por", 1, { workerPath: libUrl("libs/tesseract-5.1.1/worker.min.js"), corePath: libUrl("libs/tesseract-core-5.1.1"), langPath: libUrl("libs/tessdata-por-best-int"), workerBlobURL: false, logger: (m) => { if (m && m.status === "recognizing text" && onProg) onProg(m.progress || 0); } });
   try { const { data } = await worker.recognize(imagem); return (data && data.text) || ""; } finally { try { await worker.terminate(); } catch (e) {} }
 }
 // encontra os ativos no texto do print: código (PETR4, HGLG11…), quantidade e preço médio
