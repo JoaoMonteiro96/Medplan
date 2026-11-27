@@ -3461,7 +3461,9 @@ function App() {
   const prevMonthName = MONTHS_PT[monthBack(1)[1]];
   const contabApp = (() => {
     const past = Array.from({ length: 12 }, (_, i) => grossWorked(...monthBack(i + 1)));
-    return { mesBruto: grossWorked(viewYear, viewMonth), mesLabel: MONTHS_PT[viewMonth].toLowerCase(), rbt12: past.reduce((a, v) => a + v, 0), meses: past.filter((v) => v > 0).length };
+    // aportes em previdência PGBL no ano (Investimentos), para o IR
+    const pgblAno = investments.filter((i) => /pgbl/i.test(String(i.description || "")) && i.tipo !== "venda" && !i.posicaoInicial && String(i.date || "").slice(0, 4) === String(viewYear)).reduce((a, i) => a + (Number(i.amount) || 0), 0);
+    return { mesBruto: grossWorked(viewYear, viewMonth), mesLabel: MONTHS_PT[viewMonth].toLowerCase(), rbt12: past.reduce((a, v) => a + v, 0), meses: past.filter((v) => v > 0).length, pgblAno };
   })();
 
   const investmentsHistory12 = (() => {
@@ -6258,6 +6260,9 @@ function App() {
         .cv-b { display: flex; gap: 8px; flex-wrap: wrap; } .cv-b .btn { text-decoration: none; }
         .desk-extras { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 18px; align-items: start; } .desk-extras > .card { margin: 0; }
         #vd-desde { height: auto; min-height: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; padding-top: 10px; padding-bottom: 10px; }
+        .ir-tag { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #E3F0EA; color: #0E5640; vertical-align: middle; } .ir-tag.eu { background: #FEF3C7; color: #92400E; }
+        :root[data-theme="dark"] .ir-tag { background: rgba(110,231,183,.14); color: #6EE7B7; } :root[data-theme="dark"] .ir-tag.eu { background: rgba(251,191,36,.14); color: #FCD34D; }
+        .ir-volta { margin-top: 6px; font-size: 13px; padding: 0; text-align: left; }
         .vd-hist { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-dim); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; } .vd-hist b { color: var(--text); }
         .fg-todo-ic { width: 30px; height: 30px; border-radius: 10px; background: #E3F0EA; color: #0E5640; display: grid; place-items: center; flex-shrink: 0; } :root[data-theme="dark"] .fg-todo-ic { background: rgba(110,231,183,.12); color: #6EE7B7; }
         .fg-todo-in { padding: 0 0 6px 14px; border-left: 2px solid var(--border); margin: 0 12px 10px 22px; }
@@ -8027,7 +8032,15 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const anoIsento = yearIncomeItems.filter((i) => i.forma === "socio" || i.forma === "div");
   const anoClt = yearIncomeItems.filter((i) => i.forma === "clt");
   const somaG = (l) => l.reduce((a, i) => a + (Number(i.gross) || 0), 0), somaT = (l) => l.reduce((a, i) => a + Math.max(0, (Number(i.gross) || 0) - (Number(i.net) || 0)), 0);
-  const sug = { rend: pl * 12 + somaG(anoNaoPJ), inss: vItem("inss") * 12, retido: vItem("irrf") * 12 + somaT(anoClt) };
+  const anoAluguel = yearIncomeItems.filter((i) => i.forma === "aluguel");
+  // valores automáticos do IR, montados com o que já está no app (cada um diz de onde veio)
+  const sug = { rend: pl * 12 + somaG(anoNaoPJ), inss: vItem("inss") * 12, retido: vItem("irrf") * 12 + somaT(anoClt) + somaT(anoAluguel), pgbl: Number(app.pgblAno) || 0 };
+  const fontes = {
+    rend: [pl > 0 && `pró-labore 12 × ${fmtBRL(pl)}`, somaG(anoClt) > 0 && `carteira assinada ${fmtBRL(somaG(anoClt))}`, somaG(anoAluguel) > 0 && `aluguel ${fmtBRL(somaG(anoAluguel))}`].filter(Boolean),
+    retido: [vItem("irrf") > 0 && `imposto do pró-labore 12 × ${fmtBRL(vItem("irrf"))}`, somaT(anoClt) > 0 && `descontado na carteira ${fmtBRL(somaT(anoClt))}`, somaT(anoAluguel) > 0 && `carnê-leão do aluguel ${fmtBRL(somaT(anoAluguel))}`].filter(Boolean),
+    inss: [vItem("inss") > 0 && `INSS do pró-labore 12 × ${fmtBRL(vItem("inss"))}`].filter(Boolean),
+    pgbl: [sug.pgbl > 0 && `aportes em PGBL lançados em Investimentos`].filter(Boolean),
+  };
   const val = (k) => (ir[k] === undefined || ir[k] === "" || ir[k] === null ? sug[k] || 0 : numOf(ir[k]));
   // gastos registrados só para o IR (não entram em ganhos e custos do app)
   const avulsas = (contab.dedAvulsas || []).filter((x) => String(x.data || "").slice(0, 4) === String(viewYear))
@@ -8037,7 +8050,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const dep = Math.max(0, Math.round(numOf(ir.dependentes)));
   const rend = val("rend");
   const saude = somaCat("saude"), educ = Math.min(somaCat("educacao"), IR_EDU_LIMITE * (1 + dep));
-  const pgbl = Math.min(numOf(ir.pgbl), rend * 0.12);
+  const pgbl = Math.min(val("pgbl"), rend * 0.12);
   const deducoes = val("inss") + saude + educ + dep * IR_DEP_ANUAL + pgbl;
   const irr = irAnual(rend, deducoes);
   const irSemGastos = irAnual(rend, deducoes - saude - educ);
@@ -8145,13 +8158,27 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
       )}
     </div>
   );
+  // campo do IR: mostra o valor automático (do app) já preenchido; ao digitar, vale o seu número, com "Voltar ao automático"
+  const irCampo = (k, rotulo) => {
+    const manual = !(ir[k] === undefined || ir[k] === "" || ir[k] === null);
+    const auto = sug[k] || 0;
+    return (
+      <div className="field ir-campo" key={k} data-ir={k}>
+        <label>{rotulo} {manual ? <span className="ir-tag eu">você alterou</span> : auto > 0 ? <span className="ir-tag">automático</span> : null}</label>
+        <MoneyInput value={manual ? ir[k] : (auto > 0 ? Math.round(auto * 100) / 100 : "")} onChange={(v) => setIr(k, v)} />
+        {manual && auto > 0 && Math.abs(numOf(ir[k]) - auto) > 0.5
+          ? <button type="button" className="link-btn ir-volta" onClick={() => setIr(k, "")}>Voltar ao automático ({fmtBRL(auto)})</button>
+          : !manual && fontes[k] && fontes[k].length > 0 && <div className="field-hint">{fontes[k].join(" + ")}</div>}
+      </div>
+    );
+  };
   const irBody = (
     <div className="ct-ir">
       <div className="form-grid">
-        <div className="field"><label>Quanto você recebeu no ano (R$)</label><MoneyInput value={ir.rend === undefined || ir.rend === "" ? "" : ir.rend} placeholder={sug.rend ? Math.round(sug.rend).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("rend", v)} /><div className="field-hint">Só pró-labore, carteira assinada e aluguel. {sug.rend > 0 ? "Em branco, o app usa o que você já lançou." : ""} Pix como sócio e dividendos não entram.</div></div>
-        <div className="field"><label>Imposto já descontado no ano (R$)</label><MoneyInput value={ir.retido === undefined || ir.retido === "" ? "" : ir.retido} placeholder={sug.retido ? Math.round(sug.retido).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("retido", v)} /><div className="field-hint">Aparece no informe de rendimentos que a empresa envia em fevereiro.</div></div>
-        <div className="field"><label>INSS pago no ano (R$)</label><MoneyInput value={ir.inss === undefined || ir.inss === "" ? "" : ir.inss} placeholder={sug.inss ? Math.round(sug.inss).toLocaleString("pt-BR") : "0"} onChange={(v) => setIr("inss", v)} /></div>
-        <div className="field"><label>Previdência privada PGBL (R$)</label><MoneyInput value={ir.pgbl === undefined ? "" : ir.pgbl} onChange={(v) => setIr("pgbl", v)} /></div>
+        {irCampo("rend", "Quanto você recebeu no ano (R$)")}
+        {irCampo("retido", "Imposto já pago no ano (R$)")}
+        {irCampo("inss", "INSS pago no ano (R$)")}
+        {irCampo("pgbl", "Previdência privada PGBL (R$)")}
         <div className="field"><label>Dependentes</label><input type="number" inputMode="numeric" min="0" value={ir.dependentes || ""} placeholder="0" onChange={(e) => setIr("dependentes", e.target.value)} /></div>
       </div>
       <div className="ct-ir-res">
