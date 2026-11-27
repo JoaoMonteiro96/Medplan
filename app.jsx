@@ -5137,7 +5137,8 @@ function App() {
         /* ================= v52: faturamento por hospital ================= */
         .fg-list { display: flex; flex-direction: column; }
         .fg { border-top: 1px solid var(--border); } .fg:first-child { border-top: none; }
-        .fg-h { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 14px 18px; background: none; border: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+        .fg-vc { display: flex; align-items: center; gap: 12px; flex: none; }
+        .fg-h { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 18px; background: none; border: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
         .fg-h:hover { background: var(--surface-2); }
         .fg-h svg { transition: transform .2s; } .fg.open .fg-h svg { transform: rotate(180deg); }
         .fg-t { display: flex; flex-direction: column; min-width: 0; } .fg-t b { font-size: 15px; } .fg-t small { font-size: 12.5px; color: var(--text-dim); }
@@ -5166,6 +5167,17 @@ function App() {
           .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(5) { grid-column: 3; grid-row: 1; padding-left: 0; }
           .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(6) { grid-column: 4; grid-row: 1; }
           .fg-body .fg-item b { font-size: 13.5px; font-weight: 600; } .fg-body .badge { font-size: 11px; padding: 3px 8px; } .fg-body .fz-pen { width: 32px; height: 32px; }
+        }
+        /* letras grandes no celular (configuração do Android) ou tela muito estreita: nada se sobrepõe, o que não cabe desce de linha */
+        @media (max-width: 480px) {
+          .fg-h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+          .fg-h > .legend-dot, .fg-h > .fg-todo-ic { flex: none; }
+          .fg-h > .fg-t { flex: 1 1 120px; } .fg-t b { overflow-wrap: anywhere; }
+          .fg-h > .fg-vc { margin-left: auto; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(1) { flex: 1 1 auto; min-width: 0; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(4) { margin-left: auto; text-align: right; }
+          .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(5), .fg-body .tbl-fat tbody tr:not(.fz-row) > td:nth-child(6) { flex: none; }
         }
 
         /* ================= v46: formas de recebimento e o novo "Adicionar" ================= */
@@ -6265,7 +6277,7 @@ function App() {
         .ir-volta { margin-top: 6px; font-size: 13px; padding: 0; text-align: left; }
         .vd-hist { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-dim); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; } .vd-hist b { color: var(--text); }
         .fg-todo-ic { width: 30px; height: 30px; border-radius: 10px; background: #E3F0EA; color: #0E5640; display: grid; place-items: center; flex-shrink: 0; } :root[data-theme="dark"] .fg-todo-ic { background: rgba(110,231,183,.12); color: #6EE7B7; }
-        .fg-todo-in { padding: 0 0 6px 14px; border-left: 2px solid var(--border); margin: 0 12px 10px 22px; }
+        .fg-todo-in { padding: 0 0 4px; border-top: 1px solid var(--border); }
         .vib-op { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; min-height: 44px; font-size: 14px; cursor: pointer; } .vib-op input { width: 22px; height: 22px; accent-color: #0E5640; flex-shrink: 0; }
         .aviso .aviso-fechar { background: transparent; border: none; color: rgba(255,255,255,.7); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; padding: 0; }
         .aviso-ok { width: 26px; height: 26px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; flex-shrink: 0; animation: okPop .5s var(--ease) .05s both; }
@@ -7251,15 +7263,15 @@ function FaturamentoTab({
   // lançamentos de todo mês (cargo fixo e receitas que se repetem) ficam juntos numa gaveta que abre e fecha
   const ehFixo = (g) => g.plantoes === 0 && (g.key.startsWith("v-") || g.key.startsWith("e-"));
   const fixos = grupos.filter(ehFixo), semFixos = grupos.filter((g) => !ehFixo(g));
+  const rotuloCurto = (it) => { const p = String(it.dateLabel || "").split(" · "); return p.filter((x, i) => i === 0 || /^ref\./.test(x)).join(" · ") || it.nome; };
   const caixaGrupo = (g) => {
               const aberto = !!abertos[g.key], pend = g.itens.filter((x) => !x.recebido);
               return (
                 <div key={g.key} className={`fg ${aberto ? "open" : ""}`} data-grupo={g.nome}>
                   <button type="button" className="fg-h" aria-expanded={aberto} onClick={() => setAbertos((o) => ({ ...o, [g.key]: !o[g.key] }))}>
                     <span className="legend-dot" style={{ background: g.cor }} />
-                    <span className="fg-t"><b>{g.nome}</b><small>{g.plantoes ? `${g.plantoes} ${g.plantoes === 1 ? "plantão" : "plantões"}` : g.itens.length === 1 ? (g.itens[0].dateLabel || "") : `${g.itens.length} lançamentos`}</small></span>
-                    <span className="fg-v"><b className="mono">{fmtBRL(g.net)}</b><small className={pend.length ? "pend" : "ok"}>{pend.length ? `${pend.length} a receber` : "tudo recebido"}</small></span>
-                    <IconChevronDown size={18} color="#8FA3A0" />
+                    <span className="fg-t"><b>{g.nome}</b><small>{g.plantoes ? `${g.plantoes} ${g.plantoes === 1 ? "plantão" : "plantões"}` : g.itens.length === 1 ? (g.itens[0].tipo === "avulsa" ? g.itens[0].dateLabel || "" : rotuloCurto(g.itens[0]) + (FORMA_CURTA[g.itens[0].forma] ? " · " + FORMA_CURTA[g.itens[0].forma] : "")) : `${g.itens.length} lançamentos`}</small></span>
+                    <span className="fg-vc"><span className="fg-v"><b className="mono">{fmtBRL(g.net)}</b><small className={pend.length ? "pend" : "ok"}>{pend.length ? `${pend.length} a receber` : "tudo recebido"}</small></span><IconChevronDown size={18} color="#8FA3A0" /></span>
                   </button>
                   {aberto && (
                     <div className="fg-body">
@@ -7270,7 +7282,7 @@ function FaturamentoTab({
                           {g.itens.map((it) => (
                   <React.Fragment key={it.key}>
                   <tr className={editKey === it.key ? "fz-aberta" : ""}>
-                    <td className="grow"><span className="fg-item"><b>{it.tipo === "plantao" ? rotuloPlantao(it) : it.dateLabel || it.nome}</b></span></td>
+                    <td className="grow"><span className="fg-item"><b>{it.tipo === "plantao" ? rotuloPlantao(it) : it.tipo === "avulsa" ? it.dateLabel || it.nome : rotuloCurto(it)}</b></span></td>
                     <td className="hide-sm">{it.dateLabel}{it.tipo !== "plantao" && !/ref\./.test(it.dateLabel) ? (it.tipo === "mensal" ? "" : "") : ""}</td>
                     <td className="num mono hide-sm">{fmtBRL(it.gross)}</td>
                     <td className="num mono">{fmtBRL(it.net)}{it.gross - it.net > 0.5 && <small className="show-sm fat-bruto">bruto {fmtBRL(it.gross)}</small>}</td>
@@ -7320,9 +7332,8 @@ function FaturamentoTab({
                 <div className={`fg fg-todo ${aberto ? "open" : ""}`} id="gaveta-todo-mes">
                   <button type="button" className="fg-h" aria-expanded={aberto} onClick={() => setAbertos((o) => ({ ...o, "__todo-mes": !o["__todo-mes"] }))}>
                     <span className="fg-todo-ic" aria-hidden="true"><IconCalendar size={15} /></span>
-                    <span className="fg-t"><b>Recebimentos de todo mês</b><small>{fixos.length === 1 ? fixos[0].nome : `${fixos.length} lançamentos: ${fixos.map((g) => g.nome).join(", ")}`}</small></span>
-                    <span className="fg-v"><b className="mono">{fmtBRL(totF)}</b><small className={pendF.length ? "pend" : "ok"}>{pendF.length ? `${pendF.length} a receber` : "tudo recebido"}</small></span>
-                    <IconChevronDown size={18} color="#8FA3A0" />
+                    <span className="fg-t"><b>Recebimentos de todo mês</b><small>{fixos.length === 1 ? fixos[0].nome : `${fixos.length} lançamentos`}</small></span>
+                    <span className="fg-vc"><span className="fg-v"><b className="mono">{fmtBRL(totF)}</b><small className={pendF.length ? "pend" : "ok"}>{pendF.length ? `${pendF.length} a receber` : "tudo recebido"}</small></span><IconChevronDown size={18} color="#8FA3A0" /></span>
                   </button>
                   {aberto && <div className="fg-todo-in">{fixos.map(caixaGrupo)}</div>}
                 </div>
