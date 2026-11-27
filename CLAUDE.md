@@ -98,6 +98,8 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - **Investimento manual como carteira inicial:** em Investimentos › Novo lançamento › Compra, a opção "Já tinha antes de usar o app" grava `posicaoInicial: true` (entra na carteira, não conta como aporte do mês).
 - **Computador (Faturamento, Despesas):** as duas colunas têm a mesma altura (`dgrid-eq`); em "Detalhes" o item aberto ocupa a linha toda e os fechados se juntam (`.dgvs` em flex). Os gráficos (`SvgAreaChart`, `SvgBarChart`, `SvgDualBarChart`) medem a largura real acima de 600 px (`useLargura`), então as letras não crescem.
 - **Metas em plantões** (`MetaEmPlantoes`): quantos plantões em cada hospital pagam a meta.
+- **Valor que muda a partir de um mês** (27/11/2026, `valorNoMes`, `comValorDesde`, `ValorDesde`): cargo fixo (`valorMensal`) e receitas de todo mês (`amount`) guardam `valores: [{ desde: "AAAA-MM", valor }]`. Ao editar o valor, a pessoa escolhe "vale a partir de" (padrão: o mês que está vendo) ou "todos os meses" (apaga o histórico). Cada mês usa o valor que valia nele; o campo guarda sempre o valor mais novo.
+- **Gaveta "Recebimentos de todo mês"** (27/11/2026, Plantões › Recebimentos): cargo fixo e receitas que se repetem ficam juntos numa gaveta que abre e fecha (`fixos`, `caixaGrupo`).
 
 ## Repositório público e dados sensíveis
 

@@ -2800,10 +2800,10 @@ function App() {
       const ck = shiftMonthKey(mk, -d);
       if (v.startMonth > ck) return;
       items.push({ key: "mensal-" + v.id + "-" + ck, vinculoId: v.id, forma: formaDe(v), nome: v.nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, v.diaRecebimento || 5)),
-        dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: Number(v.valorMensal || 0), net: liquidoVinc(v, v.valorMensal),
+        dateLabel: d > 0 ? `dia ${v.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${v.diaRecebimento || 5} · mensal fixo`, gross: valorNoMes(v, "valorMensal", ck), net: liquidoVinc(v, valorNoMes(v, "valorMensal", ck)),
         recebido: !!(v.recebidoMonths && v.recebidoMonths[ck]), toggle: () => toggleVinculoMensalRecebido(v.id, ck), removable: false, ref: { t: "vinculo", id: v.id } });
       if (formaDe(v) === "clt") {
-        const sal = Number(v.valorMensal || 0);
+        const sal = valorNoMes(v, "valorMensal", mk);
         const extraClt = (k, nome, valor, dia) => items.push({ key: "clt-" + v.id + "-" + mk + "-" + k, vinculoId: v.id, forma: "clt", nome: v.nome + " · " + nome, cor: v.cor, tipo: "mensal", dateIso: dateStr(y, m, clampDay(y, m, dia)),
           dateLabel: nome, gross: valor, net: valor, recebido: !!(v.recebidoMonths && v.recebidoMonths[mk + "-" + k]), toggle: () => toggleVinculoMensalRecebido(v.id, mk + "-" + k), removable: false, ref: { t: "vinculo", id: v.id } });
         if (v.clt13 && m === 10) extraClt("13a", "13º salário (1ª parcela)", sal / 2, 30);
@@ -2816,7 +2816,7 @@ function App() {
       const ck = shiftMonthKey(mk, -d);
       if (e.startMonth > ck) return;
       items.push({ key: "extra-" + e.id + "-" + ck, vinculoId: null, forma: e.tipoReceita === "dividendos" ? "div" : e.tipoReceita === "prolabore" ? "clt" : e.tipoReceita === "aluguel" ? "aluguel" : e.tipoReceita ? "outro" : formaDe(e), nome: e.description, cor: SLATE, tipo: "extra", dateIso: dateStr(y, m, clampDay(y, m, e.diaRecebimento || 5)),
-        dateLabel: d > 0 ? `dia ${e.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${e.diaRecebimento || 5} · recorrente`, gross: Number(e.amount || 0), net: e.tipoReceita ? liquidoReceita(e, e.amount, netOf) : netOf(e.amount, e.taxOverride), tipoReceita: e.tipoReceita,
+        dateLabel: d > 0 ? `dia ${e.diaRecebimento || 5} · ref. ${refLabel(ck)}` : `dia ${e.diaRecebimento || 5} · recorrente`, gross: valorNoMes(e, "amount", ck), net: e.tipoReceita ? liquidoReceita(e, valorNoMes(e, "amount", ck), netOf) : netOf(valorNoMes(e, "amount", ck), e.taxOverride), tipoReceita: e.tipoReceita,
         recebido: !!(e.recebidoMonths && e.recebidoMonths[ck]), toggle: () => toggleExtraIncomeRecebido(e.id, ck), removable: true, remove: () => removeExtraRecurringIncome(e.id), ref: { t: "extra", id: e.id } });
     });
     oneOffIncomes.filter((o) => inMonth(o.date, y, m)).forEach((o) => {
@@ -2990,10 +2990,12 @@ function App() {
     if (v.id !== id) return v;
     const n = { ...v, nome: data.nome, cor: data.cor, forma: data.forma || v.forma || "pj", clt13: !!data.clt13, feriasMes: data.feriasMes === undefined ? v.feriasMes : data.feriasMes, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride), taxSocio: data.taxSocio === undefined ? v.taxSocio || 0 : Number(data.taxSocio) || 0 };
     if (v.tipo === "plantao") n.prazoPadrao = Number(data.prazoPadrao) || 0;
-    else { n.prazoMeses = Number(data.prazoMeses) || 0; n.valorMensal = Number(data.valorMensal) || 0; n.diaRecebimento = Number(data.diaRecebimento) || 5; if (Array.isArray(data.escala) && data.escala.length) n.escala = data.escala; else delete n.escala; }
+    else { n.prazoMeses = Number(data.prazoMeses) || 0; if (data.valorDesde !== undefined) { const c = comValorDesde(n, "valorMensal", data.valorMensal, data.valorDesde); delete n.valores; Object.assign(n, c); } n.diaRecebimento = Number(data.diaRecebimento) || 5; if (Array.isArray(data.escala) && data.escala.length) n.escala = data.escala; else delete n.escala; }
     return n;
   }));
-  const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? { ...e, forma: data.forma || e.forma || "pj", tipoReceita: data.tipoReceita || e.tipoReceita, description: data.description, amount: Number(data.amount) || 0, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) } : e));
+  // valor de receita de todo mês: valorDesde "AAAA-MM" (a partir do mês), "" (todos os meses) ou ausente (valor não mudou)
+  const comValorExtra = (e, data, n) => { if (data.valorDesde === undefined) return n; const c = comValorDesde(n, "amount", data.amount, data.valorDesde); const o = { ...n }; delete o.valores; return { ...o, ...c }; };
+  const updateExtra = (id, data) => setExtraRecurringIncomes((prev) => prev.map((e) => e.id === id ? comValorExtra(e, data, { ...e, forma: data.forma || e.forma || "pj", tipoReceita: data.tipoReceita || e.tipoReceita, description: data.description, diaRecebimento: Number(data.diaRecebimento) || 5, prazoMeses: Number(data.prazoMeses) || 0, taxOverride: data.taxOverride === "" || data.taxOverride === null || data.taxOverride === undefined ? null : Number(data.taxOverride) }) : e));
   const updateShift = (id, data) => setShifts((prev) => prev.map((s) => s.id === id ? { ...s, gross: Number(data.gross) || 0, hours: Number(data.hours) || 0, date: data.date, prazoDias: Number(data.prazoDias) || 0, payDate: addDaysIso(data.date, Number(data.prazoDias) || 0) } : s));
   const updateOneOff = (id, data) => setOneOffIncomes((prev) => prev.map((o) => o.id === id ? { ...o, description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || o.forma || "pf", tipoReceita: data.tipoReceita || o.tipoReceita } : o));
   const addOneOff = (data) => setOneOffIncomes((prev) => [...prev, { id: uid(), description: data.description, amount: Number(data.amount) || 0, date: data.date, taxOverride: Number(data.taxOverride) || 0, recebido: !!data.recebido, forma: data.forma || "pf", tipoReceita: data.tipoReceita || "outro", source: "manual" }]);
@@ -3320,7 +3322,7 @@ function App() {
         const s = slot(v.id, v); s.hours += e.hours; s.turnos += 1; dias.add(e.date);
       });
       const o = by[v.id];
-      if (o && o.hours > 0) o.net += liquidoVinc(v, v.valorMensal);
+      if (o && o.hours > 0) o.net += liquidoVinc(v, valorNoMes(v, "valorMensal", mk));
       else if (v.startMonth <= mk) mensalSemHoras.push(v.nome);
     });
     const byVinculo = Object.values(by).filter((o) => o.hours > 0).map((o) => ({ ...o, hourly: o.net / o.hours })).sort((a, b) => b.hourly - a.hourly);
@@ -3331,7 +3333,7 @@ function App() {
   const grossWorked = (y, m) => {
     const mk = monthKeyOf(y, m);
     return shifts.reduce((a, s) => a + (inMonth(s.date, y, m) ? Number(s.gross || 0) : 0), 0) +
-      vinculos.reduce((a, v) => a + (v.tipo === "mensal" && v.startMonth <= mk ? Number(v.valorMensal || 0) : 0), 0);
+      vinculos.reduce((a, v) => a + (v.tipo === "mensal" && v.startMonth <= mk ? valorNoMes(v, "valorMensal", mk) : 0), 0);
   };
 
   // resumo do mês que passou: aparece na Hoje nos primeiros 7 dias do mês, até a pessoa fechar
@@ -3490,11 +3492,11 @@ function App() {
     let total = shifts.filter((s) => s.recebido).reduce((a, s) => a + liquidoVinc(vinculoMap[s.vinculoId], s.gross), 0);
     vinculos.filter((v) => v.tipo === "mensal").forEach((v) => {
       const rmap = v.recebidoMonths || {};
-      total += Object.keys(rmap).filter((k) => rmap[k]).length * liquidoVinc(v, v.valorMensal);
+      Object.keys(rmap).filter((k) => rmap[k]).forEach((k) => { total += liquidoVinc(v, valorNoMes(v, "valorMensal", k.slice(0, 7))); });
     });
     extraRecurringIncomes.forEach((e) => {
       const rmap = e.recebidoMonths || {};
-      total += Object.keys(rmap).filter((k) => rmap[k]).length * netOf(e.amount, e.taxOverride);
+      Object.keys(rmap).filter((k) => rmap[k]).forEach((k) => { total += netOf(valorNoMes(e, "amount", k.slice(0, 7)), e.taxOverride); });
     });
     oneOffIncomes.forEach((o) => { if (o.recebido) total += Number(o.amount || 0); });
     return total;
@@ -3673,7 +3675,7 @@ function App() {
         vinculos.filter((v) => v.tipo === "mensal" && v.startMonth <= monthKeyOf(y, m)).forEach((v) => {
           const h = (workStats(y, m).byVinculo.find((o) => o.id === v.id) || { hours: 0 }).hours;
           if (h <= 0) return;
-          const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += liquidoVinc(v, v.valorMensal); o.h += h;
+          const o = (hv[v.id] = hv[v.id] || { nome: v.nome, net: 0, h: 0 }); o.net += liquidoVinc(v, valorNoMes(v, "valorMensal", monthKeyOf(y, m))); o.h += h;
         });
       });
       return Object.values(hv).filter((o) => o.h > 0);
@@ -6255,6 +6257,9 @@ function App() {
         .cv-hoje { padding: 16px; display: grid; gap: 12px; } .cv-t b { display: block; font-family: "Manrope", "Inter", sans-serif; font-size: 16px; } .cv-t small { display: block; font-size: 13px; color: var(--text-dim); margin-top: 3px; }
         .cv-b { display: flex; gap: 8px; flex-wrap: wrap; } .cv-b .btn { text-decoration: none; }
         .desk-extras { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 18px; align-items: start; } .desk-extras > .card { margin: 0; }
+        .vd-hist { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-dim); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; } .vd-hist b { color: var(--text); }
+        .fg-todo-ic { width: 30px; height: 30px; border-radius: 10px; background: #E3F0EA; color: #0E5640; display: grid; place-items: center; flex-shrink: 0; } :root[data-theme="dark"] .fg-todo-ic { background: rgba(110,231,183,.12); color: #6EE7B7; }
+        .fg-todo-in { padding: 0 0 6px 14px; border-left: 2px solid var(--border); margin: 0 12px 10px 22px; }
         .vib-op { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; min-height: 44px; font-size: 14px; cursor: pointer; } .vib-op input { width: 22px; height: 22px; accent-color: #0E5640; flex-shrink: 0; }
         .aviso .aviso-fechar { background: transparent; border: none; color: rgba(255,255,255,.7); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; padding: 0; }
         .aviso-ok { width: 26px; height: 26px; border-radius: 50%; background: #16A34A; display: grid; place-items: center; flex-shrink: 0; animation: okPop .5s var(--ease) .05s both; }
@@ -6774,6 +6779,26 @@ function FormBtns({ label, onSubmit, onCancel, onDelete }) {
 }
 
 // como o dinheiro do trabalho chega: nota da própria empresa, Pix como sócio de outra empresa ou carteira assinada
+// Valor que muda a partir de um mês (salário de cargo fixo, receita de todo mês).
+// obj.valores = [{ desde: "AAAA-MM", valor }]: cada mês usa o valor mais recente com "desde" até ele; antes do 1º, o 1º.
+// obj[campo] fica sempre com o valor mais novo (para telas que não olham o mês).
+const valorNoMes = (obj, campo, ck) => {
+  const h = obj && Array.isArray(obj.valores) && obj.valores.length ? obj.valores : null;
+  if (!h) return Number(obj && obj[campo]) || 0;
+  let v = h[0].valor; for (const x of h) if (!ck || x.desde <= ck) v = x.valor;
+  return Number(v) || 0;
+};
+// grava "novo" valendo a partir do mês "desde" (sem "desde": vale para todos os meses e apaga o histórico)
+const comValorDesde = (obj, campo, novo, desde) => {
+  const n = Number(novo) || 0;
+  if (!desde) { const o = { ...obj, [campo]: n }; delete o.valores; return o; }
+  const base = Array.isArray(obj.valores) && obj.valores.length ? obj.valores : [{ desde: obj.startMonth || "2000-01", valor: Number(obj[campo]) || 0 }];
+  if (valorNoMes({ ...obj, valores: base }, campo, desde) === n && !base.some((x) => x.desde === desde)) return { ...obj, valores: base, [campo]: base[base.length - 1].valor };
+  const h = base.filter((x) => x.desde !== desde).concat([{ desde, valor: n }]).sort((a, b) => a.desde.localeCompare(b.desde));
+  const limpo = h.filter((x, i) => i === 0 || x.valor !== h[i - 1].valor); // tira repetidos seguidos
+  return { ...obj, valores: limpo, [campo]: limpo[limpo.length - 1].valor };
+};
+
 const FORMAS = [
   ["pj", "Nota da minha empresa", "Você emite a nota, paga os impostos e fica com o resto.", "o app calcula o imposto", "#DBEAFE", "nota"],
   ["socio", "Pix de empresa em que sou sócio", "Outra empresa paga sua parte direto no seu CPF.", "imposto já pago pela empresa", "#EDE9FE", "socio"],
@@ -6846,11 +6871,47 @@ const liquidoReceita = (o, amount, netOf) => {
   return netOf(a, o.taxOverride);
 };
 
-function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
+// "Vale a partir de": aparece ao mudar o valor de um lançamento de todo mês. Mostra também os valores que já valeram.
+const mesRotulo = (ck) => { const [a, m] = String(ck).split("-").map(Number); return MONTHS_ABBR_PT[m - 1] + "/" + a; };
+function ValorDesde({ ini, campo, valor, mesRef, desde, setDesde }) {
+  const ref = mesRef || todayStr().slice(0, 7);
+  const antes = valorNoMes(ini, campo, ref);
+  const mudou = Math.abs((Number(valor) || 0) - antes) > 0.004;
+  const hist = Array.isArray(ini.valores) && ini.valores.length > 1 ? ini.valores : null;
+  const meses = [];
+  for (let k = -6; k <= 12; k++) meses.push(shiftMonthKey(ref, k));
+  return (
+    <>
+      {hist && (
+        <div className="vd-hist" style={{ gridColumn: "1 / -1" }}>
+          {hist.map((x, i) => <span key={x.desde}><b className="mono">{fmtBRL(x.valor)}</b> {i === 0 ? "até " + mesRotulo(shiftMonthKey(hist[1].desde, -1)) : "desde " + mesRotulo(x.desde)}</span>)}
+        </div>
+      )}
+      {mudou && (
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label htmlFor="vd-desde">O valor novo vale a partir de</label>
+          <select id="vd-desde" value={desde} onChange={(e) => setDesde(e.target.value)}>
+            {meses.map((m) => <option key={m} value={m}>{mesRotulo(m)} em diante{m === ref ? " (este mês)" : ""}</option>)}
+            <option value="">Todos os meses (corrigir o valor antigo)</option>
+          </select>
+          <div className="field-hint">Os meses antes continuam com {fmtBRL(antes)}.</div>
+        </div>
+      )}
+    </>
+  );
+}
+const desdeParaSalvar = (ini, campo, valor, mesRef, desde) => {
+  if (!ini || !ini.id) return undefined;
+  const antes = valorNoMes(ini, campo, mesRef || todayStr().slice(0, 7));
+  return Math.abs((Number(valor) || 0) - antes) > 0.004 ? desde : undefined;
+};
+
+function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete, mesRef }) {
   const ini = inicial || {};
   const [tipoReceita, setTipo] = useState(ini.tipoReceita || (inicial ? "outro" : "aluguel"));
   const [description, setDescription] = useState(ini.description || (inicial ? "" : "Aluguel"));
-  const [amount, setAmount] = useState(inicial ? Number(ini.amount) || 0 : "");
+  const [amount, setAmount] = useState(inicial ? valorNoMes(ini, "amount", mesRef || todayStr().slice(0, 7)) : "");
+  const [valorDesde, setValorDesde] = useState(mesRef || todayStr().slice(0, 7));
   const [diaRecebimento, setDia] = useState(ini.diaRecebimento || 5);
   const [taxOverride, setTax] = useState(ini.taxOverride !== null && ini.taxOverride !== undefined ? String(ini.taxOverride) : "");
   const [prazoMeses, setPrazo] = useState(Number(ini.prazoMeses) || 0);
@@ -6860,7 +6921,7 @@ function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
   const submit = () => {
     if (!description.trim()) { setErro("Dê um nome para a receita."); return; }
     if (!(Number(amount) > 0)) { setErro("Informe o valor."); return; }
-    onSubmit({ description: description.trim(), amount: Number(amount), diaRecebimento, taxOverride: tipoReceita === "outro" ? (String(taxOverride).trim() === "" ? 0 : Number(String(taxOverride).replace(",", "."))) : 0, prazoMeses, tipoReceita, forma: tipoReceita === "dividendos" ? "div" : tipoReceita === "prolabore" ? "clt" : "pf" });
+    onSubmit({ description: description.trim(), amount: Number(amount), valorDesde: desdeParaSalvar(inicial, "amount", amount, mesRef, valorDesde), diaRecebimento, taxOverride: tipoReceita === "outro" ? (String(taxOverride).trim() === "" ? 0 : Number(String(taxOverride).replace(",", "."))) : 0, prazoMeses, tipoReceita, forma: tipoReceita === "dividendos" ? "div" : tipoReceita === "prolabore" ? "clt" : "pf" });
     if (!inicial) { setDescription(""); setAmount(""); setTax(""); setPrazo(0); }
     setErro("");
   };
@@ -6875,6 +6936,7 @@ function ExtraIncomeForm({ inicial, onSubmit, onCancel, onDelete }) {
         <div className="field"><label>Nome</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Aluguel da sala" /></div>
         <div className="field"><label>{tipoReceita === "prolabore" ? "Quanto cai na conta por mês" : "Valor por mês"}</label><MoneyInput value={amount} onChange={(x) => { setAmount(x); setErro(""); }} /></div>
         <div className="field"><label>Cai todo dia</label><input type="number" inputMode="numeric" min="1" max="31" value={diaRecebimento} onChange={(e) => setDia(e.target.value)} /></div>
+        {inicial && <ValorDesde ini={ini} campo="amount" valor={amount} mesRef={mesRef} desde={valorDesde} setDesde={setValorDesde} />}
         {tipoReceita === "outro" && <div className="field"><label>Imposto (%), se tiver</label><input type="number" inputMode="decimal" min="0" value={taxOverride} placeholder="0" onChange={(e) => setTax(e.target.value)} /></div>}
       </div>
       {tipoReceita === "aluguel" && v > 0 && <div className="rc-res"><div><span>Aluguel</span><b className="mono">{fmtBRL(v)}</b></div><div><span>Carnê-leão estimado</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(leao)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(v - leao)}</b></div></div>}
@@ -6942,14 +7004,15 @@ function OneOffEditForm({ item, onSubmit, onCancel, onDelete, novo, defaultDate 
   );
 }
 
-function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, onCancel, onDelete, taxaPadrao }) {
+function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, onCancel, onDelete, taxaPadrao, mesRef }) {
   const ini = inicial || {};
   const [nome, setNome] = useState(inicial ? ini.nome || "" : defaultNome || "");
   const [cor, setCor] = useState(ini.cor || PALETTE[0]);
   const [tipo, setTipo] = useState(inicial ? ini.tipo : fixo ? "mensal" : "plantao");
   const [taxOverride, setTaxOverride] = useState(ini.taxOverride !== null && ini.taxOverride !== undefined && formaDe(ini) === "pj" ? String(ini.taxOverride) : (taxaPadrao ? String(taxaPadrao).replace(".", ",") : ""));
   const [taxSocio, setTaxSocio] = useState(Number(ini.taxSocio) > 0 ? String(ini.taxSocio).replace(".", ",") : "");
-  const [valorMensal, setValorMensal] = useState(inicial && ini.tipo === "mensal" ? Number(ini.valorMensal) || 0 : "");
+  const [valorMensal, setValorMensal] = useState(inicial && ini.tipo === "mensal" ? valorNoMes(ini, "valorMensal", mesRef || todayStr().slice(0, 7)) : "");
+  const [valorDesde, setValorDesde] = useState(mesRef || todayStr().slice(0, 7));
   const [diaRecebimento, setDiaRecebimento] = useState(ini.diaRecebimento || 5);
   const [prazoPadrao, setPrazoPadrao] = useState(Number(ini.prazoPadrao) || 0);
   const [prazoMeses, setPrazoMeses] = useState(Number(ini.prazoMeses) || 0);
@@ -6967,7 +7030,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
     const txS = Number(String(taxSocio).replace(",", ".")) || 0;
     if (forma === "socio" && (txS < 0 || txS >= 100)) { setErroV("O imposto pago pela empresa precisa ficar entre 0 e 99%."); return; }
     setErroV("");
-    onSubmit({ nome, cor, tipo, taxOverride: forma === "pj" ? tx : 0, taxSocio: forma === "socio" ? txS : 0, valorMensal, diaRecebimento, prazoPadrao, prazoMeses, escala, forma, clt13: forma === "clt" && tipo === "mensal" ? clt13 : false, feriasMes: forma === "clt" && tipo === "mensal" && feriasMes !== "" ? Number(feriasMes) : null, startMonth: defaultStartMonth });
+    onSubmit({ nome, cor, tipo, taxOverride: forma === "pj" ? tx : 0, taxSocio: forma === "socio" ? txS : 0, valorMensal, valorDesde: tipo === "mensal" ? desdeParaSalvar(inicial, "valorMensal", valorMensal, mesRef, valorDesde) : undefined, diaRecebimento, prazoPadrao, prazoMeses, escala, forma, clt13: forma === "clt" && tipo === "mensal" ? clt13 : false, feriasMes: forma === "clt" && tipo === "mensal" && feriasMes !== "" ? Number(feriasMes) : null, startMonth: defaultStartMonth });
     if (!inicial) { setNome(""); setValorMensal(""); setPrazoPadrao(0); setPrazoMeses(0); setEscala([]); }
   };
 
@@ -6988,6 +7051,7 @@ function VinculoForm({ onSubmit, defaultStartMonth, fixo, defaultNome, inicial, 
         {tipo === "mensal" && (
           <>
             <div className="field"><label>{forma === "clt" ? "Quanto cai na sua conta por mês" : forma === "socio" ? (Number(String(taxSocio).replace(",", ".")) > 0 ? "Valor bruto por mês" : "Quanto cai no Pix por mês") : "Valor por mês (bruto, da nota)"}</label><MoneyInput value={valorMensal} onChange={(v) => { setValorMensal(v); setErroV(""); }} /></div>
+            {inicial && <ValorDesde ini={ini} campo="valorMensal" valor={valorMensal} mesRef={mesRef} desde={valorDesde} setDesde={setValorDesde} />}
             <div className="field"><label>Cai todo dia</label><input type="number" inputMode="numeric" min="1" max="31" value={diaRecebimento} onChange={(e) => setDiaRecebimento(e.target.value)} /></div>
             {forma === "pj" && Number(valorMensal) > 0 && String(taxOverride).trim() !== "" && <div className="rc-res" style={{ gridColumn: "1 / -1" }}><div><span>Valor da nota</span><b className="mono">{fmtBRL(Number(valorMensal))}</b></div><div><span>Imposto</span><b className="mono" style={{ color: "#B91C1C" }}>− {fmtBRL(Number(valorMensal) * (Number(String(taxOverride).replace(",", ".")) || 0) / 100)}</b></div><div className="t"><span>Fica com você</span><b className="mono">{fmtBRL(Number(valorMensal) * (1 - (Number(String(taxOverride).replace(",", ".")) || 0) / 100))}</b></div></div>}
             {forma === "socio" && Number(valorMensal) > 0 && <BrutoLiquido bruto={Number(valorMensal)} pct={taxSocio} />}
@@ -7115,11 +7179,11 @@ function FaturamentoTab({
   const fechar = () => setEditKey(null);
   const confirmaVinculo = (v) => { if (window.confirm(`Excluir o vínculo "${v.nome}"? Os plantões e presenças dele também serão apagados.`)) { removeVinculo(v.id); fechar(); } };
   const confirmaExtra = (e) => { if (window.confirm(`Excluir a receita "${e.description}"? Ela some de todos os meses.`)) { removeExtraRecurringIncome(e.id); fechar(); } };
-  const editorVinculo = (v) => <VinculoForm key={"v" + v.id} inicial={v} taxaPadrao={taxaPadrao} onSubmit={(d) => { updateVinculo(v.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaVinculo(v)} />;
-  const editorExtra = (e) => <ExtraIncomeForm key={"e" + e.id} inicial={e} onSubmit={(d) => { updateExtra(e.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaExtra(e)} />;
+  const editorVinculo = (v) => <VinculoForm key={"v" + v.id} inicial={v} mesRef={monthKey} taxaPadrao={taxaPadrao} onSubmit={(d) => { updateVinculo(v.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaVinculo(v)} />;
+  const editorExtra = (e) => <ExtraIncomeForm key={"e" + e.id} inicial={e} mesRef={monthKey} onSubmit={(d) => { updateExtra(e.id, d); fechar(); }} onCancel={fechar} onDelete={() => confirmaExtra(e)} />;
   const editor = (it) => {
     const r = it.ref || {};
-    if (r.t === "vinculo") { const v = vinculos.find((x) => x.id === r.id); return v ? <><div className="fz-tit">Editar {v.nome}</div>{editorVinculo(v)}<div className="field-hint" style={{ marginTop: 8 }}>A mudança vale para todos os meses deste cargo.</div></> : null; }
+    if (r.t === "vinculo") { const v = vinculos.find((x) => x.id === r.id); return v ? <><div className="fz-tit">Editar {v.nome}</div>{editorVinculo(v)}</> : null; }
     if (r.t === "extra") { const e = extraRecurringIncomes.find((x) => x.id === r.id); return e ? <><div className="fz-tit">Editar {e.description}</div>{editorExtra(e)}</> : null; }
     if (r.t === "shift") { const s = shifts.find((x) => x.id === r.id); return s ? <><div className="fz-tit">Editar plantão de {fmtDatePt(s.date)} · {it.nome}</div><ShiftEditForm key={s.id} shift={s} onSubmit={(d) => { updateShift(s.id, d); fechar(); }} onCancel={fechar} onDelete={() => { if (window.confirm("Excluir este plantão?")) { it.remove(); fechar(); } }} /></> : null; }
     if (r.t === "avulsa") { const o = oneOffIncomes.find((x) => x.id === r.id); return o ? <><div className="fz-tit">Editar receita extra</div><OneOffEditForm key={o.id} item={o} onSubmit={(d) => { updateOneOff(o.id, d); fechar(); }} onCancel={fechar} onDelete={() => { if (window.confirm("Excluir esta entrada?")) { it.removeOne(); fechar(); } }} /></> : null; }
@@ -7178,32 +7242,10 @@ function FaturamentoTab({
       {aConfirmar.length > 5 && <button type="button" className="link-btn conf-mais" onClick={() => setVerTodosConf(!verTodosConf)}>{verTodosConf ? "Mostrar menos" : `Ver os outros ${aConfirmar.length - 5}`}</button>}
     </div>
   );
-  const received = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0);
-  const donutData = netByVinculo.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }));
-
-  return (
-    <div>
-      <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
-      {simples ? (
-      <div className="kpi-row" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-        <Kpi label="Entra no mês" value={fmtBRL(totalNet)} sub="já sem o imposto" />
-        <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do mês" : null} />
-      </div>
-      ) : <div className="kpi-row">
-        <Kpi label="Receita bruta" value={fmtBRL(totalGross)} />
-        <Kpi label="Impostos" value={fmtBRL(totalGross - totalNet)} tone="var(--brick)" />
-        <Kpi label="Receita líquida" value={fmtBRL(totalNet)} sub="entra neste mês" />
-        <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do líquido" : null} />
-      </div>}
-
-
-      {confirmar}
-      <div className={desk ? "dgrid dgrid-eq" : ""} style={desk ? { gridTemplateColumns: simples ? "1fr" : "1.7fr 1fr" } : null}>
-      <div className="card flush">
-        <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3></div>
-        {sorted.length === 0 ? <div className="empty-state">Nenhuma receita neste mês ainda.</div> : (
-          <div className="fg-list">
-            {grupos.map((g) => {
+  // lançamentos de todo mês (cargo fixo e receitas que se repetem) ficam juntos numa gaveta que abre e fecha
+  const ehFixo = (g) => g.plantoes === 0 && (g.key.startsWith("v-") || g.key.startsWith("e-"));
+  const fixos = grupos.filter(ehFixo), semFixos = grupos.filter((g) => !ehFixo(g));
+  const caixaGrupo = (g) => {
               const aberto = !!abertos[g.key], pend = g.itens.filter((x) => !x.recebido);
               return (
                 <div key={g.key} className={`fg ${aberto ? "open" : ""}`} data-grupo={g.nome}>
@@ -7239,7 +7281,47 @@ function FaturamentoTab({
                   )}
                 </div>
               );
-            })}
+  };
+  const received = monthIncomeItems.filter((i) => i.recebido).reduce((a, i) => a + i.net, 0);
+  const donutData = netByVinculo.map((h) => ({ nome: h.nome, value: h.value, cor: h.cor }));
+
+  return (
+    <div>
+      <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
+      {simples ? (
+      <div className="kpi-row" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+        <Kpi label="Entra no mês" value={fmtBRL(totalNet)} sub="já sem o imposto" />
+        <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do mês" : null} />
+      </div>
+      ) : <div className="kpi-row">
+        <Kpi label="Receita bruta" value={fmtBRL(totalGross)} />
+        <Kpi label="Impostos" value={fmtBRL(totalGross - totalNet)} tone="var(--brick)" />
+        <Kpi label="Receita líquida" value={fmtBRL(totalNet)} sub="entra neste mês" />
+        <Kpi label="Já recebido" value={fmtBRL(received)} tone="var(--teal)" sub={totalNet > 0 ? Math.round((received / totalNet) * 100) + "% do líquido" : null} />
+      </div>}
+
+
+      {confirmar}
+      <div className={desk ? "dgrid dgrid-eq" : ""} style={desk ? { gridTemplateColumns: simples ? "1fr" : "1.7fr 1fr" } : null}>
+      <div className="card flush">
+        <div className="card-head pad"><h3 className="card-title">Lançamentos de {MONTHS_PT[viewMonth]}</h3></div>
+        {sorted.length === 0 ? <div className="empty-state">Nenhuma receita neste mês ainda.</div> : (
+          <div className="fg-list">
+            {semFixos.map(caixaGrupo)}
+            {fixos.length > 0 && (() => {
+              const aberto = !!abertos["__todo-mes"], itensF = fixos.flatMap((g) => g.itens), pendF = itensF.filter((x) => !x.recebido), totF = fixos.reduce((a, g) => a + g.net, 0);
+              return (
+                <div className={`fg fg-todo ${aberto ? "open" : ""}`} id="gaveta-todo-mes">
+                  <button type="button" className="fg-h" aria-expanded={aberto} onClick={() => setAbertos((o) => ({ ...o, "__todo-mes": !o["__todo-mes"] }))}>
+                    <span className="fg-todo-ic" aria-hidden="true"><IconCalendar size={15} /></span>
+                    <span className="fg-t"><b>Recebimentos de todo mês</b><small>{fixos.length === 1 ? fixos[0].nome : `${fixos.length} lançamentos: ${fixos.map((g) => g.nome).join(", ")}`}</small></span>
+                    <span className="fg-v"><b className="mono">{fmtBRL(totF)}</b><small className={pendF.length ? "pend" : "ok"}>{pendF.length ? `${pendF.length} a receber` : "tudo recebido"}</small></span>
+                    <IconChevronDown size={18} color="#8FA3A0" />
+                  </button>
+                  {aberto && <div className="fg-todo-in">{fixos.map(caixaGrupo)}</div>}
+                </div>
+              );
+            })()}
           </div>
         )}
         <div className="fz-add-wrap">

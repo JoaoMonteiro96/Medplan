@@ -14,9 +14,10 @@ const codigo = [
   src.split("\n").find((l) => l.startsWith("const fatorCdi = ")),
   trecho("const SIMPLES_III", "const fmtHoras"),
   trecho("const IRPF_ANUAL_2026", "// guias do mês mk"),
+  trecho("const valorNoMes = ", "const FORMAS = ["),
   trecho("const FORMAS = [", "const FORMA_CURTA"),
 ].join("\n");
-const api = new Function(codigo + "\nreturn { numOf, fatorCdi, simplesFaixa, irrfMensal2026, socioRetencoes, calcSimples, calcPresumido, proLaboreParaFatorR, irAnual, liquidoDeVinc, r2 };")();
+const api = new Function(codigo + "\nreturn { numOf, fatorCdi, simplesFaixa, irrfMensal2026, socioRetencoes, calcSimples, calcPresumido, proLaboreParaFatorR, irAnual, liquidoDeVinc, r2, valorNoMes, comValorDesde };")();
 
 let falhas = 0, total = 0;
 const perto = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
@@ -61,6 +62,18 @@ ok("IRPF anual: 120 mil, desconto simplificado limitado a 16.754,34", perto(a.si
 ok("IRPF anual: tabela de 2026 (mensal x 12), 120 mil devem 17.487,80", perto(a.devido, 17487.80), String(a.devido));
 ok("IRPF anual: faixa isenta até 29.145,60 (2.428,80 x 12)", api.irAnual(36432, 0).bruto === 0, String(api.irAnual(36432, 0).bruto));
 ok("IRPF anual: renda de 50 mil (isenta pela redução) paga 0", api.irAnual(50000, 0).devido === 0, String(api.irAnual(50000, 0).devido));
+
+// Valor de todo mês que muda a partir de um mês (salário que aumenta em dezembro)
+const cargo = { id: "c1", startMonth: "2026-01", valorMensal: 10000 };
+const aumento = api.comValorDesde(cargo, "valorMensal", 12000, "2026-12");
+ok("Salário: novembro continua com o valor antigo", api.valorNoMes(aumento, "valorMensal", "2026-11") === 10000);
+ok("Salário: dezembro em diante com o valor novo", api.valorNoMes(aumento, "valorMensal", "2026-12") === 12000 && api.valorNoMes(aumento, "valorMensal", "2027-05") === 12000);
+ok("Salário: o valor de agora fica no campo (telas que não olham o mês)", aumento.valorMensal === 12000);
+const doisAumentos = api.comValorDesde(aumento, "valorMensal", 15000, "2027-06");
+ok("Salário: dois aumentos guardados em ordem", api.valorNoMes(doisAumentos, "valorMensal", "2027-03") === 12000 && api.valorNoMes(doisAumentos, "valorMensal", "2027-06") === 15000 && api.valorNoMes(doisAumentos, "valorMensal", "2026-02") === 10000);
+const corrigido = api.comValorDesde(doisAumentos, "valorMensal", 11000, "");
+ok("Salário: 'todos os meses' corrige tudo e apaga o histórico", api.valorNoMes(corrigido, "valorMensal", "2026-03") === 11000 && !corrigido.valores);
+ok("Salário: sem histórico, vale o valor de sempre", api.valorNoMes(cargo, "valorMensal", "2026-12") === 10000);
 
 // Líquido por forma de recebimento
 const netOf = (g, o) => g * (1 - (o == null || o === "" ? 27.5 : Number(o)) / 100);
