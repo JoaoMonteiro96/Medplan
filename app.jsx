@@ -6274,6 +6274,7 @@ function App() {
         #vd-desde { height: auto; min-height: 48px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; padding-top: 10px; padding-bottom: 10px; }
         .ir-tag { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #E3F0EA; color: #0E5640; vertical-align: middle; } .ir-tag.eu { background: #FEF3C7; color: #92400E; }
         :root[data-theme="dark"] .ir-tag { background: rgba(110,231,183,.14); color: #6EE7B7; } :root[data-theme="dark"] .ir-tag.eu { background: rgba(251,191,36,.14); color: #FCD34D; }
+        .ir-fixo { min-height: 44px; display: flex; align-items: center; padding: 0 12px; border-radius: 10px; background: var(--surface-2); font-weight: 700; }
         .ir-volta { margin-top: 6px; font-size: 13px; padding: 0; text-align: left; }
         .vd-hist { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-dim); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; } .vd-hist b { color: var(--text); }
         .fg-todo-ic { width: 30px; height: 30px; border-radius: 10px; background: #E3F0EA; color: #0E5640; display: grid; place-items: center; flex-shrink: 0; } :root[data-theme="dark"] .fg-todo-ic { background: rgba(110,231,183,.12); color: #6EE7B7; }
@@ -8038,7 +8039,8 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const setIr = (k, v) => setContab((p) => ({ ...p, ir: { ...(p.ir || {}), [k]: v } }));
   const pl = numOf(contab.proLabore);
   const calcPl = contab.modo === "contab" && pl > 0 ? (contab.regime === "presumido" ? calcPresumido(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0)) : calcSimples(contabParams(contab, numOf(contab.receitaMes) || app.mesBruto || 0))) : null;
-  const vItem = (id) => (calcPl ? (calcPl.itens.find((i) => i.id === id) || { valor: 0 }).valor : 0);
+  const retPl = pl > 0 ? socioRetencoes(pl) : { inss: 0, irrf: 0 };
+  const vItem = (id) => (calcPl ? (calcPl.itens.find((i) => i.id === id) || { valor: 0 }).valor : (id === "inss" ? retPl.inss : id === "irrf" ? retPl.irrf : 0));
   const anoNaoPJ = yearIncomeItems.filter((i) => i.forma === "clt" || i.forma === "aluguel");
   const anoIsento = yearIncomeItems.filter((i) => i.forma === "socio" || i.forma === "div");
   const anoClt = yearIncomeItems.filter((i) => i.forma === "clt");
@@ -8186,18 +8188,29 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
   const irBody = (
     <div className="ct-ir">
       <div className="form-grid">
+        <div className="field ir-campo" data-ir="pl">
+          <label htmlFor="ir-pl">Seu pró-labore por mês (R$)</label>
+          <MoneyInput id="ir-pl" value={contab.proLabore || ""} onChange={(v) => setContab((p) => ({ ...p, proLabore: v === "" ? "" : String(v) }))} />
+          <div className="field-hint">{pl > 0 ? "O mesmo de Impostos › Ajustar os impostos." : "O “salário” que a sua empresa paga a você. Com ele, o app calcula o resto."}</div>
+        </div>
         {irCampo("rend", "Quanto você recebeu no ano (R$)")}
         {irCampo("retido", "Imposto já pago no ano (R$)")}
         {irCampo("inss", "INSS pago no ano (R$)")}
         {irCampo("pgbl", "Previdência privada PGBL (R$)")}
+        {anoIsento.length > 0 && (
+          <div className="field ir-campo" data-ir="isento">
+            <label>Recebido sem imposto no ano <span className="ir-tag">automático</span></label>
+            <div className="ir-fixo mono">{fmtBRL(anoIsento.reduce((a, i) => a + (Number(i.forma === "socio" ? i.net : i.gross) || 0), 0))}</div>
+            <div className="field-hint">Pix como sócio e dividendos. Vai na ficha de rendimentos isentos.</div>
+          </div>
+        )}
         <div className="field"><label>Dependentes</label><input type="number" inputMode="numeric" min="0" value={ir.dependentes || ""} placeholder="0" onChange={(e) => setIr("dependentes", e.target.value)} /></div>
       </div>
       <div className="ct-ir-res">
         <div className="kv-line"><span>Imposto do ano</span><b className="mono">{fmtBRL(irr.devido)}</b></div>
         <div className="kv-line"><span>Você paga a menos por causa de saúde e escola</span><b className="mono" style={{ color: devolucaoDed > 0 ? "#15803D" : undefined }}>{fmtBRL(devolucaoDed)}</b></div>
         <div className="kv-line"><span>Declaração mais vantajosa</span><b>{irr.usaSimp ? "Simplificada" : "Completa"}</b></div>
-        {anoIsento.length > 0 && <div className="kv-line"><span>Recebido sem imposto (Pix como sócio e dividendos)</span><b className="mono">{fmtBRL(anoIsento.reduce((a, i) => a + (Number(i.forma === "socio" ? i.net : i.gross) || 0), 0))}</b></div>}
-        <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Preencha quanto você recebeu" : (saldoIr >= 0 ? "Você recebe de volta " : "Você ainda paga ") + fmtBRL(Math.abs(saldoIr))}</b></div>
+        <div className={`ct-ir-box ${saldoIr >= 0 ? "ok" : "bad"}`}><small>Declaração de {viewYear + 1}</small><b className="mono">{rend <= 0 ? "Preencha quanto você recebeu" : Math.abs(saldoIr) < 0.5 ? "Nada a pagar nem a receber" : (saldoIr >= 0 ? "Você recebe de volta " : "Você ainda paga ") + fmtBRL(Math.abs(saldoIr))}</b></div>
       </div>
     </div>
   );
@@ -8271,7 +8284,7 @@ function ContabTab({ onAddDed, contab, setContab, app, taxRateGeral, setTaxRateG
     </div>
   );
   const gFormas = <DGv id="ct-formas" icon={<IconReceipt size={18} />} tone="#0F766E" title="De onde vem o imposto" sub="cada forma de receber, explicada" val="">{quadro}</DGv>;
-  const gIr = <DGv id="ct-ir" open icon={<IconCalc size={18} />} tone="#15803D" title={"Imposto de renda de " + viewYear} sub="valor aproximado" val={rend > 0 ? (saldoIr >= 0 ? "recebe " : "paga ") + fmtBRL(Math.abs(saldoIr)) : ""}>{irBody}</DGv>;
+  const gIr = <DGv id="ct-ir" open icon={<IconCalc size={18} />} tone="#15803D" title={"Imposto de renda de " + viewYear} sub="valor aproximado" val={rend > 0 && Math.abs(saldoIr) < 0.5 ? "nada a pagar" : rend > 0 ? (saldoIr >= 0 ? "recebe " : "paga ") + fmtBRL(Math.abs(saldoIr)) : ""}>{irBody}</DGv>;
   const gDed = <DGv id="ct-ded" open icon={<IconReceipt size={18} />} tone="#6D28D9" title="Gastos que descontam no IR" sub="saúde e escola, com as notas" val={rend > 0 && devolucaoDed > 0 ? fmtBRL(devolucaoDed) : fmtBRL(somaSaude + somaEscola)}>{dedBody}</DGv>;
   const gRel = <DGv id="ct-rel" open icon={<IconDownload size={18} />} tone="#1D4ED8" title="Relatório para o contador" sub="planilha do mês ou do ano" val="">{relBody}</DGv>;
   const gCalc = <DGv id="ct-calc" icon={<IconCalc size={18} />} tone="#334155" title="Ajustar os impostos" sub={calcSub + (boleto ? " · boleto do contador" : " · guias")} val="">
