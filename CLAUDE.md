@@ -133,6 +133,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - Notificação depois do plantão.
 - Marcar escala como "Fiz/Feito".
 - Pergunta "Como sua empresa paga imposto?" na Hoje (26/11/2026): cada lançamento já diz quanto paga de imposto.
+- Cartão do imposto na Hoje ("Separe R$ X para o imposto" / "Imposto do que caiu separado", com "Já separei") (27/11/2026). A caixinha fica só em Impostos.
 - Enxugar as telas juntando os números do mês num resumo só e mudando gráficos de lugar (proposta de 22/11/2026). Ele quer manter os gráficos onde estão.
 
 ## Supabase (projeto "mediplan-sp")

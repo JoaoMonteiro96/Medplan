@@ -9356,7 +9356,6 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
       <HojeAneis a={aneisMes} simples={simples} atual={ehMesAtual} saldo={saldoRealizado} saldoTit={ehMesAtual ? "Saldo em caixa" : "Saldo em caixa hoje"} dir={ehMesAtual ? ["Previsto no fim do mês", saldoRealizado + dBlocos.receber - dBlocos.pagar] : [`Sobra de ${MONTHS_PT[viewMonth].toLowerCase()}`, curStats.net - curStats.expTotal]} />
       {ehMesAtual && hojeInfo && <ProximoPlantao p={hojeInfo.proximo} onVer={() => setActiveTab("calendario")} />}
       {ehMesAtual && hojeInfo && <ParaConfirmar itens={hojeInfo.itens} pagar={hojeInfo.pagar} onCobrar={onCobrar} />}
-      {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
       {ehMesAtual && !simples && <LembreteCarteira investiuNoMes={(curStats.invested || 0) > 0} onImportar={() => setActiveTab("importar")} />}
       {ehMesAtual && convite && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
       {alerts.length > 0 && <Avisos alerts={alerts} />}
@@ -9366,9 +9365,8 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
     </div>
   );
   // no computador: a caixinha do imposto e os convites, lado a lado
-  const extrasDesk = (ehMesAtual && (onSeparar || convite)) ? (
+  const extrasDesk = (ehMesAtual && (convite || !simples)) ? (
     <div className="desk-extras">
-      {ehMesAtual && onSeparar && <CaixinhaHoje itens={monthIncomeItems} separado={separado} onSeparar={onSeparar} />}
       {ehMesAtual && !simples && <LembreteCarteira investiuNoMes={(curStats.invested || 0) > 0} onImportar={() => setActiveTab("importar")} />}
       {ehMesAtual && convite && <ConviteHoje {...convite} vazio={totalDados === 0} guiaAberto={!!guia} onPlantao={() => quickGo("plantao")} />}
     </div>
