@@ -109,6 +109,14 @@ const LOJAS_BR = {
 };
 // marcas que decidem sozinhas, antes das palavras gerais (ex.: "Estok Distribuidora" é loja de casa, não mercado)
 const MARCAS_FIXAS = [
+  // contas de casa pagas no cartão (27/11/2026)
+  ["energia", ["enel", "coelba", "neoenergia", "cemig", "copel", "celpe", "cosern", "light", "equatorial", "energisa", "celesc", "cpfl", "eletropaulo", "edp", "amazonas energia", "ceee", "rge", "elektro", "cea", "energia eletrica", "conta de luz"]],
+  ["agua", ["embasa", "sabesp", "copasa", "cedae", "sanepar", "compesa", "cagece", "caesb", "corsan", "casan", "saneago", "cesan", "deso", "caern", "cagepa", "aguas de", "aegea", "iguá", "igua saneamento", "brk ambiental", "saae", "conta de agua"]],
+  ["moradia", ["comgas", "naturgy", "bahiagas", "gas natural", "copergas", "sulgas", "ultragaz", "liquigas", "supergasbras", "nacional gas", "consigaz", "gas de cozinha"]],
+  // animais antes de saúde (clínica veterinária não é saúde da pessoa)
+  ["pets", ["veterin*", "clinica vet*", "hospital vet*"]],
+  // bolos e doces
+  ["restaurante", ["confeitaria*", "bolo*", "bolos", "casa do bolo", "doceria*", "doces", "brigadeiro*", "cupcake*", "torta*"]],
   ["moradia", ["estok", "larshopping", "lar shopping"]],
   ["compras", ["hstern", "h stern", "privalia", "varejo", "mercadolivre", "mercado livre", "mercadoli*", "mercadol"]],
   ["seguro", ["yelum*", "yelumseg*"]],
@@ -150,6 +158,26 @@ function catCompra(desc, aprendidas) {
   for (const [cat, chaves] of REGRAS_COMPRA) if (chaves.some((k) => regraBate(txt, k))) return cat;
   return "outros";
 }
+// categoria que o banco escreve no arquivo da fatura → categoria do app (usada quando o nome da loja não diz nada)
+const CAT_BANCO = [
+  ["restaurante", /restaur|aliment|bares|lanch|delivery|comida|fast ?food|padaria|cafe/],
+  ["mercado", /supermerc|mercado|hortifr|acougue|atacad/],
+  ["transporte", /transport|combust|posto|estacion|pedagio|mobilidade|automo|veicul|taxi|aplicativo de transp|carro|oficina/],
+  ["saude", /saude|farmac|drogar|hospital|medic|clinic|odonto|laborat|otica/],
+  ["educacao", /educa|escola|curso|livrar|papelar/],
+  ["viagem", /viage|turism|hotel|hosped|aere|passag|cia aerea|companhia aerea/],
+  ["assinaturas", /assinat|streaming|servicos digitais|digital|software|aplicativ/],
+  ["lazer", /lazer|entreten|cinema|show|ingress|jogos|games/],
+  ["beleza", /beleza|estetic|cosmet|salao|perfum/],
+  ["pets", /pet|veterin|animal/],
+  ["academia", /academ|esport|fitness/],
+  ["seguro", /seguro/],
+  ["telefone", /telefon|telecom|celular/],
+  ["moradia", /casa|constru|movei|decora|lar |condomin|aluguel/],
+  ["impostos", /impost|tarifa|taxa|juros|iof|encargo|anuidade/],
+  ["compras", /vestu|roupa|calcad|loja|depart|eletron|varejo|shopping|compras|marketplace|e-?commerce|presente|joalh|brinq/],
+];
+const catDoBanco = (txt) => { const t = SEM_ACENTO(txt); if (!t.trim()) return ""; const f = CAT_BANCO.find(([, re]) => re.test(t)); return f ? f[0] : ""; };
 const guessExpCat = (desc) => {
   const d = String(desc || "").toLowerCase();
   if (!d) return "outros";
@@ -514,7 +542,7 @@ function parseCSV(text, refYear, today) {
   const count = (ch) => (sample.match(new RegExp(ch === "\t" ? "\\t" : "\\" + ch, "g")) || []).length;
   const delim = [";", ",", "\t"].sort((a, b) => count(b) - count(a))[0];
   const rows = lines.map((l) => splitCSVLine(l, delim));
-  const H = { date: /(^|\s)(data|date|dt)(\s|$|\b)/, desc: /descri|hist|lancamento|estabelecimento|title|titulo|memo|detalhe|nome|favorecido|estabelec/, amount: /^(valor|amount|value|quantia)|valor ?\(|valor em|valor r/, credit: /credito|entrada/, debit: /debito|saida/, saldo: /saldo|balance/ };
+  const H = { date: /(^|\s)(data|date|dt)(\s|$|\b)/, desc: /descri|hist|lancamento|estabelecimento|title|titulo|memo|detalhe|nome|favorecido|estabelec/, amount: /^(valor|amount|value|quantia)|valor ?\(|valor em|valor r/, credit: /credito|entrada/, debit: /debito|saida/, saldo: /saldo|balance/, cat: /^(categoria|category|segmento|ramo|classificacao|tipo de compra|tipo do estabelecimento)/ };
   let hi = -1;
   for (let i = 0; i < Math.min(rows.length, 20); i++) {
     const n = rows[i].map(stripAcc);
@@ -524,17 +552,20 @@ function parseCSV(text, refYear, today) {
   if (hi >= 0) {
     const hdr = rows[hi].map(stripAcc);
     const di = hdr.findIndex((c) => H.date.test(c));
-    const ai = hdr.findIndex((c) => H.amount.test(c) && !H.saldo.test(c));
+    // com mais de uma coluna de valor (ex.: C6 manda em US$ e em R$), fica com a de reais
+    const ais = hdr.map((c, i) => (H.amount.test(c) && !H.saldo.test(c) ? i : -1)).filter((i) => i >= 0);
+    const ai = ais.find((i) => /r\$|reais|brl/.test(hdr[i])) ?? ais.find((i) => !/us\$|usd|dolar|cotac/.test(hdr[i])) ?? (ais.length ? ais[0] : -1);
     const ci = hdr.findIndex((c) => H.credit.test(c) && !H.saldo.test(c));
     const bi = hdr.findIndex((c) => H.debit.test(c) && !H.saldo.test(c));
-    const dIdx = hdr.map((c, i) => (H.desc.test(c) && i !== di ? i : -1)).filter((i) => i >= 0);
+    const ti = hdr.findIndex((c) => H.cat.test(c)); // categoria que o banco manda (C6, Inter e outros)
+    const dIdx = hdr.map((c, i) => (H.desc.test(c) && i !== di && i !== ti && !/nome no cart|titular|portador|final do cart|nome do cliente/.test(c) ? i : -1)).filter((i) => i >= 0);
     rows.slice(hi + 1).forEach((r) => {
       const dt = fixYear(parseDateAny(r[di] || "", refYear), today);
       let amount;
       if (ai >= 0) amount = parseAmountBR(r[ai]);
       else { const cr = parseAmountBR(r[ci]), db = parseAmountBR(r[bi]); amount = (isNaN(cr) ? 0 : Math.abs(cr)) - (isNaN(db) ? 0 : Math.abs(db)); }
       const desc = (dIdx.length ? dIdx.map((i) => r[i]).filter(Boolean).join(" · ") : r.filter((c, i) => i !== di && i !== ai).join(" ")).replace(/\s+/g, " ").trim();
-      if (dt && !isNaN(amount) && amount !== 0) out.push({ date: dt, desc: desc || "Lançamento", amount, fmt: "csv" });
+      if (dt && !isNaN(amount) && amount !== 0) out.push({ date: dt, desc: desc || "Lançamento", amount, fmt: "csv", banco: ti >= 0 ? String(r[ti] || "").trim() : "" });
     });
   } else {
     rows.forEach((r) => {
@@ -6298,6 +6329,10 @@ function App() {
         :root[data-theme="dark"] .ir-tag { background: rgba(110,231,183,.14); color: #6EE7B7; } :root[data-theme="dark"] .ir-tag.eu { background: rgba(251,191,36,.14); color: #FCD34D; }
         .ir-fixo { min-height: 44px; display: flex; align-items: center; padding: 0 12px; border-radius: 10px; background: var(--surface-2); font-weight: 700; }
         .ir-volta { margin-top: 6px; font-size: 13px; padding: 0; text-align: left; }
+        .rev-outros { margin: 4px 16px 12px; padding: 14px; border-radius: 14px; background: #FFF8EB; border: 1px solid #F5DDAE; display: grid; gap: 8px; } .rev-outros > b { font-family: "Manrope", "Inter", sans-serif; font-size: 15.5px; } .rev-outros > small { color: var(--text-dim); font-size: 13px; }
+        :root[data-theme="dark"] .rev-outros { background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.25); }
+        .rev-l { padding-top: 8px; border-top: 1px solid rgba(0,0,0,.06); display: grid; gap: 6px; min-width: 0; } .rev-t { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; } .rev-t span { min-width: 0; overflow-wrap: anywhere; } .rev-t b { white-space: nowrap; }
+        .rev-c { gap: 6px; } .rev-c select { min-height: 32px; border-radius: 999px; padding: 0 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
         .vd-hist { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-dim); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; } .vd-hist b { color: var(--text); }
         .fg-todo-ic { width: 30px; height: 30px; border-radius: 10px; background: #E3F0EA; color: #0E5640; display: grid; place-items: center; flex-shrink: 0; } :root[data-theme="dark"] .fg-todo-ic { background: rgba(110,231,183,.12); color: #6EE7B7; }
         .fg-todo-in { padding: 0 0 4px; border-top: 1px solid var(--border); }
@@ -6565,7 +6600,8 @@ function App() {
         {activeTab === "importar" && (
           <ImportTab buildExpenseItems={buildExpenseItems} buildIncomeItems={buildIncomeItems} importedKeys={importedKeys}
             commitImport={commitImport} importLog={importLog} undoImport={undoImport} goTab={goTab}
-            commitB3={commitB3} portfolio={portfolio} investments={investments} commitPrint={commitPrint} fonteInicial={importSrc} limparFonte={() => setImportSrc(null)} />
+            commitB3={commitB3} portfolio={portfolio} investments={investments} commitPrint={commitPrint} fonteInicial={importSrc} limparFonte={() => setImportSrc(null)}
+            catAprendida={contab.catAprendida || {}} aprenderCat={(desc, cat) => { const k = chaveLoja(desc); if (k) setContab((p) => ({ ...p, catAprendida: { ...(p.catAprendida || {}), [k]: cat } })); }} />
         )}
         {activeTab === "backup" && (
           <BackupTab modo={modoApp} onModo={trocarModo} contabAba={contabAba} setContabAba={(v) => setContab((p) => ({ ...p, aba: v }))} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
@@ -11935,7 +11971,7 @@ function ImportDicas({ source }) {
   if (!T) return null;
   return <div className="tips" id={source === "nota" ? "nota-tips" : undefined}><b>{T[0]}</b>{T.slice(1).map((t, i) => <span key={i}>{t}</span>)}</div>;
 }
-function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitImport, importLog, undoImport, goTab, commitB3, portfolio, investments, commitPrint, fonteInicial, limparFonte }) {
+function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitImport, importLog, undoImport, goTab, commitB3, portfolio, investments, commitPrint, fonteInicial, limparFonte, catAprendida = {}, aprenderCat }) {
   const [b3raw, setB3raw] = useState([]);
   const [b3info, setB3info] = useState(null);
   const [source, setSource] = useState(fonteInicial === "extrato" ? "fatura" : (fonteInicial || "nota"));
@@ -12052,7 +12088,9 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
       if (invert) amount = -amount;
       const out = amount < 0;
       const key = r.fitid ? "fit:" + r.fitid + ":" + amount.toFixed(2) : `${r.date}|${amount.toFixed(2)}|${stripAcc(r.desc).replace(/\s+/g, " ").slice(0, 40)}`;
-      const base = { id: r.id, date: r.date, desc: r.desc, amount, out, key, category: guessExpCat(r.desc), action: out ? "novo" : "receita", reason: "", matchItem: null, matchLabel: "" };
+      const kLoja = chaveLoja(r.desc), adiv = guessExpCat(r.desc);
+      const cat0 = (kLoja && catAprendida[kLoja]) || (adiv !== "outros" ? adiv : catDoBanco(r.banco) || "outros");
+      const base = { id: r.id, date: r.date, desc: r.desc, amount, out, key, category: cat0, action: out ? "novo" : "receita", reason: "", matchItem: null, matchLabel: "" };
       let auto = null;
       if (importedKeys[key]) auto = { action: "ignorar", reason: "Já importado antes" };
       else if (out && source === "extrato" && CARD_PAY_RE.test(r.desc)) auto = { action: "ignorar", reason: "Pagamento de fatura. Importe a fatura do cartão para ver cada gasto" };
@@ -12076,7 +12114,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
       const ed = edits[r.id];
       return ed ? { ...row, ...ed } : row;
     });
-  }, [raw, source, invert, edits, importedKeys]);
+  }, [raw, source, invert, edits, importedKeys, catAprendida]);
 
 
   // ---------- revisão B3 ----------
@@ -12147,6 +12185,12 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
   const doImportB3 = () => { const entry = commitB3(b3rows, label || (source === "nota" ? "Nota de corretagem" : "Planilha B3")); setDone(entry); reset(); };
 
   const setEdit = (id, patch) => setEdits((p) => ({ ...p, [id]: { ...(p[id] || {}), ...patch } }));
+  // muda a categoria de uma compra: vale para todas as compras da mesma loja nesta importação e fica aprendido para as próximas
+  const mudarCat = (r, cat) => {
+    const k = chaveLoja(r.desc);
+    setEdits((p) => { const n = { ...p }; rows.filter((x) => x.id === r.id || (k && chaveLoja(x.desc) === k)).forEach((x) => { n[x.id] = { ...(n[x.id] || {}), category: cat }; }); return n; });
+    if (aprenderCat && k) aprenderCat(r.desc, cat);
+  };
   const active = rows.filter((r) => r.action !== "ignorar");
   const sum = (arr) => arr.reduce((a, r) => a + Math.abs(r.amount), 0);
   const novos = rows.filter((r) => r.action === "novo"), baixas = rows.filter((r) => r.action === "baixar" || r.action === "receber"), entradas = rows.filter((r) => r.action === "receita"), ignor = rows.filter((r) => r.action === "ignorar");
@@ -12337,6 +12381,32 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
                 </div>
               )}
             </div>
+            {(() => {
+              // compras que o app não reconheceu: uma linha por loja, com 1 toque para escolher a categoria
+              const semCat = rows.filter((x) => x.out && x.action === "novo" && x.category === "outros");
+              if (!semCat.length) return null;
+              const lojas = Object.values(semCat.reduce((m, x) => { const k = chaveLoja(x.desc) || x.desc; (m[k] = m[k] || { k, r: x, n: 0, v: 0 }).n += 1; m[k].v += Math.abs(x.amount); return m; }, {})).sort((a, b) => b.v - a.v);
+              const RAPIDAS = [["restaurante", "Restaurante"], ["mercado", "Mercado"], ["compras", "Compras"], ["transporte", "Transporte"], ["saude", "Saúde"], ["moradia", "Casa"], ["lazer", "Lazer"]];
+              return (
+                <div className="rev-outros" id="revisar-outros">
+                  <b>Revisar {semCat.length} {semCat.length === 1 ? "compra" : "compras"} em Outros</b>
+                  <small>Escolha uma vez: o app lembra dessa loja nas próximas faturas.</small>
+                  {lojas.slice(0, 12).map((l) => (
+                    <div key={l.k} className="rev-l" data-loja={l.k}>
+                      <div className="rev-t"><span>{l.r.desc}</span><b className="mono">{fmtBRL(l.v)}{l.n > 1 ? ` · ${l.n}x` : ""}</b></div>
+                      <div className="chip-row rev-c">
+                        {RAPIDAS.map(([c, nome]) => <button key={c} type="button" className="chip sm" onClick={() => mudarCat(l.r, c)}>{nome}</button>)}
+                        <select aria-label={"Outra categoria para " + l.r.desc} value="" onChange={(e) => e.target.value && mudarCat(l.r, e.target.value)}>
+                          <option value="">Outra…</option>
+                          {EXP_CATS.filter((c) => c.id !== "outros" && !RAPIDAS.some(([k]) => k === c.id)).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                  {lojas.length > 12 && <small>e mais {lojas.length - 12} lojas: ajuste na lista abaixo.</small>}
+                </div>
+              );
+            })()}
             <div className="imp-list">
               {shown.length === 0 && <div className="empty-state">Nada neste filtro.</div>}
               {shown.map((r) => (
@@ -12350,7 +12420,7 @@ function ImportTab({ buildExpenseItems, buildIncomeItems, importedKeys, commitIm
                       {actionOptions(r).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                     {r.out && r.action === "novo" && (
-                      <select value={r.category} onChange={(e) => setEdit(r.id, { category: e.target.value })}>
+                      <select value={r.category} onChange={(e) => mudarCat(r, e.target.value)}>
                         {EXP_CATS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                       </select>
                     )}

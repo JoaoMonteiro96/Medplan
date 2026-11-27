@@ -47,6 +47,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - `node ferramentas/testes/larguras.cjs`: confere as larguras **344 px** (Galaxy Z Fold fechado), 360, 390, **412** (celular do João), 430, 600, 690 (Fold aberto) e 1440 (computador), nos temas claro e escuro, nos modos Simples e Completo e no guia de pessoa nova. Tem que terminar com "Tudo certo".
 - `node ferramentas/testes/offline.cjs`: app com o service worker ligado: abre sem internet, com as fontes, e mostra "Nova versão" quando há versão nova.
 - `node ferramentas/testes/importar-offline.cjs`: leitores do Importar (PDF, planilha e foto) carregam do próprio app e funcionam sem internet.
+- `node ferramentas/testes/fatura.cjs`: fatura fictícia em CSV (`ferramentas/dados/fatura-teste.csv`, formato C6): categoria do banco, luz/água/veterinário, "Revisar compras em Outros" e aprendizado da loja.
 - `node ferramentas/testes/calculos.cjs`: contas de dinheiro (imposto, pró-labore, Simples, presumido, IR anual, metas, férias).
 - `node ferramentas/testes/nuvem.cjs`: testa a nuvem com um Supabase de mentira (envio, download só do que mudou, mudança sem internet, excluir conta). Rode sempre que mexer na sincronização.
 - `node ferramentas/testes/telas.cjs simples` (ou `completo`, `novo`): fotos das telas em `ferramentas/saida/` para mandar ao João. Olhe as fotos antes de mandar.
@@ -60,7 +61,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - Notas fiscais: banco `mediplan-anexos` no aparelho (IndexedDB) e pasta privada `notas` no Supabase.
 - `cotacoes.__hist`: um registro por dia do valor da carteira (gráfico de patrimônio).
 - `cotacoes.__USD` e `__USDauto`: cotação do dólar.
-- `contab.catAprendida`: categoria que a pessoa escolheu para cada loja da fatura do cartão.
+- `contab.catAprendida`: categoria que a pessoa escolheu para cada loja da fatura do cartão. Desde 27/11/2026 vale também na prévia do Importar, e escolher a categoria ali (ou no quadro "Revisar compras em Outros") muda todas as compras da mesma loja e fica aprendido. Quando o nome não diz nada, o app usa a coluna "Categoria" do CSV do banco (`catDoBanco`).
 - `contab.modoApp`: `"simples"` ou `"completo"`. Sem valor: quem já tem dados fica no Completo; quem não tem vê o guia de abertura.
 - `contab.ferias`: lista de férias salvas (`{ id, ini, fim }`, datas `AAAA-MM-DD`).
 - `contab.eventos`: eventos do calendário fora dos plantões (`{ id, data, titulo, hora, nota }`, data `AAAA-MM-DD`, hora `HH:MM` ou vazia).
