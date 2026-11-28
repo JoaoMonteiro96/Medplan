@@ -2,7 +2,7 @@
 // O Playwright precisa estar instalado (npm i -g playwright, ou o que já vier no ambiente).
 const http = require('http'), fs = require('fs'), path = require('path');
 const RAIZ = path.resolve(__dirname, '..');
-const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp4': 'video/mp4', '.css': 'text/css', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.gz': 'application/gzip' };
+const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.css': 'text/css', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.gz': 'application/gzip' };
 
 // serve a pasta do repositório (o mesmo que o GitHub Pages publica)
 function servidor() {

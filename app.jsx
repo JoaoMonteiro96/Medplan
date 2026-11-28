@@ -5476,6 +5476,45 @@ function App() {
         .pm-bar .pm-btns { display: flex; gap: 8px; margin: 10px 0 6px; flex-wrap: wrap; } .pm-bar small { color: var(--text-dim); font-size: 12px; }
         .cl-more { display: block; width: 100%; text-align: left; padding: 12px 16px; border: none; border-top: 1px solid var(--border); background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--teal); cursor: pointer; }
 
+
+        /* ================= tabela de ações, FIIs e ETFs (28/11/2026): logo, selos verde/vermelho ================= */
+        .atv-logo { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; object-fit: cover; background: #fff; box-shadow: 0 0 0 1px var(--border); }
+        .atv-mono { display: grid; place-items: center; color: #fff; font: 800 10px/1 Manrope, Inter, sans-serif; letter-spacing: 0.01em; box-shadow: inset 0 0 0 2px rgba(255,255,255,.25); }
+        .pvar { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; line-height: 1.25; }
+        .pvar.up { background: #DCFCE7; color: #047857; } .pvar.down { background: #FEE2E2; color: #DC2626; }
+        .pvar.dia { background: none; padding: 0; color: var(--text); font-weight: 600; } .pvar.dia.up svg { color: #059669; } .pvar.dia.down svg { color: #DC2626; }
+        :root[data-theme="dark"] .pvar.up { background: rgba(52,211,153,.16); color: #34D399; } :root[data-theme="dark"] .pvar.down { background: rgba(248,113,113,.16); color: #F87171; }
+        :root[data-theme="dark"] .pvar.dia { background: none; color: var(--text); } :root[data-theme="dark"] .pvar.dia.up svg { color: #34D399; } :root[data-theme="dark"] .pvar.dia.down svg { color: #F87171; }
+        .tb-nd { color: var(--text-dim); font-weight: 600; font-size: 12.5px; }
+        .cl-head.tb-head { grid-template-columns: 44px minmax(0, 1fr) auto 18px; }
+        .tb-ic { position: relative; width: 44px; height: 44px; display: grid; place-items: center; } .tb-ic .tb-anel { position: absolute; inset: 0; }
+        .tb-head .cl-name b { font-family: Manrope, Inter, sans-serif; letter-spacing: -0.02em; } .tb-kpi b, .tb-s b { font-family: Manrope, Inter, sans-serif; letter-spacing: -0.01em; }
+        .tb-barra { display: inline-block; width: 44px; height: 5px; border-radius: 3px; background: var(--surface-3, #EEF2F1); overflow: hidden; } .tb-barra i { display: block; height: 100%; border-radius: 3px; }
+        .tb-kpi { display: none; min-width: 0; } .tb-kpi small { display: block; font-size: 12px; color: var(--text-dim); font-weight: 600; margin-bottom: 3px; white-space: nowrap; } .tb-kpi b { font-size: 16px; font-weight: 800; white-space: nowrap; }
+        .tb-head .tb-k-v { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; } .tb-head .tb-k-v small { display: none; }
+        .tb-head .cl-name { min-width: 0; } .tb-head .cl-name small { white-space: normal; }
+        .tb-head .tb-k-r { display: none; }
+        .tb-cols { display: none; }
+        .cl-row .ac-top.tb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px 16px; }
+        .tb-atv { display: flex; align-items: center; gap: 11px; min-width: 0; }
+        .tb-id { min-width: 0; } .tb-id b { display: block; font-size: 14.5px; } .tb-id small { display: block; font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+        .tb-c { display: none; }
+        .tb-row .tb-s { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; } .tb-s b { font-size: 14.5px; white-space: nowrap; }
+        @media (min-width: 1000px) {
+          .cl-head.tb-head { grid-template-columns: 44px minmax(150px, 1.3fr) 70px 150px 120px 130px 110px 18px; gap: 16px; padding: 16px 20px; }
+          .tb-head .cl-name small { display: none; } .tb-head .cl-name b { font-size: 18px; }
+          .tb-kpi, .tb-head .tb-k-r, .tb-head .tb-k-v { display: block; text-align: right; } .tb-head .tb-k-v small { display: block; }
+          .tb-cols, .cl-row .ac-top.tb-row { display: grid; grid-template-columns: minmax(150px, 1.6fr) 80px 110px 110px 100px 120px 130px 90px; gap: 12px; align-items: center; }
+          .tb-cols { padding: 9px 20px; border-top: 1px solid var(--border); background: var(--surface-2, #F8FAFB); font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+          .tb-cols > * { text-align: right; white-space: nowrap; } .tb-cols > :first-child { text-align: left; }
+          .tb-cols button { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; } .tb-cols button:hover, .tb-cols button.on { color: var(--text); } .tb-cols button.on::after { content: " ↓"; }
+          .cl-row .ac-top.tb-row { padding: 12px 20px; }
+          .tb-c { display: block; text-align: right; font-size: 14px; white-space: nowrap; }
+          .tb-c.tb-w { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+          .tb-id small { display: none; } .tb-id b { font-weight: 600; font-size: 15px; }
+          .tb-row .tb-s { display: block; } .tb-r-cel { display: none; }
+          .cl-tab .cl-row:nth-child(even):not(.open) { background: var(--surface-2, #F8FAFB); }
+        }
         /* ================= v36: teto de gastos, metas compactas, print ================= */
         .tt-big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 2px; }
         .tt-big b { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; } .tt-big span { color: var(--text-dim); font-weight: 600; }
@@ -10851,6 +10890,28 @@ function RentabilidadeCard({ hist = [], investments = [], totalValue, totalBough
 }
 
 // Renda fixa no cartão do ativo: mostra de onde vem o valor de hoje, ou liga uma posição antiga ao Tesouro/CDI
+// logos das ações, FIIs e ETFs guardadas no próprio app (pasta logos/): sem avisar a outro site quais papéis a pessoa tem
+const LOGOS = new Set("AAPL34 ABCB4 ABEV3 ACWI11 AGRO3 ALOS3 ALPA3 ALPA4 ALUP11 ALUP3 ALUP4 AMER3 AMZO34 ANIM3 ASAI3 AURE3 AZUL3 AZUL4 AZZA3 B3SA3 B5P211 BBAS3 BBDC3 BBDC4 BBSD11 BBSE3 BEEF3 BERK34 BHIA3 BITH11 BLAU3 BMGB4 BOVA11 BOVV11 BPAC11 BPAC3 BPAC5 BPAN4 BRAP3 BRAP4 BRAV3 BRAX11 BRCR11 BRFS3 BRKM3 BRKM5 BRKM6 BRSR3 BRSR5 BRSR6 BTAL11 BTCI11 BTHF11 BTLG11 CAML3 CASH3 CCRO3 CEAB3 CMIG3 CMIG4 CMIN3 COCA34 COGN3 CPFE3 CPLE3 CPLE5 CPLE6 CPTS11 CRFB3 CSAN3 CSMG3 CSNA3 CURY3 CVCB3 CXSE3 CYRE3 CYRE4 DASA3 DIRR3 DISB34 DIVO11 DXCO3 ECOO11 ECOR3 EGIE3 ELET3 ELET6 EMBR3 ENEV3 ENGI11 ENGI3 ENGI4 EQTL3 ETHE11 EUCA4 EVEN3 EZTC3 FESA4 FIND11 FIXA11 FLRY3 FRAS3 GFSA3 GGBR3 GGBR4 GGRC11 GMAT3 GOAU3 GOAU4 GOGL34 GOLD11 GOLL4 GOVE11 GRND3 GUAR3 HABT11 HAPV3 HASH11 HBOR3 HBSA3 HFOF11 HGBS11 HGCR11 HGLG11 HGRE11 HYPE3 IGTI11 IGTI3 IGTI4 IMAB11 INTB3 IRBR3 IRFM11 ISAE3 ISAE4 ITSA3 ITSA4 ITUB3 ITUB4 IVVB11 JALL3 JBSS3 JHSF3 JPMC34 JSLG3 JSRE11 JURO11 KEPL3 KFOF11 KLBN11 KLBN3 KLBN4 KNCA11 KNCR11 KNHY11 KNIP11 KNRI11 KNSC11 LAVV3 LEVE3 LFTB11 LFTS11 LJQQ3 LOGG3 LOGN3 LREN3 LVBI11 LWSA3 MATB11 MATD3 MDIA3 MEAL3 MELI34 MGLU3 MLAS3 MOVI3 MRFG3 MRVE3 MSCD34 MSFT34 MTRE3 MULT3 MXRF11 MYPK3 NASD11 NEOE3 NFLX34 NTCO3 NTNS11 NVDC34 ODPV3 ONCO11 ONCO3 ORVR3 PCAR3 PETR3 PETR4 PETZ3 PGMN3 PIBB11 PINE4 PLPL3 POMO3 POMO4 PORT3 POSI3 PRIO3 PSSA3 PTBL3 PVBI11 QBTC11 QUAL3 RADL3 RAIL3 RAIZ4 RANI3 RAPT3 RAPT4 RBRP11 RBRR11 RBVA11 RCRB11 RDOR3 RECR11 RECV3 RENT3 RENT4 ROMI3 RURA11 RZAG11 RZTR11 SANB11 SANB3 SANB4 SAPR11 SAPR3 SAPR4 SARE11 SBFG3 SBSP3 SEER3 SHUL4 SIMH3 SLCE3 SMAC11 SMAL11 SMFT3 SMTO3 SNAG11 SOJA3 SPXI11 STBP3 SUZB3 TAEE11 TAEE3 TAEE4 TECK11 TEND3 TGAR11 TGMA3 TIMS3 TOTS3 TRIS3 TRPL11 TRXF11 TSLA34 TTEN3 TUPY3 UGPA3 UNIP3 UNIP5 UNIP6 USIM3 USIM5 USIM6 USTK11 VALE3 VAMO3 VBBR3 VCRA11 VCRI11 VGHF11 VGIA11 VGIR11 VILG11 VINO11 VISA34 VISC11 VIVA3 VIVT3 VRTA11 VULC3 WEGE3 WIZC3 WPLZ11 WRLD11 XFIX11 XINA11 XPCA11 XPCI11 XPLG11 XPML11 YDUQ3 ZAMP3".split(" "));
+const TABELA_CATS = ["Ações", "FII", "ETF"];
+function AtivoLogo({ t, cor }) {
+  const [erro, setErro] = useState(false);
+  const tk = String(t || "").toUpperCase().trim();
+  if (LOGOS.has(tk) && !erro) return <img className="atv-logo" src={"logos/" + tk + ".svg"} alt="" width="36" height="36" loading="lazy" onError={() => setErro(true)} />;
+  return <span className="atv-logo atv-mono" style={{ background: cor }} aria-hidden="true">{tk.replace(/\d+$/, "").slice(0, 4) || "?"}</span>;
+}
+// selo de ganho (verde) ou perda (vermelho); "dia" mostra o triângulo, o resto a seta
+function PillVar({ v, dia }) {
+  const up = v >= 0;
+  return (
+    <span className={"pvar " + (up ? "up" : "down") + (dia ? " dia" : "")}>
+      {(up ? "" : "−") + Math.abs(v).toFixed(2).replace(".", ",") + "%"}
+      {dia
+        ? <svg width="9" height="7" viewBox="0 0 10 8" aria-hidden="true"><path d={up ? "M5 0l5 8H0z" : "M5 8L0 0h10z"} fill="currentColor" /></svg>
+        : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{up ? <path d="M7 17L17 7M9 7h8v8" /> : <path d="M7 7l10 10M17 9v8H9" />}</svg>}
+    </span>
+  );
+}
+
 // ---- Análise completa de uma ação ou FII: preço (12 meses, B3), mínima/máxima, proventos (B3) ----
 const ANL_CACHE = {};
 const anlTipo = (t) => ({ RENDIMENTO: "Rendimento", DIVIDENDO: "Dividendo", "JRS CAP PROPRIO": "JCP", AMORTIZACAO: "Amortização", "AMORTIZAÇÃO": "Amortização" }[String(t || "").toUpperCase().trim()] || (String(t || "").charAt(0) + String(t || "").slice(1).toLowerCase()));
@@ -11369,15 +11430,43 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             const aberta = catsAbertas === null ? gi === 0 : catsAbertas.includes(g.cat);
             const alternar = () => setCatsAbertas((prev) => { const atual = prev === null ? [maiorCat] : prev; return atual.includes(g.cat) ? atual.filter((c) => c !== g.cat) : [...atual, g.cat]; });
             const LIM = 5, todas = catsTodas[g.cat] || g.items.length <= LIM + 1;
+            const tabela = TABELA_CATS.includes(g.cat);
+            const diaCl = diaItens.filter((p) => p.category === g.cat);
+            const diaClBase = diaCl.reduce((a, p) => a + p.qty * antM[p.description].a, 0);
+            const diaClPct = diaClBase > 0 ? (diaCl.reduce((a, p) => a + p.qty * (p.cotacao - antM[p.description].a), 0) / diaClBase) * 100 : null;
+            const diaDe = (p) => (antM[p.description] && antM[p.description].a > 0 && p.cotacao > 0 && diaItens.includes(p) ? ((p.cotacao - antM[p.description].a) / antM[p.description].a) * 100 : null);
+            const ordCol = (col) => setSortBy(col === "valor" ? "valor" : col === "az" ? "az" : sortBy === "alta" ? "baixa" : "alta");
             const itens = todas ? g.items : g.items.slice(0, LIM);
             return (
-              <section key={g.cat} className={`cl-card ${aberta ? "open" : ""}`} data-classe={g.cat}>
+              <section key={g.cat} className={`cl-card ${aberta ? "open" : ""} ${tabela ? "cl-tab" : ""}`} data-classe={g.cat}>
+                {tabela ? (
+                <button type="button" className="cl-head tb-head" aria-expanded={aberta} onClick={alternar}>
+                  <span className="tb-ic" style={{ color: invCatMeta(g.cat).color }} aria-hidden="true"><svg className="tb-anel" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeOpacity=".16" strokeWidth="3.5" /><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.max(0.5, totalValue > 0 ? (sub / totalValue) * 119.4 : 0)} 200`} transform="rotate(-90 22 22)" /></svg><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{g.cat === "FII" ? <><path d="M3 21h18" /><path d="M5 21V8l7-5 7 5v13" /><path d="M10 21v-5h4v5" /></> : g.cat === "ETF" ? <><circle cx="12" cy="12" r="9" /><path d="M12 3v9l6.4 6.4" /></> : <><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>}</svg></span>
+                  <span className="cl-name"><b>{g.cat === "FII" ? "Fundos imobiliários" : g.cat === "ETF" ? "ETFs" : "Ações"}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}</small></span>
+                  <span className="tb-kpi tb-k-n"><small>Ativos</small><b className="mono">{g.items.length}</b></span>
+                  <span className="tb-kpi tb-k-v"><small>Valor total</small><b className="mono">{fmtBRL(sub)}</b>{subCost > 0 && <span className="tb-r-cel"><PillVar v={subPct} /></span>}</span>
+                  <span className="tb-kpi tb-k-d"><small>{diaRot}</small>{diaClPct === null ? <b className="mono tb-nd">—</b> : <PillVar v={diaClPct} dia />}</span>
+                  <span className="tb-kpi tb-k-r"><small>Rentabilidade</small>{subCost > 0 ? <PillVar v={subPct} /> : <b className="mono tb-nd">—</b>}</span>
+                  <span className="tb-kpi tb-k-p"><small>% na carteira</small><b className="mono">{pctOf(sub)}</b></span>
+                  <span className="cl-chev" aria-hidden="true"><IconChevronDown size={18} /></span>
+                </button>
+                ) : (
                 <button type="button" className="cl-head" aria-expanded={aberta} onClick={alternar}>
                   <span className="cl-dot" style={{ background: invCatMeta(g.cat).color }} />
                   <span className="cl-name"><b>{g.cat === "Exterior" ? "Exterior (em dólar)" : g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}{g.cat === "Exterior" ? " · " + fmtUSD(g.items.reduce((a, p) => a + (p.valueUsd || 0), 0)) : ""}</small></span>
                   <span className="cl-val"><b className="mono">{fmtBRL(sub)}</b>{!ehRendaFixa(g.cat) && <small className="mono" style={{ color: subProfit >= 0 ? "var(--teal)" : "var(--brick)" }}><span>{sgn(subProfit)} {fmtBRL(Math.abs(subProfit))}</span><i className="cl-pct">({signPct(subPct)})</i></small>}</span>
                   <span className="cl-chev" aria-hidden="true"><IconChevronDown size={18} /></span>
                 </button>
+                )}
+                {aberta && tabela && (
+                  <div className="tb-cols" role="presentation">
+                    <button type="button" className={sortBy === "az" ? "on" : ""} onClick={() => ordCol("az")}>Ativo</button>
+                    <span>Quant.</span><span>Preço médio</span><span>Preço atual</span><span>{diaRot}</span>
+                    <button type="button" className={sortBy === "alta" || sortBy === "baixa" ? "on" : ""} onClick={() => ordCol("var")}>Rentabilidade</button>
+                    <button type="button" className={sortBy === "valor" ? "on" : ""} onClick={() => ordCol("valor")}>Saldo</button>
+                    <span>% Carteira</span>
+                  </div>
+                )}
                 {aberta && g.cat === "Exterior" && (
                   <div className="cl-fx" data-fx>
                     <span>Dólar usado na conversão<small>{numOf(cotacoes.__USD) > 0 ? "valor digitado por você. Apague para usar o do dia" : numOf(cotacoes.__USDauto) > 0 ? "cotação do dia, automática" : "sem internet: usando um valor aproximado. Digite o do dia"}</small></span>
@@ -11398,6 +11487,18 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                     );
                     return (
                       <article key={p.key} className={`asset-card cl-row ${open ? "open" : ""}`} data-asset={p.description}>
+                        {tabela && p.isQty ? (() => { const dp = diaDe(p); return (
+                        <button className="ac-top tb-row" aria-expanded={open} onClick={() => setOpenKey(open ? null : p.key)}>
+                          <span className="tb-atv"><AtivoLogo t={p.description} cor={invCatMeta(p.category).color} /><span className="tb-id"><b>{p.description}</b><small className="mono">{fmtQty(p.qty)} · PM {fmtBRL(p.avg)}</small></span></span>
+                          <span className="tb-c tb-q mono">{fmtQty(p.qty)}</span>
+                          <span className="tb-c tb-pm mono">{fmtBRL(p.avg)}</span>
+                          <span className="tb-c tb-pa mono">{hasQuote ? fmtBRL(p.cotacao) : "—"}</span>
+                          <span className="tb-c tb-d">{dp === null ? <span className="tb-nd">—</span> : <PillVar v={dp} dia />}</span>
+                          <span className="tb-c tb-r">{hasQuote ? <PillVar v={p.profitPct} /> : <small className="tb-nd">sem cotação</small>}</span>
+                          <span className="tb-c tb-s"><b className="mono">{fmtBRL(p.value)}</b><span className="tb-r-cel">{hasQuote ? <PillVar v={p.profitPct} /> : <small className="tb-nd">sem cotação</small>}</span></span>
+                          <span className="tb-c tb-w mono"><i className="tb-barra" aria-hidden="true"><i style={{ width: Math.max(6, Math.min(100, (p.value / Math.max(1, ...g.items.map((x) => x.value))) * 100)) + "%", background: invCatMeta(p.category).color }} /></i>{pctOf(p.value)}</span>
+                        </button>
+                        ); })() : (
                         <button className="ac-top" aria-expanded={open} onClick={() => setOpenKey(open ? null : p.key)}>
                           <span className="ac-id"><b>{p.description}</b><span className="mono">{p.usd ? (p.isQty ? `${fmtQty(p.qty)} · PM ${fmtUSD(p.avgUsd)}${hasQuote ? " · hoje " + fmtUSD(p.cotacaoUsd) : ""}` : `aplicado ${fmtUSD(p.costUsd)}`) : p.isQty ? `${fmtQty(p.qty)} · PM ${fmtBRL(p.avg)}${hasQuote ? " · hoje " + fmtBRL(p.cotacao) : ""}` : ehRendaFixa(p.category) ? "valor investido" : `aplicado ${fmtBRL(p.cost)}`}</span></span>
                           <span className="ac-val">
@@ -11406,6 +11507,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                             {ehRendaFixa(p.category) ? null : hasQuote ? <small className="mono" style={{ color: p.profit >= 0 ? "var(--teal)" : "var(--brick)" }}>{signPct(p.profitPct)}</small> : <small>sem cotação</small>}
                           </span>
                         </button>
+                        )}
                         {open && (<>
                         <div className={`ac-stats ${p.isQty ? "" : "three"}`}>
                           {p.isQty ? (

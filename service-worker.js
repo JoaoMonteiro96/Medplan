@@ -1,6 +1,6 @@
 // Sallos: abre na hora com a cópia guardada e busca a versão nova por trás. Quando chega versão nova,
 // avisa o app ("Nova versão pronta") e a próxima abertura já usa a nova. Sem internet, usa a cópia guardada.
-const CACHE_NAME = "mediplan-202611262302";
+const CACHE_NAME = "mediplan-202611280959";
 const REM_CACHE = "mediplan-lembretes"; // lista de lembretes gravada pelo app; não é apagada nas atualizações
 // partes do programa com a versão no nome (libs/): ficam guardadas entre as atualizações do app, sem baixar de novo
 const LIB_CACHE = "sallos-libs-1";
@@ -56,8 +56,8 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   // fontes e bibliotecas guardadas no app: a cópia guardada primeiro
-  if (mesma && (url.pathname.includes("/fontes/") || url.pathname.includes("/libs/"))) {
-    const destino = url.pathname.includes("/libs/") ? LIB_CACHE : CACHE_NAME;
+  if (mesma && (url.pathname.includes("/fontes/") || url.pathname.includes("/libs/") || url.pathname.includes("/logos/"))) {
+    const destino = url.pathname.includes("/fontes/") ? CACHE_NAME : LIB_CACHE;
     e.respondWith(caches.match(req, { ignoreSearch: true }).then((g) => g || fetch(req).then((res) => { if (res.ok) { const copy = res.clone(); caches.open(destino).then((c) => c.put(req, copy)); } return res; })));
     return;
   }
