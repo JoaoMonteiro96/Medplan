@@ -5778,8 +5778,8 @@ function App() {
         @media (max-width: 560px) { .subtabs.inv-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; } .inv-tabs .subtab { flex-direction: column; justify-content: center; gap: 3px; padding: 7px 2px; font-size: 11.5px; letter-spacing: -0.01em; } .inv-tabs .subtab svg { width: 17px; height: 17px; } }
         @media (max-width: 379px) { .inv-tabs .subtab { font-size: 9.6px; letter-spacing: -0.02em; padding: 7px 0; } .subtabs.inv-tabs { gap: 2px; padding: 3px; } }
         /* aba Dividendos */
-        .dv-top { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); } .dv-bot { display: grid; gap: 12px; margin-top: 12px; grid-template-columns: minmax(0, 1fr); } .dv .card { min-width: 0; }
-        @media (min-width: 1000px) { .dv-top { grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.4fr); align-items: start; } .dv-bot { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } .dv-top .card, .dv-bot .card { margin: 0; } }
+        .dv-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); } .dv .card { min-width: 0; margin: 0; }
+        @media (min-width: 1000px) { .dv-grid { grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.4fr); grid-template-areas: "res ch" "rk ch" "rk px"; align-items: start; } .dv-res { grid-area: res; } .dv-ch { grid-area: ch; align-self: stretch; } .dv-rk { grid-area: rk; align-self: stretch; } .dv-px { grid-area: px; align-self: stretch; } }
         .dv-l { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-dim); } .dv-l small { font-weight: 500; margin-left: 4px; }
         .dv-big { font: 800 clamp(30px, 8vw, 38px) Manrope, Inter, sans-serif; letter-spacing: -0.03em; margin: 4px 0 10px; }
         .dv-meta { display: flex; justify-content: space-between; font-size: 13.5px; color: var(--text-dim); } .dv-meta b { color: var(--text); }
@@ -9837,7 +9837,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         </div>
         <div className="dgrid" style={{ gridTemplateColumns: "1.9fr 1fr" }}>
           <div className="card"><div className="card-head"><h3 className="card-title">O dinheiro do mês, dia a dia</h3></div><DFluxo fluxoDia={fluxoDia} viewYear={viewYear} viewMonth={viewMonth} /></div>
-          <div className="card"><div className="card-head"><h3 className="card-title">Próximos lançamentos</h3></div><DProximos incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} max={5} onVer={() => setActiveTab("despesas")} /></div>
+          <div className="card"><div className="card-head"><h3 className="card-title">Próximos lançamentos</h3></div><DProximos incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} max={9} onVer={() => setActiveTab("despesas")} /></div>
         </div>
         <DGrid>
           <DGv id="ini-12m" open icon={<IconTrending size={18} />} title="Receitas x despesas" sub={`últimos ${chartMonths} meses`} val={"sobra média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.value - h.expenses, 0) / history12.length : 0)}>
@@ -11343,8 +11343,7 @@ function DividendosTab({ lista = [], positions = [], nosRecebimentos = true, set
   if (!temAtivos) return <div className="card"><div className="empty-state">Os dividendos aparecem aqui quando você tiver ações, FIIs ou ETFs da bolsa na carteira.</div></div>;
   const salvarMeta = () => { const v = Number(String(metaTxt).replace(/\./g, "").replace(",", ".")) || 0; setMeta && setMeta(v); setEditMeta(false); };
   return (
-    <div className="dv" id="dividendos">
-      <div className="dv-top">
+    <div className="dv dv-grid" id="dividendos">
         <div className="card dv-res">
           <span className="dv-l">Média por mês <small>últimos 12 meses</small></span>
           <div className="dv-big mono">{comCentavos(fmtBRL(media))}</div>
@@ -11385,9 +11384,7 @@ function DividendosTab({ lista = [], positions = [], nosRecebimentos = true, set
             ))}
           </div>
         </div>
-      </div>
-      <div className="dv-bot">
-        <div className="card">
+        <div className="card dv-rk">
           <div className="card-head"><h3 className="card-title">Quem mais pagou</h3><span className="card-note">12 meses</span></div>
           {porAtivo.length === 0 && <div className="dv-vazio">Nenhum pagamento nos últimos 12 meses.</div>}
           {(todos ? porAtivo : porAtivo.slice(0, 6)).map((a) => (
@@ -11395,14 +11392,13 @@ function DividendosTab({ lista = [], positions = [], nosRecebimentos = true, set
           ))}
           {porAtivo.length > 6 && <button type="button" className="dv-link" onClick={() => setTodos(!todos)}>{todos ? "Mostrar menos" : `Ver os ${porAtivo.length}`}</button>}
         </div>
-        <div className="card">
+        <div className="card dv-px">
           <div className="card-head"><h3 className="card-title">Próximos pagamentos</h3>{aReceber.length > 0 && <span className="card-note mono">{fmtBRL(totRec)}</span>}</div>
           {aReceber.length === 0 && <div className="dv-vazio">Nenhum pagamento anunciado ainda.</div>}
           {aReceber.slice(0, 8).map((x, k) => (
             <div key={k} className="dv-it">{x.semData ? <span className="dv-dia"><b>—</b>a definir</span> : <span className="dv-dia"><b>{Number(x.pag.slice(8, 10))}</b>{(MONTHS_ABBR_PT[Number(x.pag.slice(5, 7)) - 1] || "").toLowerCase()}</span>}<span className="dv-it-n"><b>{x.ticker}</b><small>{x.tipo} · com {fmtQty(x.qtd)} {x.cat === "FII" ? "cotas" : "ações"}{x.semData ? " · data de pagamento a definir" : ""}</small></span><b className="mono dv-rec">{fmtBRL(x.liquido)}</b></div>
           ))}
         </div>
-      </div>
     </div>
   );
 }
