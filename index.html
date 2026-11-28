@@ -72,7 +72,7 @@ html:has(#splash){background:#0B3D2E}
   function showError(msg){var el=document.getElementById("error-banner");if(el){el.style.display="block";el.textContent="Erro ao carregar o Sallos:\n\n"+msg;}}
   window.addEventListener("error",function(e){if(e&&e.message)showError(e.message+"\n(linha "+e.lineno+")");});
 </script>
-<script src="app.js?v=202611281141"></script>
+<script src="app.js?v=202611281209"></script>
 <script>
   if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("service-worker.js").catch(function () {}); }); }
 </script>

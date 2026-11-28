@@ -5500,18 +5500,6 @@ function App() {
         .tb-id { min-width: 0; } .tb-id b { display: block; font-size: 14.5px; } .tb-id small { display: block; font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .tb-c { display: none; } .tb-longo { display: none; }
         .tb-row .tb-s { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; } .tb-s b { font-size: 14.5px; white-space: nowrap; }
-        /* topo de cada grupo no verde do Sallos, com a grade fina */
-        .app .cl-tab .cl-head.tb-head { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(135deg, #0B3D2E, #0E5640); color: #fff; }
-        .app .cl-tab .cl-head.tb-head::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-          background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
-          background-size: 22px 22px; opacity: 0.5;
-          -webkit-mask-image: linear-gradient(to left, #000 30%, transparent 100%); mask-image: linear-gradient(to left, #000 30%, transparent 100%); }
-        .app .cl-tab .tb-head .cl-name small, .app .cl-tab .tb-head .tb-kpi small { color: rgba(220,245,235,0.72); }
-        .app .cl-tab .tb-head .cl-chev { color: rgba(255,255,255,0.75); }
-        .app .cl-tab .tb-head .tb-ic { color: #6EE7B7 !important; } .app .cl-tab .tb-head .tb-ic > svg:last-child { color: #fff; }
-        .app .cl-tab .tb-head .pvar.up { background: #D1FAE5; color: #065F46; } .app .cl-tab .tb-head .pvar.down { background: #FEE2E2; color: #B91C1C; }
-        .app .cl-tab .tb-head .pvar.dia { background: none; color: #fff; } .app .cl-tab .tb-head .pvar.dia.up svg { color: #6EE7B7; } .app .cl-tab .tb-head .pvar.dia.down svg { color: #FCA5A5; }
-        .app .cl-tab .tb-head .tb-nd { color: rgba(220,245,235,0.6); }
         .app .cl-tab .tb-cols { border-top: none; }
         @media (min-width: 1000px) {
           .cl-head.tb-head { grid-template-columns: 44px minmax(150px, 1.3fr) 70px 150px 120px 130px 110px 18px; gap: 16px; padding: 16px 20px; }
@@ -5632,7 +5620,7 @@ function App() {
         @media (max-width: 720px) { .xl-row { grid-template-columns: 30px minmax(0, 1fr) auto; padding: 10px 10px; } .xl-row .fz-pen { display: none; } .xl-row .xl-check { width: 28px; height: 28px; } }
 
         /* ================= Contas em três caixinhas (28/11/2026) ================= */
-        .cx { max-width: 640px; } @media (min-width: 1100px) { .cx { max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-bottom: 14px; } .cx > .card { margin: 0; } .cx > :only-child { grid-column: 1 / -1; } }
+        .cx { max-width: 640px; } @media (min-width: 1100px) { .cx { max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-bottom: 14px; } .cx > .card { margin: 0; } .cx > :only-child { grid-column: 1 / -1; } .cx > .cx-det { grid-column: 1 / -1; order: 3; } }
         .cx-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
         @media (min-width: 1100px) { .cx { align-items: stretch !important; } .cx-3 { margin: 0; gap: 12px; } .cx .cx-box { padding: 18px 16px; display: flex; flex-direction: column; } .cx .cx-box .cx-anel { width: 44px; height: 44px; margin-bottom: auto; } .cx .cx-box small { margin-top: 18px; font-size: 13px; } .cx .cx-box b { font-size: 26px; } .cx .cx-box span { font-size: 12.5px; } }
         .cx-box { background: var(--surface, #fff); border: 1px solid var(--hair, var(--border)); border-radius: 18px; padding: 12px 11px 12px; min-width: 0; box-shadow: var(--sombra, none); }
@@ -5640,14 +5628,35 @@ function App() {
         .cx-box small { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); }
         .cx-box b { display: block; font-family: Manrope, Inter, sans-serif; font-weight: 800; font-size: clamp(14px, 4.2vw, 19px); letter-spacing: -0.02em; margin: 3px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cx-box span { display: block; font-size: 11.5px; color: var(--text-dim); line-height: 1.3; }
-        .cx-livre { background: linear-gradient(135deg, #0B3D2E, #0E5640); border-color: transparent; color: #fff; }
+        .cx-box.cx-livre { background: linear-gradient(135deg, #0B3D2E, #0E5640); border-color: transparent; color: #fff; }
         .cx-livre small, .cx-livre span { color: rgba(220,245,235,0.8); }
-        .cx-livre.neg { background: linear-gradient(135deg, #7F1D1D, #991B1B); }
+        .cx-box.cx-livre.neg { background: linear-gradient(135deg, #7F1D1D, #991B1B); }
         .cx-sem .oa-h { margin: 0 0 10px; color: var(--text); }
         .cx-dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-bottom: 4px; }
+
+        .cx-box { position: relative; text-align: left; font: inherit; color: var(--text); cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+        .cx-box:active { transform: scale(.97); } .cx-box.on { box-shadow: 0 0 0 2px #16A34A; } .cx-livre.on { box-shadow: 0 0 0 2px #6EE7B7; }
+        .cx-sinal { position: absolute; top: 12px; right: 10px; color: var(--text-dim); transition: transform .2s; } .cx-box.on .cx-sinal { transform: rotate(180deg); } .cx-livre .cx-sinal { color: rgba(220,245,235,.7); }
+        .cx-arco { animation: cxCresce .9s cubic-bezier(.22,1,.36,1) both; } @keyframes cxCresce { from { stroke-dasharray: 0 200; } }
+        @media (prefers-reduced-motion: reduce) { .cx-arco { animation: none; } }
+        .cx-det { animation: cxAbre .2s ease both; } @keyframes cxAbre { from { opacity: 0; transform: translateY(-4px); } }
+        .cx-det .oa-h { margin: 0 0 10px; color: var(--text); }
+        .cx-dbar { height: 8px; border-radius: 5px; background: var(--surface-3, #E7ECEA); overflow: hidden; margin-bottom: 8px; } .cx-dbar i { display: block; height: 100%; border-radius: 5px; transition: width .6s ease; }
+        .cx-dl { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; font-size: 14.5px; } .cx-dl span { color: var(--text-dim); } .cx-dl b { font-size: 15px; white-space: nowrap; }
+        .cx-dl.in b { color: #15803D; } .cx-dl.out b { color: #B45309; }
+        .cx-dl.tot { border-top: 2px dashed var(--border); margin-top: 4px; padding-top: 10px; } .cx-dl.tot span { color: var(--text); font-weight: 700; } .cx-dl.tot b { font-size: 19px; color: #15803D; } .cx-dl.tot.neg b { color: #DC2626; }
+        .cx-dli { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; } .cx-dli span { min-width: 0; } .cx-dli small { display: block; color: var(--text-dim); font-size: 12px; } .cx-dli b { white-space: nowrap; }
+        .cx-dsub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-dim); margin: 10px 0 2px; }
+        .cx-sem-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; } .cx-sem-h .oa-h { margin: 0; }
+        .cx-sem-x { border: none; background: none; color: #15803D; font: 600 13.5px Inter, sans-serif; cursor: pointer; padding: 4px 0; white-space: nowrap; }
+        .cx-dias button { border: 0; font: inherit; cursor: pointer; text-align: center; border-radius: 12px; padding: 6px 0 5px; background: var(--surface-3, #F4F7F5); font-size: 11px; color: var(--text-dim); min-width: 0; }
+        .cx-dias button.sel { box-shadow: inset 0 0 0 2px #16A34A; background: #ECFDF5; } .cx-dias button.hj.sel { box-shadow: inset 0 0 0 2px #6EE7B7; }
+        :root[data-theme="dark"] .cx-dias button.sel { background: rgba(52,211,153,.14); }
+        .cx-li.paga .cx-li-n b, .cx-li.paga .cx-li-v { color: var(--text-dim); text-decoration: line-through; }
+        .cx-pag.ok { display: inline-flex; align-items: center; gap: 5px; background: #16A34A; color: #fff; }
         .cx-dias div { text-align: center; border-radius: 12px; padding: 6px 0 5px; background: var(--surface-3, #F4F7F5); font-size: 11px; color: var(--text-dim); }
         .cx-dias b { display: block; font: 700 15px Manrope, Inter, sans-serif; color: var(--text); }
-        .cx-dias .hj { background: var(--text); color: var(--surface, #fff); } .cx-dias .hj b { color: var(--surface, #fff); }
+        .cx-dias .hj, .cx-dias button.hj { background: var(--text); color: var(--surface, #fff); } .cx-dias .hj b { color: var(--surface, #fff); }
         .cx-dias em { display: block; width: 6px; height: 6px; border-radius: 50%; margin: 3px auto 0; } .cx-dias em.r { background: #DC2626; } .cx-dias em.a { background: #F59E0B; } .cx-dias em.g { background: #16A34A; }
         .cx-li { display: flex; align-items: center; gap: 10px; padding: 12px 0 0; margin-top: 12px; border-top: 1px solid var(--border); }
         .cx-li-n { flex: 1; min-width: 0; } .cx-li-n b { display: block; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .cx-li-n small { font-size: 12.5px; color: var(--text-dim); } .cx-li-n small.late { color: #DC2626; font-weight: 600; }
@@ -7827,6 +7836,9 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
   const [prev, setPrevState] = useState(() => lsGet("mediplan-org-previstos") !== "0");
   const setPrev = (v) => { lsSet("mediplan-org-previstos", v ? "1" : "0"); setPrevState(v); };
   const [verTudo, setVerTudo] = useState({});
+  const [diaSel, setDiaSel] = useState(null);
+  const [cxAberta, setCxAberta] = useState(null);
+  useEffect(() => { setDiaSel(null); setCxAberta(null); }, [viewYear, viewMonth]);
   const N = new Date(viewYear, viewMonth + 1, 0).getDate();
   const agora = new Date();
   const rel = viewYear * 12 + viewMonth - (agora.getFullYear() * 12 + agora.getMonth());
@@ -7950,18 +7962,56 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
       </div>
     </div>
   );
-  // topo de Contas em três caixinhas (28/11/2026): recebi, contas que faltam e livre para gastar; e as contas desta semana
+  // topo de Contas em três caixinhas (28/11/2026): recebi, contas que faltam e livre para gastar; tocar abre os detalhes. E a semana, com os dias clicáveis
   if (parte === "topo") {
     const totRec = recebido + aReceber, totContas = pagas + aPagar;
-    const livreCx = rel === 0 ? recebido - pagas - Math.max(0, investido) - aPagar : totRec - totContas - Math.max(0, investido);
+    const inv = Math.max(0, investido);
+    const livreCx = rel === 0 ? recebido - pagas - inv - aPagar : totRec - totContas - inv;
+    const semC = (v) => fmtBRL(Math.round(v)).replace(/,\d\d$/, "");
     const anel = (frac, cor, fundo) => (
-      <svg className="cx-anel" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke={fundo} strokeWidth="5" /><circle cx="18" cy="18" r="15" fill="none" stroke={cor} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, Math.min(1, frac)) * 94.25} 200`} transform="rotate(-90 18 18)" /></svg>
+      <svg className="cx-anel" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke={fundo} strokeWidth="5" /><circle className="cx-arco" cx="18" cy="18" r="15" fill="none" stroke={cor} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, Math.min(1, frac)) * 94.25} 200`} transform="rotate(-90 18 18)" /></svg>
+    );
+    const caixa = (id, cls, frac, cor, fundo, rot, val, sub) => (
+      <button type="button" className={`cx-box ${cls} ${cxAberta === id ? "on" : ""}`} data-cx={id} aria-expanded={cxAberta === id} onClick={() => setCxAberta(cxAberta === id ? null : id)}>
+        {anel(frac, cor, fundo)}<small>{rot}</small><b className="mono">{val}</b><span>{sub}</span>
+        <svg className="cx-sinal" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
     );
     const caixas = (
       <div className="cx-3" id="cx-caixinhas">
-        <div className="cx-box" data-cx="recebi">{anel(totRec > 0 ? recebido / totRec : 0, "#16A34A", "#DCFCE7")}<small>{rel > 0 ? "Vai receber" : "Recebi"}</small><b className="mono">{fmtBRL(Math.round(rel > 0 ? totRec : recebido)).replace(/,\d\d$/, "")}</b><span>{aReceber > 0.005 && rel <= 0 ? "faltam " + fmtBRL(Math.round(aReceber)).replace(/,\d\d$/, "") : totRec > 0 ? "tudo recebido" : "nada lançado"}</span></div>
-        <div className="cx-box" data-cx="contas">{anel(totContas > 0 ? pagas / totContas : 1, "#F59E0B", "#FEF3C7")}<small>Contas</small><b className="mono">{fmtBRL(Math.round(aPagar > 0.005 ? aPagar : pagas)).replace(/,\d\d$/, "")}</b><span>{aPagar > 0.005 ? "faltam pagar" : totContas > 0 ? "tudo pago" : "nenhuma conta"}</span></div>
-        <div className={`cx-box cx-livre ${livreCx < 0 ? "neg" : ""}`} data-cx="livre">{anel(recebido > 0 ? Math.max(0, livreCx) / Math.max(recebido, totRec) : 0, "#6EE7B7", "rgba(255,255,255,0.15)")}<small>{livreCx < 0 ? "Falta" : "Livre"}</small><b className="mono">{fmtBRL(Math.round(Math.abs(livreCx))).replace(/,\d\d$/, "")}</b><span>{livreCx < 0 ? "para pagar tudo" : rel < 0 ? "sobrou no mês" : rel > 0 ? "previsto" : "pode gastar"}</span></div>
+        {caixa("recebi", "", totRec > 0 ? recebido / totRec : 0, "#16A34A", "#DCFCE7", rel > 0 ? "Vai receber" : "Recebi", semC(rel > 0 ? totRec : recebido), rel > 0 ? "previsto" : totRec > 0 ? Math.round((recebido / totRec) * 100) + "% do mês" : "nada lançado")}
+        {caixa("contas", "", totContas > 0 ? pagas / totContas : 1, "#F59E0B", "#FEF3C7", "Contas", semC(aPagar > 0.005 ? aPagar : pagas), aPagar > 0.005 ? "faltam pagar" : totContas > 0 ? "tudo pago" : "nenhuma conta")}
+        {caixa("livre", `cx-livre ${livreCx < 0 ? "neg" : ""}`, recebido > 0 ? Math.max(0, livreCx) / Math.max(recebido, 1) : 0, "#6EE7B7", "rgba(255,255,255,0.15)", livreCx < 0 ? "Falta" : "Livre", semC(Math.abs(livreCx)), livreCx < 0 ? "para pagar tudo" : rel < 0 ? "sobrou no mês" : rel > 0 ? "previsto" : "pode gastar")}
+      </div>
+    );
+    const linha = (rot, v, cls = "") => <div className={`cx-dl ${cls}`}><span>{rot}</span><b className="mono">{v}</b></div>;
+    const barra = (frac, cor) => <div className="cx-dbar"><i style={{ width: `${Math.max(0, Math.min(100, frac * 100))}%`, background: cor }} /></div>;
+    const detalhe = cxAberta && (
+      <div className="card cx-det" id="cx-detalhe" data-det={cxAberta}>
+        {cxAberta === "recebi" && <>
+          <h3 className="oa-h">O que já caiu na conta</h3>
+          {barra(totRec > 0 ? recebido / totRec : 0, "#16A34A")}
+          {linha("Já caiu", fmtBRL(recebido), "in")}
+          {linha("Ainda vai cair", fmtBRL(aReceber))}
+          {vaiCair.length > 0 && <div className="cx-dsub">Próximos a cair</div>}
+          {vaiCair.slice(0, 4).map((it) => <div key={it.key} className="cx-dli"><span>{it.nome}<small>{dm(it.dateIso)} · {subRec(it)}</small></span><b className="mono">{fmtBRL(it.net)}</b></div>)}
+        </>}
+        {cxAberta === "contas" && <>
+          <h3 className="oa-h">Contas do mês</h3>
+          {barra(totContas > 0 ? pagas / totContas : 0, "#F59E0B")}
+          {linha("Já paguei", fmtBRL(pagas))}
+          {linha("Falta pagar", fmtBRL(aPagar), "out")}
+          {vaiSair.length > 0 && <div className="cx-dsub">Próximas a pagar</div>}
+          {vaiSair.slice(0, 4).map((it) => <div key={it.key} className="cx-dli"><span>{it.description}<small>{dm(it.dateIso)}</small></span><b className="mono">{fmtBRL(it.amount)}</b></div>)}
+        </>}
+        {cxAberta === "livre" && <>
+          <h3 className="oa-h">{rel === 0 ? "De onde vem o livre" : "A conta do mês"}</h3>
+          {linha(rel === 0 ? "Caiu na conta" : "Entra no mês", fmtBRL(rel === 0 ? recebido : totRec), "in")}
+          {linha("− Contas pagas", fmtBRL(pagas))}
+          {inv > 0 && linha("− Investido", fmtBRL(inv))}
+          {linha("− Contas que faltam", fmtBRL(aPagar))}
+          {linha(livreCx < 0 ? "= Falta" : "= Livre para gastar", fmtBRL(Math.abs(livreCx)), "tot " + (livreCx < 0 ? "neg" : ""))}
+        </>}
       </div>
     );
     let semana = null;
@@ -7969,26 +8019,29 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
       const hj = new Date(hojeIso + "T12:00:00"), dow = (hj.getDay() + 6) % 7;
       const dias = Array.from({ length: 7 }, (_, k) => { const d = new Date(hj); d.setDate(hj.getDate() - dow + k); return d.toISOString().slice(0, 10); });
       const fim = dias[6];
-      const daSemana = vaiSair.filter((e) => e.dateIso <= fim);
       const prox = vaiSair.find((e) => e.dateIso > fim);
       const pontoDe = (iso) => { const l = expenseItems.filter((e) => e.dateIso === iso); if (!l.length) return ""; if (l.some((e) => !e.paid && iso < hojeIso)) return "r"; if (l.some((e) => !e.paid)) return "a"; return "g"; };
       const NOMES = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+      const lista2 = diaSel ? expenseItems.filter((e) => e.dateIso === diaSel).sort((a, b) => Number(a.paid) - Number(b.paid)) : vaiSair.filter((e) => e.dateIso <= fim);
+      const nomeDia = diaSel ? (diaSel === hojeIso ? "hoje" : NOMES[dias.indexOf(diaSel)] + ", " + dm(diaSel)) : "";
       semana = (
         <div className="card cx-sem" id="cx-semana">
-          <h3 className="oa-h">Esta semana</h3>
-          <div className="cx-dias">{dias.map((iso, k) => <div key={iso} className={iso === hojeIso ? "hj" : ""}><span>{NOMES[k]}</span><b>{Number(iso.slice(8, 10))}</b><em className={pontoDe(iso)} /></div>)}</div>
-          {daSemana.length === 0 && <div className="cx-vazio">{prox ? <>Nenhuma conta até domingo. Próxima: <b>{prox.description}</b>, dia {dm(prox.dateIso)} · <b className="mono">{fmtBRL(prox.amount)}</b></> : "Nenhuma conta para pagar neste mês."}</div>}
-          {daSemana.map((it) => { const st = subPag(it.dateIso); return (
-            <div key={it.key} className="cx-li" data-semana={it.description}>
-              <span className="cx-li-n"><b>{it.description}</b><small className={st.late ? "late" : ""}>{st.late && st.t !== "vence hoje" ? "venceu dia " + Number(it.dateIso.slice(8, 10)) : st.t}</small></span>
+          <div className="cx-sem-h"><h3 className="oa-h">{diaSel ? "Contas de " + nomeDia : "Esta semana"}</h3>{diaSel && <button type="button" className="cx-sem-x" onClick={() => setDiaSel(null)}>Ver a semana</button>}</div>
+          <div className="cx-dias" role="group" aria-label="Dias da semana">{dias.map((iso, k) => <button type="button" key={iso} data-dia={iso} aria-pressed={diaSel === iso} className={`${iso === hojeIso ? "hj" : ""} ${diaSel === iso ? "sel" : ""}`} onClick={() => setDiaSel(diaSel === iso ? null : iso)}><span>{NOMES[k]}</span><b>{Number(iso.slice(8, 10))}</b><em className={pontoDe(iso)} /></button>)}</div>
+          {lista2.length === 0 && <div className="cx-vazio">{diaSel ? "Nenhuma conta neste dia." : prox ? <>Nenhuma conta até domingo. Próxima: <b>{prox.description}</b>, dia {dm(prox.dateIso)} · <b className="mono">{fmtBRL(prox.amount)}</b></> : "Nenhuma conta para pagar neste mês."}</div>}
+          {lista2.map((it) => { const st = subPag(it.dateIso); return (
+            <div key={it.key} className={`cx-li ${it.paid ? "paga" : ""}`} data-semana={it.description}>
+              <span className="cx-li-n"><b>{it.description}</b><small className={!it.paid && st.late ? "late" : ""}>{it.paid ? "paga" : st.late && st.t !== "vence hoje" ? "venceu dia " + Number(it.dateIso.slice(8, 10)) : st.t}</small></span>
               <b className="mono cx-li-v">{fmtBRL(it.amount)}</b>
-              {typeof it.toggle === "function" && <button type="button" className="cx-pag" onClick={it.toggle}>Paguei</button>}
+              {typeof it.toggle === "function" && (it.paid
+                ? <button type="button" className="cx-pag ok" aria-label={"Desmarcar " + it.description} onClick={it.toggle}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>Paga</button>
+                : <button type="button" className="cx-pag" onClick={it.toggle}>Paguei</button>)}
             </div>
           ); })}
         </div>
       );
     }
-    return <div className="oa cx">{caixas}{semana}</div>;
+    return <div className="oa cx">{caixas}{detalhe}{semana}</div>;
   }
   if (parte === "rodape") return <div className="oa oa-rodape">{sobraCard}</div>;
   return <div className="oa">{chips}{fluxo}{sugCard}{sobraCard}</div>;
@@ -10978,11 +11031,15 @@ function RentabilidadeCard({ hist = [], investments = [], totalValue, totalBough
 // logos das ações, FIIs e ETFs guardadas no próprio app (pasta logos/): sem avisar a outro site quais papéis a pessoa tem
 const LOGOS = new Set("AAPL34 ABCB4 ABEV3 ACWI11 AGRO3 ALOS3 ALPA3 ALPA4 ALUP11 ALUP3 ALUP4 AMER3 AMZO34 ANIM3 ASAI3 AURE3 AZUL3 AZUL4 AZZA3 B3SA3 B5P211 BBAS3 BBDC3 BBDC4 BBSD11 BBSE3 BEEF3 BERK34 BHIA3 BITH11 BLAU3 BMGB4 BOVA11 BOVV11 BPAC11 BPAC3 BPAC5 BPAN4 BRAP3 BRAP4 BRAV3 BRAX11 BRCR11 BRFS3 BRKM3 BRKM5 BRKM6 BRSR3 BRSR5 BRSR6 BTAL11 BTCI11 BTHF11 BTLG11 CAML3 CASH3 CCRO3 CEAB3 CMIG3 CMIG4 CMIN3 COCA34 COGN3 CPFE3 CPLE3 CPLE5 CPLE6 CPTS11 CRFB3 CSAN3 CSMG3 CSNA3 CURY3 CVCB3 CXSE3 CYRE3 CYRE4 DASA3 DIRR3 DISB34 DIVO11 DXCO3 ECOO11 ECOR3 EGIE3 ELET3 ELET6 EMBR3 ENEV3 ENGI11 ENGI3 ENGI4 EQTL3 ETHE11 EUCA4 EVEN3 EZTC3 FESA4 FIND11 FIXA11 FLRY3 FRAS3 GFSA3 GGBR3 GGBR4 GGRC11 GMAT3 GOAU3 GOAU4 GOGL34 GOLD11 GOLL4 GOVE11 GRND3 GUAR3 HABT11 HAPV3 HASH11 HBOR3 HBSA3 HFOF11 HGBS11 HGCR11 HGLG11 HGRE11 HYPE3 IGTI11 IGTI3 IGTI4 IMAB11 INTB3 IRBR3 IRFM11 ISAE3 ISAE4 ITSA3 ITSA4 ITUB3 ITUB4 IVVB11 JALL3 JBSS3 JHSF3 JPMC34 JSLG3 JSRE11 JURO11 KEPL3 KFOF11 KLBN11 KLBN3 KLBN4 KNCA11 KNCR11 KNHY11 KNIP11 KNRI11 KNSC11 LAVV3 LEVE3 LFTB11 LFTS11 LJQQ3 LOGG3 LOGN3 LREN3 LVBI11 LWSA3 MATB11 MATD3 MDIA3 MEAL3 MELI34 MGLU3 MLAS3 MOVI3 MRFG3 MRVE3 MSCD34 MSFT34 MTRE3 MULT3 MXRF11 MYPK3 NASD11 NEOE3 NFLX34 NTCO3 NTNS11 NVDC34 ODPV3 ONCO11 ONCO3 ORVR3 PCAR3 PETR3 PETR4 PETZ3 PGMN3 PIBB11 PINE4 PLPL3 POMO3 POMO4 PORT3 POSI3 PRIO3 PSSA3 PTBL3 PVBI11 QBTC11 QUAL3 RADL3 RAIL3 RAIZ4 RANI3 RAPT3 RAPT4 RBRP11 RBRR11 RBVA11 RCRB11 RDOR3 RECR11 RECV3 RENT3 RENT4 ROMI3 RURA11 RZAG11 RZTR11 SANB11 SANB3 SANB4 SAPR11 SAPR3 SAPR4 SARE11 SBFG3 SBSP3 SEER3 SHUL4 SIMH3 SLCE3 SMAC11 SMAL11 SMFT3 SMTO3 SNAG11 SOJA3 SPXI11 STBP3 SUZB3 TAEE11 TAEE3 TAEE4 TECK11 TEND3 TGAR11 TGMA3 TIMS3 TOTS3 TRIS3 TRPL11 TRXF11 TSLA34 TTEN3 TUPY3 UGPA3 UNIP3 UNIP5 UNIP6 USIM3 USIM5 USIM6 USTK11 VALE3 VAMO3 VBBR3 VCRA11 VCRI11 VGHF11 VGIA11 VGIR11 VILG11 VINO11 VISA34 VISC11 VIVA3 VIVT3 VRTA11 VULC3 WEGE3 WIZC3 WPLZ11 WRLD11 XFIX11 XINA11 XPCA11 XPCI11 XPLG11 XPML11 YDUQ3 ZAMP3".split(" "));
 const TABELA_CATS = ["Ações", "FII", "ETF"];
-function AtivoLogo({ t, cor }) {
+const CORES_LOGO = { BTC: "#F7931A", ETH: "#627EEA" };
+function AtivoLogo({ t, cor, ticker = true }) {
   const [erro, setErro] = useState(false);
   const tk = String(t || "").toUpperCase().trim();
-  if (LOGOS.has(tk) && !erro) return <img className="atv-logo" src={"logos/" + tk + ".svg"} alt="" width="36" height="36" loading="lazy" onError={() => setErro(true)} />;
-  return <span className="atv-logo atv-mono" style={{ background: cor }} aria-hidden="true">{tk.replace(/\d+$/, "").slice(0, 4) || "?"}</span>;
+  if (ticker && LOGOS.has(tk) && !erro) return <img className="atv-logo" src={"logos/" + tk + ".svg"} alt="" width="36" height="36" loading="lazy" onError={() => setErro(true)} />;
+  // sem logo: letras do código (bolsa) ou iniciais do nome (renda fixa, reserva, cripto, exterior)
+  const pal = tk.normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^A-Z0-9+]+/).filter(Boolean);
+  const txt = ticker ? tk.replace(/\d+$/, "").slice(0, 4) : (pal.length > 1 ? pal[0][0] + pal[1][0] : (pal[0] || "?").slice(0, 3));
+  return <span className="atv-logo atv-mono" style={{ background: CORES_LOGO[tk] || cor }} aria-hidden="true">{txt || "?"}</span>;
 }
 // selo de ganho (verde) ou perda (vermelho); "dia" mostra o triângulo, o resto a seta
 function PillVar({ v, dia }) {
@@ -11515,7 +11572,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             const aberta = catsAbertas === null ? gi === 0 : catsAbertas.includes(g.cat);
             const alternar = () => setCatsAbertas((prev) => { const atual = prev === null ? [maiorCat] : prev; return atual.includes(g.cat) ? atual.filter((c) => c !== g.cat) : [...atual, g.cat]; });
             const LIM = 5, todas = catsTodas[g.cat] || g.items.length <= LIM + 1;
-            const tabela = TABELA_CATS.includes(g.cat);
+            const tabela = true, rfG = ehRendaFixa(g.cat);
             const diaCl = diaItens.filter((p) => p.category === g.cat);
             const diaClBase = diaCl.reduce((a, p) => a + p.qty * antM[p.description].a, 0);
             const diaClPct = diaClBase > 0 ? (diaCl.reduce((a, p) => a + p.qty * (p.cotacao - antM[p.description].a), 0) / diaClBase) * 100 : null;
@@ -11526,12 +11583,12 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
               <section key={g.cat} className={`cl-card ${aberta ? "open" : ""} ${tabela ? "cl-tab" : ""}`} data-classe={g.cat}>
                 {tabela ? (
                 <button type="button" className="cl-head tb-head" aria-expanded={aberta} onClick={alternar}>
-                  <span className="tb-ic" style={{ color: invCatMeta(g.cat).color }} aria-hidden="true"><svg className="tb-anel" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeOpacity=".16" strokeWidth="3.5" /><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.max(0.5, totalValue > 0 ? (sub / totalValue) * 119.4 : 0)} 200`} transform="rotate(-90 22 22)" /></svg><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{g.cat === "FII" ? <><path d="M3 21h18" /><path d="M5 21V8l7-5 7 5v13" /><path d="M10 21v-5h4v5" /></> : g.cat === "ETF" ? <><circle cx="12" cy="12" r="9" /><path d="M12 3v9l6.4 6.4" /></> : <><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>}</svg></span>
-                  <span className="cl-name"><b>{g.cat === "FII" ? <><span className="tb-longo">Fundos imobiliários</span><span className="tb-curto">FIIs</span></> : g.cat === "ETF" ? "ETFs" : "Ações"}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}</small></span>
+                  <span className="tb-ic" style={{ color: invCatMeta(g.cat).color }} aria-hidden="true"><svg className="tb-anel" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeOpacity=".16" strokeWidth="3.5" /><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.max(0.5, totalValue > 0 ? (sub / totalValue) * 119.4 : 0)} 200`} transform="rotate(-90 22 22)" /></svg><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{g.cat === "FII" ? <><path d="M3 21h18" /><path d="M5 21V8l7-5 7 5v13" /><path d="M10 21v-5h4v5" /></> : g.cat === "ETF" ? <><circle cx="12" cy="12" r="9" /><path d="M12 3v9l6.4 6.4" /></> : g.cat === "Renda Fixa" ? <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><path d="M7 15h4" /></> : g.cat === "Reserva de oportunidade" ? <><path d="M12 3l8 4v5c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V7z" /></> : g.cat === "Cripto" ? <><circle cx="12" cy="12" r="9" /><path d="M9.5 8h4a2 2 0 0 1 0 4h-4h4.5a2 2 0 0 1 0 4h-4.5V8zM11 6v2M11 16v2" /></> : g.cat === "Exterior" ? <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></> : g.cat === "Ações" ? <><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></> : <><circle cx="12" cy="12" r="9" /><path d="M8 12h8" /></>}</svg></span>
+                  <span className="cl-name"><b>{g.cat === "FII" ? <><span className="tb-longo">Fundos imobiliários</span><span className="tb-curto">FIIs</span></> : g.cat === "ETF" ? "ETFs" : g.cat === "Reserva de oportunidade" ? <><span className="tb-longo">Reserva de oportunidade</span><span className="tb-curto">Reserva</span></> : g.cat === "Exterior" ? "Exterior (em dólar)" : g.cat}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}</small></span>
                   <span className="tb-kpi tb-k-n"><small>Ativos</small><b className="mono">{g.items.length}</b></span>
-                  <span className="tb-kpi tb-k-v"><small>Valor total</small><b className="mono">{fmtBRL(sub)}</b>{subCost > 0 && <span className="tb-r-cel"><PillVar v={subPct} /></span>}</span>
+                  <span className="tb-kpi tb-k-v"><small>Valor total</small><b className="mono">{fmtBRL(sub)}</b>{subCost > 0 && !rfG && <span className="tb-r-cel"><PillVar v={subPct} /></span>}</span>
                   <span className="tb-kpi tb-k-d"><small>{diaRot}</small>{diaClPct === null ? <b className="mono tb-nd">—</b> : <PillVar v={diaClPct} dia />}</span>
-                  <span className="tb-kpi tb-k-r"><small>Rentabilidade</small>{subCost > 0 ? <PillVar v={subPct} /> : <b className="mono tb-nd">—</b>}</span>
+                  <span className="tb-kpi tb-k-r"><small>Rentabilidade</small>{subCost > 0 && !rfG ? <PillVar v={subPct} /> : <b className="mono tb-nd">—</b>}</span>
                   <span className="tb-kpi tb-k-p"><small>% na carteira</small><b className="mono">{pctOf(sub)}</b></span>
                   <span className="cl-chev" aria-hidden="true"><IconChevronDown size={18} /></span>
                 </button>
@@ -11572,15 +11629,15 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                     );
                     return (
                       <article key={p.key} className={`asset-card cl-row ${open ? "open" : ""}`} data-asset={p.description}>
-                        {tabela && p.isQty ? (() => { const dp = diaDe(p); return (
+                        {tabela ? (() => { const dp = diaDe(p), rfP = ehRendaFixa(p.category), m = p.usd ? fmtUSD : fmtBRL, temP = !rfP && hasQuote; const pill = rfP ? null : hasQuote ? <PillVar v={p.profitPct} /> : <small className="tb-nd">sem cotação</small>; return (
                         <button className="ac-top tb-row" aria-expanded={open} onClick={() => setOpenKey(open ? null : p.key)}>
-                          <span className="tb-atv"><AtivoLogo t={p.description} cor={invCatMeta(p.category).color} /><span className="tb-id"><b>{p.description}</b><small className="mono">{fmtQty(p.qty)} · PM {fmtBRL(p.avg)}</small></span></span>
-                          <span className="tb-c tb-q mono">{fmtQty(p.qty)}</span>
-                          <span className="tb-c tb-pm mono">{fmtBRL(p.avg)}</span>
-                          <span className="tb-c tb-pa mono">{hasQuote ? fmtBRL(p.cotacao) : "—"}</span>
+                          <span className="tb-atv"><AtivoLogo t={p.description} ticker={invCatMeta(p.category).kind === "ticker"} cor={invCatMeta(p.category).color} /><span className="tb-id"><b>{p.description}</b><small className="mono">{p.isQty ? `${fmtQty(p.qty)} · PM ${m(p.usd ? p.avgUsd : p.avg)}` : rfP ? "valor investido" : `aplicado ${m(p.usd ? p.costUsd : p.cost)}`}</small></span></span>
+                          <span className="tb-c tb-q mono">{p.isQty ? fmtQty(p.qty) : "—"}</span>
+                          <span className="tb-c tb-pm mono">{p.isQty ? m(p.usd ? p.avgUsd : p.avg) : "—"}</span>
+                          <span className="tb-c tb-pa mono">{p.isQty && temP ? m(p.usd ? p.cotacaoUsd : p.cotacao) : "—"}</span>
                           <span className="tb-c tb-d">{dp === null ? <span className="tb-nd">—</span> : <PillVar v={dp} dia />}</span>
-                          <span className="tb-c tb-r">{hasQuote ? <PillVar v={p.profitPct} /> : <small className="tb-nd">sem cotação</small>}</span>
-                          <span className="tb-c tb-s"><b className="mono">{fmtBRL(p.value)}</b><span className="tb-r-cel">{hasQuote ? <PillVar v={p.profitPct} /> : <small className="tb-nd">sem cotação</small>}</span></span>
+                          <span className="tb-c tb-r">{rfP ? <span className="tb-nd">—</span> : pill}</span>
+                          <span className="tb-c tb-s"><b className="mono">{fmtBRL(p.value)}</b>{pill && <span className="tb-r-cel">{pill}</span>}</span>
                           <span className="tb-c tb-w mono"><i className="tb-barra" aria-hidden="true"><i style={{ width: Math.max(6, Math.min(100, (p.value / Math.max(1, ...g.items.map((x) => x.value))) * 100)) + "%", background: invCatMeta(p.category).color }} /></i>{pctOf(p.value)}</span>
                         </button>
                         ); })() : (
