@@ -1473,28 +1473,86 @@ function DKpi({ label, value, sub, tone, subTone, spark, sparkColor }) {
   );
 }
 const deltaTxt = (now, prev, nome) => { if (!prev) return null; const p = ((now - prev) / Math.abs(prev)) * 100; if (!isFinite(p)) return null; return `${p >= 0 ? "▲" : "▼"} ${Math.abs(p).toFixed(1).replace(".", ",")}% vs ${nome}`; };
-// fluxo do mês dia a dia: linha cheia até hoje, tracejada depois
+// dinheiro do mês dia a dia (28/11/2026): barras do que entra e sai em cada dia, a linha do que sobra somando o mês,
+// o dia mais apertado e, ao tocar num dia, o que entrou e saiu nele
 function DFluxo({ fluxoDia = {}, viewYear, viewMonth }) {
   const dias = new Date(viewYear, viewMonth + 1, 0).getDate();
   const hoje = new Date(); const ehMes = hoje.getFullYear() === viewYear && hoje.getMonth() === viewMonth;
   const corte = ehMes ? hoje.getDate() : (new Date(viewYear, viewMonth, 1) < hoje ? dias : 0);
   let acc = 0; const pts = [];
   for (let d = 1; d <= dias; d++) { const f = fluxoDia[d]; if (f) acc += f.entra - f.sai; pts.push(acc); }
-  const mx = Math.max(0, ...pts), mn = Math.min(0, ...pts), W = 760, H = 190, padB = 22, padT = 26;
-  const X = (i) => (i / (dias - 1)) * W, Y = (v) => padT + (1 - (v - mn) / (mx - mn || 1)) * (H - padT - padB);
-  const seg = (a, b) => pts.slice(a, b).map((v, i) => `${X(a + i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-  const real = corte > 0 ? seg(0, corte) : "", prev = corte < dias ? seg(Math.max(0, corte - 1), dias) : "";
+  const movs = Array.from({ length: dias }, (_, k) => fluxoDia[k + 1] || { entra: 0, sai: 0, itens: [] });
+  const maior = Math.max(1, ...movs.map((m) => Math.max(m.entra, m.sai)));
+  const [sel, setSel] = useState(null);
+  const padrao = corte > 0 ? corte : (movs.reduce((b, m, k) => (m.entra + m.sai > movs[b].entra + movs[b].sai ? k : b), 0) + 1);
+  const dSel = sel || padrao;
+  const W = 760, H = 200, meio = 104, alt = 78;
+  const mx = Math.max(1, ...pts.map(Math.abs));
+  const X = (k) => (k + 0.5) * (W / dias), bw = Math.max(3, (W / dias) * 0.56);
+  const YL = (v) => meio - (v / mx) * (alt - 6);
+  const linha = (a, b) => pts.slice(a, b).map((v, k) => `${X(a + k).toFixed(1)},${YL(v).toFixed(1)}`).join(" ");
+  const real = corte > 0 ? linha(0, corte) : "", prev = corte < dias ? linha(Math.max(0, corte - 1), dias) : "";
   const fim = pts[dias - 1] || 0, hojeV = corte > 0 ? pts[corte - 1] : 0;
+  const minV = Math.min(...pts), minD = pts.indexOf(minV) + 1;
+  const m = movs[dSel - 1] || { entra: 0, sai: 0, itens: [] };
+  const nomeMes = (MONTHS_PT[viewMonth] || "").toLowerCase();
   return (
-    <div>
-      <svg width="100%" height="190" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Quanto entrou menos o que saiu, somado dia a dia">
-        <line x1="0" x2={W} y1={Y(0)} y2={Y(0)} stroke="var(--border)" />
-        {real && <polygon points={`0,${Y(0)} ${real} ${X(corte - 1)},${Y(0)}`} fill="#16A34A" opacity=".1" />}
-        {real && <polyline points={real} fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
-        {prev && <polyline points={prev} fill="none" stroke="#16A34A" strokeWidth="2" strokeDasharray="5 5" vectorEffect="non-scaling-stroke" />}
-        {[1, 5, 10, 15, 20, 25, dias].map((d) => <text key={d} x={X(d - 1)} y={H - 4} fontSize="11" fill="#94A3B8" textAnchor={d === 1 ? "start" : d === dias ? "end" : "middle"}>{d}</text>)}
-      </svg>
-      <div className="dflx-leg"><span>{corte > 0 && corte < dias ? <>Até hoje: <b className="mono">{fmtBRL(hojeV)}</b></> : null}</span><span>Fim do mês: <b className="mono" style={{ color: fim >= 0 ? "#15803D" : "#B91C1C" }}>{fmtBRL(fim)}</b></span></div>
+    <div className="dflx">
+      <div className="dflx-kpis">
+        {corte > 0 && corte < dias && <div><small>Sobra até hoje</small><b className="mono" style={{ color: hojeV >= 0 ? "#15803D" : "#B91C1C" }}>{fmtBRL(hojeV)}</b></div>}
+        <div><small>{corte >= dias ? "Sobrou no mês" : "No fim do mês"}</small><b className="mono" style={{ color: fim >= 0 ? "#15803D" : "#B91C1C" }}>{fmtBRL(fim)}</b></div>
+        <div><small>Dia mais apertado</small>{minV < 0 ? <b className="mono" style={{ color: "#B91C1C" }}>dia {minD}: {fmtBRL(minV)}</b> : <b className="dflx-ok">não fica no vermelho</b>}</div>
+      </div>
+      <div className="dflx-ch">
+        <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Entradas, saídas e o que sobra em ${nomeMes}, dia a dia`}>
+          <line x1="0" x2={W} y1={meio} y2={meio} stroke="var(--border)" vectorEffect="non-scaling-stroke" />
+          {movs.map((mv, k) => {
+            const fut = corte > 0 ? k + 1 > corte : true, op = (dSel === k + 1 ? 1 : fut ? 0.35 : 0.7);
+            return (
+              <g key={k} opacity={op}>
+                {mv.entra > 0 && <rect x={X(k) - bw / 2} y={meio - (mv.entra / maior) * alt} width={bw} height={(mv.entra / maior) * alt} rx="2" fill="#22C55E" />}
+                {mv.sai > 0 && <rect x={X(k) - bw / 2} y={meio} width={bw} height={(mv.sai / maior) * alt} rx="2" fill="#F87171" />}
+              </g>
+            );
+          })}
+          {real && <polyline points={real} fill="none" stroke="var(--text)" strokeWidth="2.2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
+          {prev && <polyline points={prev} fill="none" stroke="var(--text)" strokeWidth="2" strokeDasharray="5 5" opacity=".55" vectorEffect="non-scaling-stroke" />}
+          {minV < 0 && <circle cx={X(minD - 1)} cy={YL(minV)} r="4.5" fill="#DC2626" vectorEffect="non-scaling-stroke" />}
+          <line x1={X(dSel - 1)} x2={X(dSel - 1)} y1="6" y2={H - 6} stroke="var(--text)" strokeOpacity=".25" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <div className="dflx-hit" role="group" aria-label="Escolha um dia">{movs.map((mv, k) => <button key={k} type="button" aria-label={`Dia ${k + 1}`} aria-pressed={dSel === k + 1} onClick={() => setSel(k + 1)} />)}</div>
+        <div className="dflx-x" aria-hidden="true">{[1, 5, 10, 15, 20, 25, dias].map((d) => <span key={d} style={{ left: `${(X(d - 1) / W) * 100}%` }}>{d}</span>)}</div>
+      </div>
+      <div className="dflx-leg"><span><i className="e" />Entrou</span><span><i className="s" />Saiu</span><span><i className="l" />Sobra do mês</span></div>
+      <div className="dflx-dia" data-dia={dSel}>
+        <div className="dflx-dia-h"><b>Dia {dSel}{ehMes && dSel === corte ? " (hoje)" : ""}</b><span className="mono">sobra {fmtBRL(pts[dSel - 1] || 0)}</span></div>
+        {m.itens.length === 0 ? <div className="dflx-vazio">Nada entrou nem saiu neste dia.</div> : m.itens.map((it) => (
+          <div key={it.k} className="dflx-it"><span><b>{it.nome}</b><small>{it.in ? (it.ok ? "caiu na conta" : "a receber") : (it.ok ? "paga" : "a pagar")}</small></span><b className="mono" style={{ color: it.in ? "#15803D" : "#B91C1C" }}>{it.in ? "+ " : "− "}{fmtBRL(it.v)}</b></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+// despesas mês a mês (28/11/2026): barras só dos meses com contas, linha da média e o mês escolhido em destaque
+function DespesasMeses({ history12 = [], viewYear, viewMonth, onOpen }) {
+  const ini = history12.findIndex((h) => h.expenses > 0);
+  const l = ini < 0 ? [] : history12.slice(ini);
+  if (!l.length) return <div className="empty-state">Nenhuma conta lançada ainda.</div>;
+  const media = l.reduce((a, h) => a + h.expenses, 0) / l.length;
+  const mx = Math.max(1, ...l.map((h) => h.expenses), media) * 1.1;
+  const atual = l.find((h) => h.y === viewYear && h.m === viewMonth);
+  const comp = atual && media > 0 ? atual.expenses / media : null;
+  return (
+    <div className="dmes">
+      {atual && <div className="dmes-txt"><b>{(MONTHS_PT[viewMonth] || "")}: <span className="mono">{fmtBRL(atual.expenses)}</span></b><span>{comp === null ? "" : Math.abs(comp - 1) < 0.05 ? "perto da sua média" : comp > 1 ? `${Math.round((comp - 1) * 100)}% acima da sua média` : `${Math.round((1 - comp) * 100)}% abaixo da sua média`} · média <b className="mono">{fmtBRL(media)}</b></span></div>}
+      <div className="dmes-ch">
+        <div className="dmes-med" style={{ bottom: `${(media / mx) * 100}%` }}><span>média</span></div>
+        {l.map((h) => { const on = h.y === viewYear && h.m === viewMonth; return (
+          <button key={h.y + "-" + h.m} type="button" className={`dmes-col ${on ? "on" : ""} ${h.expenses > media * 1.05 ? "alto" : ""}`} onClick={() => onOpen && onOpen(h)} aria-label={`${MONTHS_PT[h.m]} de ${h.y}: ${fmtBRL(h.expenses)}`}>
+            <i style={{ height: `${(h.expenses / mx) * 100}%` }} /><small>{(MONTHS_ABBR_PT[h.m] || "").slice(0, 3)}</small>
+          </button>
+        ); })}
+      </div>
     </div>
   );
 }
@@ -1522,7 +1580,11 @@ function DSide({ active, onPick, onNovo, onVale, ocultar = [], modo, onModo }) {
     <aside className="dsb" aria-label="Páginas">
       <div className="dsb-brand"><span className="tb-logo"><IconLogo size={32} /></span><span className="brand-nm">Sa<span>ll</span>os</span></div>
       <button type="button" className="dsb-new" onClick={onNovo}><IconPlus size={16} color="#fff" /> Novo lançamento</button>
-      <nav>{grupo(["inicio", "faturamento", "calendario", "despesas", "investimentos", "metas", "contabilidade", "importar"])}{onVale && <button type="button" className="dsb-i" id="dsb-vale" onClick={onVale}><ProIc n="calculo" size={18} /><span>Vale a pena?</span></button>}</nav>
+      <nav className="dsb-nav">
+        <div className="dsb-sec"><span className="dsb-lb">Dia a dia</span>{grupo(["inicio", "faturamento", "calendario", "despesas"])}</div>
+        <div className="dsb-sec"><span className="dsb-lb">Patrimônio</span>{grupo(["investimentos", "metas"])}</div>
+        <div className="dsb-sec"><span className="dsb-lb">Ferramentas</span>{grupo(["contabilidade", "importar"])}{onVale && <button type="button" className="dsb-i" id="dsb-vale" onClick={onVale}><ProIc n="calculo" size={18} /><span>Vale a pena?</span></button>}</div>
+      </nav>
       {onModo && <ModoTroca valor={modo} onTrocar={onModo} />}
     </aside>
   );
@@ -1856,6 +1918,29 @@ function mensagemCobranca(itens) {
   if (outros.length) partes.push(outros.length === 1 ? `de ${String(outros[0].dateLabel || "").replace(/^dia \d+ · /, "")}` : `de ${outros.length} pagamentos do mês`);
   const um = itens.length === 1;
   return `Olá, tudo bem? ${um ? "O pagamento" : "Os pagamentos"} ${partes.join(" e ")} (${um ? "" : "total de "}${fmtBRL(tot)}) ainda não ${um ? "caiu" : "caíram"} na minha conta. Consegue verificar, por favor? Obrigado!`;
+}
+// Configurações › WhatsApp de cobrança (28/11/2026): o número do financeiro de cada hospital, usado no botão Cobrar
+function CobrancaCard({ vinculos = [], onSalvar }) {
+  const ativos = vinculos.filter((v) => !v.arquivado);
+  const [nums, setNums] = useState(() => Object.fromEntries(ativos.map((v) => [v.id, fmtFone(v.cobrarWhats || "")])));
+  const [salvo, setSalvo] = useState("");
+  if (!ativos.length) return <div className="card"><div className="card-head"><h3 className="card-title">WhatsApp de cobrança</h3></div><div className="empty-state">Cadastre um hospital ou clínica para guardar o WhatsApp do financeiro.</div></div>;
+  return (
+    <div className="card cob-cfg" id="cfg-cobranca">
+      <div className="card-head"><h3 className="card-title">WhatsApp de cobrança</h3></div>
+      <p className="line-sub" style={{ marginTop: 0 }}>Quando um pagamento atrasa, o botão Cobrar abre a conversa com este número e a mensagem pronta.</p>
+      {ativos.map((v) => (
+        <div key={v.id} className="field cob-cfg-l">
+          <label htmlFor={"cobw-" + v.id}><span className="legend-dot" style={{ background: v.cor }} />{v.nome}</label>
+          <div className="cob-cfg-in">
+            <input id={"cobw-" + v.id} type="tel" inputMode="tel" placeholder="(71) 99999-9999" value={nums[v.id] || ""} onChange={(e) => setNums((p) => ({ ...p, [v.id]: fmtFone(e.target.value) }))}
+              onBlur={() => { const d = soDigitos(nums[v.id] || ""); if (d !== soDigitos(v.cobrarWhats || "")) { onSalvar(v.id, d); setSalvo(v.id); avisar("WhatsApp de " + v.nome + " salvo"); } }} />
+            {salvo === v.id && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-label="Salvo"><path d="M20 6L9 17l-5-5" /></svg>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 function CobrarSheet({ vinculo, itens = [], onSalvarNumero, onClose }) {
   const [num, setNum] = useState(fmtFone(vinculo.cobrarWhats || ""));
@@ -2831,6 +2916,29 @@ function App() {
 
   // quanto fica com você: nota da sua empresa (o app calcula), Pix como sócio (imposto que a outra empresa já pagou, se informado) ou carteira
   const liquidoVinc = (v, gross) => liquidoDeVinc(v, gross, netOf);
+  // dividendos: busca os proventos da B3 de cada ação/FII/ETF (guardado 12 h no aparelho) e cruza com a quantidade na data com
+  const [provDados, setProvDados] = useState(() => { try { const c = JSON.parse(localStorage.getItem("mediplan-prov") || "null"); return c && c.dados ? c.dados : {}; } catch (e) { return {}; } });
+  const provTks = useMemo(() => provTickers(investments).sort().join(","), [investments]);
+  useEffect(() => {
+    if (!provTks) return;
+    let vivo = true;
+    let cache = null; try { cache = JSON.parse(localStorage.getItem("mediplan-prov") || "null"); } catch (e) {}
+    const fresco = cache && cache.tks === provTks && Date.now() - (cache.em || 0) < 12 * 3600e3;
+    if (fresco || typeof navigator !== "undefined" && navigator.onLine === false) return;
+    const tks = provTks.split(","), novo = {};
+    (async () => {
+      for (let k = 0; k < tks.length; k += 4) {
+        await Promise.all(tks.slice(k, k + 4).map((t) => fetch(PROV_URL + encodeURIComponent(t)).then((r) => r.json()).then((j) => { novo[t] = (j && j.proventos) || []; }).catch(() => { if (cache && cache.dados && cache.dados[t]) novo[t] = cache.dados[t]; })));
+      }
+      if (!vivo || !Object.keys(novo).length) return;
+      setProvDados(novo);
+      try { localStorage.setItem("mediplan-prov", JSON.stringify({ em: Date.now(), tks: provTks, dados: novo })); } catch (e) {}
+    })();
+    return () => { vivo = false; };
+  }, [provTks]);
+  const proventosLista = useMemo(() => calcProventos(investments, provDados), [investments, provDados]);
+  const provNosRecebimentos = contab.provRecebimentos !== false;
+
   const buildIncomeItems = (y, m) => {
     const mk = monthKeyOf(y, m);
     const items = [];
@@ -2871,9 +2979,20 @@ function App() {
         gross: Number(o.amount || 0), net: o.tipoReceita ? liquidoReceita(o, o.amount, netOf) : o.taxOverride !== undefined && o.taxOverride !== null && String(o.taxOverride) !== "" ? netOf(o.amount, o.taxOverride) : Number(o.amount || 0), recebido: !!o.recebido, toggle: () => setOneOffIncomes((prev) => prev.map((x) => x.id === o.id ? { ...x, recebido: !x.recebido } : x)),
         removable: true, removeOne: () => setOneOffIncomes((prev) => prev.filter((x) => x.id !== o.id)), ref: { t: "avulsa", id: o.id } });
     });
+    // dividendos já pagos entram sozinhos, um por dia de pagamento
+    if (provNosRecebimentos) {
+      const hojeP = todayStr(), porDia = {};
+      proventosLista.filter((x) => x.pag <= hojeP && inMonth(x.pag, y, m)).forEach((x) => { (porDia[x.pag] = porDia[x.pag] || []).push(x); });
+      Object.entries(porDia).forEach(([dia, l]) => {
+        const tot = Math.round(l.reduce((a, x) => a + x.liquido, 0) * 100) / 100;
+        const nomes = [...new Set(l.map((x) => x.ticker))];
+        items.push({ key: "prov-" + dia, vinculoId: null, forma: "div", tipoReceita: "dividendos", nome: "Dividendos", cor: "#7C3AED", tipo: "provento", auto: true, dateIso: dia,
+          dateLabel: fmtDatePt(dia) + " · " + (nomes.length > 3 ? nomes.slice(0, 3).join(", ") + " e +" + (nomes.length - 3) : nomes.join(", ")), gross: tot, net: tot, recebido: true, toggle: () => avisar("Os dividendos entram sozinhos. Para tirar, desligue em Investimentos › Dividendos."), removable: false, ref: { t: "provento", id: dia } });
+      });
+    }
     const suf = { ...FORMA_CURTA, div: "isento", aluguel: "aluguel" };
-    items.forEach((it) => { if (suf[it.forma] && !it.key.startsWith("clt-")) it.dateLabel += " · " + suf[it.forma]; });
-    items.forEach((it) => { it.toggle = comAviso(it.toggle, it.recebido, "rec", it.nome); });
+    items.forEach((it) => { if (suf[it.forma] && !it.key.startsWith("clt-") && it.tipo !== "provento") it.dateLabel += " · " + suf[it.forma]; });
+    items.forEach((it) => { if (!it.auto) it.toggle = comAviso(it.toggle, it.recebido, "rec", it.nome); });
     return items;
   };
 
@@ -5613,6 +5732,92 @@ function App() {
         /* ================= v31: organização (caminho do dinheiro) ================= */
         .oa { max-width: 640px; } @media (min-width: 1100px) { .oa { max-width: none; } .oa-chips { max-width: 420px; } .oa.oa-rodape { max-width: none; margin-top: 12px; } }
         .oa-chips { display: flex; gap: 8px; margin-bottom: 12px; }
+        /* barra lateral (28/11/2026): grupos com títulos e divisórias, item ativo com marca verde */
+        @media (min-width: 1100px) {
+          .dsb { background: linear-gradient(180deg, var(--surface, #fff), var(--surface, #fff) 70%, rgba(22,163,74,0.035)); }
+          .dsb-new { box-shadow: 0 8px 18px -10px rgba(22,163,74,.7); }
+          .dsb-nav { display: flex; flex-direction: column; gap: 0; margin-top: 6px; }
+          .dsb-sec { display: flex; flex-direction: column; gap: 2px; padding: 12px 0 10px; } .dsb-sec + .dsb-sec { border-top: 1px solid var(--border); }
+          .dsb-lb { font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--text-dim); opacity: .75; padding: 0 12px 6px; }
+          .dsb-i { position: relative; transition: background .15s, color .15s; } .dsb-i:hover { background: var(--surface-3, #F2F5F3); color: var(--text); }
+          .dsb-i.on { background: #E9F7EF; color: #15803D; font-weight: 700; } .dsb-i.on::before { content: ""; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: #16A34A; }
+          :root[data-theme="dark"] .dsb { background: var(--surface); } :root[data-theme="dark"] .dsb-i:hover { background: rgba(255,255,255,.05); } :root[data-theme="dark"] .dsb-i.on { background: rgba(52,211,153,.14); color: #34D399; }
+        }
+
+        .cob-cfg-l label { display: flex; align-items: center; gap: 8px; } .cob-cfg-in { display: flex; align-items: center; gap: 8px; } .cob-cfg-in input { flex: 1; min-width: 0; }
+
+        /* dinheiro do mês dia a dia e despesas mês a mês (28/11/2026) */
+        .dflx-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 10px; }
+        .dflx-kpis > div { background: var(--surface-3, #F4F7F5); border-radius: 12px; padding: 9px 12px; min-width: 0; } .dflx-kpis small { display: block; font-size: 12px; color: var(--text-dim); } .dflx-kpis b { display: block; font: 700 15.5px Manrope, Inter, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dflx-ok { color: #15803D; font-size: 14px !important; }
+        .dflx-ch { position: relative; } .dflx-ch svg { display: block; }
+        .dflx-hit { position: absolute; inset: 0 0 18px 0; display: flex; } .dflx-hit button { flex: 1; border: 0; background: transparent; cursor: pointer; padding: 0; min-width: 0; } .dflx-hit button:focus-visible { outline: 2px solid #16A34A; outline-offset: -2px; }
+        .dflx-x { position: relative; height: 16px; } .dflx-x span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--text-dim); }
+        .dflx-leg { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-dim); margin: 6px 0 10px; } .dflx-leg span { display: inline-flex; align-items: center; gap: 6px; } .dflx-leg i { width: 10px; height: 10px; border-radius: 3px; } .dflx-leg i.e { background: #22C55E; } .dflx-leg i.s { background: #F87171; } .dflx-leg i.l { height: 2.5px; width: 14px; border-radius: 2px; background: var(--text); }
+        .dflx-dia { border-top: 1px solid var(--border); padding-top: 10px; } .dflx-dia-h { display: flex; justify-content: space-between; font-size: 14.5px; margin-bottom: 2px; } .dflx-dia-h span { color: var(--text-dim); font-size: 13.5px; }
+        .dflx-it { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; } .dflx-dia-h + .dflx-it { border-top: 0; } .dflx-it small { display: block; font-size: 12px; color: var(--text-dim); } .dflx-it > b { white-space: nowrap; } .dflx-vazio { font-size: 13.5px; color: var(--text-dim); padding: 6px 0; }
+        .dmes-txt { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 14px; margin-bottom: 10px; } .dmes-txt > span { color: var(--text-dim); font-size: 13px; }
+        .dmes-ch { position: relative; display: flex; align-items: flex-end; gap: 6px; height: 170px; padding-bottom: 18px; }
+        .dmes-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; border: 0; background: none; padding: 0; cursor: pointer; position: relative; }
+        .dmes-col i { display: block; width: 100%; max-width: 30px; background: #FCD9A8; border-radius: 6px 6px 3px 3px; } .dmes-col.alto i { background: #FBBF77; } .dmes-col.on i { background: #F59E0B; }
+        .dmes-col small { position: absolute; bottom: -17px; font-size: 10.5px; color: var(--text-dim); } .dmes-col.on small { color: var(--text); font-weight: 700; }
+        .dmes-med { position: absolute; left: 0; right: 0; border-top: 1.5px dashed #94A3B8; margin-bottom: 18px; pointer-events: none; z-index: 1; } .dmes-med span { position: absolute; right: 0; top: -16px; font-size: 10.5px; color: var(--text-dim); background: var(--surface, #fff); padding: 0 4px; }
+
+        .anl-seg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; } .anl-seg small { flex-basis: 100%; font-size: 12.5px; color: var(--text-dim); }
+        .anl-seg-g, .anl-seg-s { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; font-weight: 700; }
+        .anl-seg-g { color: #fff; background: #16A34A; } .anl-hero .anl-seg small { color: rgba(225,245,236,.9); } .anl-hero .anl-seg-s { background: rgba(255,255,255,.92); color: #0F1A16; } .anl-seg-g.g-P { background: #2563EB; } .anl-seg-g.g-H { background: #7C3AED; } .anl-seg-g.g-F { background: #0891B2; } .anl-seg-g.g-A { background: #B45309; }
+        .anl-seg-s { background: var(--surface-3, #EEF2F1); color: var(--text); font-weight: 600; }
+
+        /* barra de Investimentos (28/11/2026): pílula com ícones */
+        .subtabs.inv-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: var(--surface-3, #E9EEEC); border: 1px solid var(--hair, var(--border)); overflow-x: auto; scrollbar-width: none; }
+        .subtabs.inv-tabs::-webkit-scrollbar { display: none; }
+        .inv-tabs .subtab { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 0; border-radius: 12px; margin: 0; font-weight: 600; font-size: 14px; color: var(--text-dim); transition: background .18s, color .18s, box-shadow .18s; flex-shrink: 0; }
+        .inv-tabs .subtab svg { opacity: .7; }
+        .inv-tabs .subtab.active { background: var(--surface, #fff); color: var(--text); box-shadow: 0 1px 2px rgba(15,30,24,.08), 0 6px 16px -10px rgba(15,30,24,.35); border-bottom: 0; }
+        .inv-tabs .subtab.active svg { color: #16A34A; opacity: 1; }
+        :root[data-theme="dark"] .subtabs.inv-tabs { background: rgba(255,255,255,.05); } :root[data-theme="dark"] .inv-tabs .subtab.active { background: rgba(255,255,255,.1); } :root[data-theme="dark"] .inv-tabs .subtab.active svg { color: #4ADE80; }
+        @media (max-width: 560px) { .subtabs.inv-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; } .inv-tabs .subtab { flex-direction: column; justify-content: center; gap: 3px; padding: 7px 2px; font-size: 11.5px; letter-spacing: -0.01em; } .inv-tabs .subtab svg { width: 17px; height: 17px; } }
+        @media (max-width: 379px) { .inv-tabs .subtab { font-size: 9.6px; letter-spacing: -0.02em; padding: 7px 0; } .subtabs.inv-tabs { gap: 2px; padding: 3px; } }
+        /* aba Dividendos */
+        .dv-top { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); } .dv-bot { display: grid; gap: 12px; margin-top: 12px; grid-template-columns: minmax(0, 1fr); } .dv .card { min-width: 0; }
+        @media (min-width: 1000px) { .dv-top { grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.4fr); align-items: start; } .dv-bot { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } .dv-top .card, .dv-bot .card { margin: 0; } }
+        .dv-l { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-dim); } .dv-l small { font-weight: 500; margin-left: 4px; }
+        .dv-big { font: 800 clamp(30px, 8vw, 38px) Manrope, Inter, sans-serif; letter-spacing: -0.03em; margin: 4px 0 10px; }
+        .dv-meta { display: flex; justify-content: space-between; font-size: 13.5px; color: var(--text-dim); } .dv-meta b { color: var(--text); }
+        .dv-bar { height: 8px; border-radius: 5px; background: var(--surface-3, #E7ECEA); overflow: hidden; margin: 6px 0 4px; } .dv-bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #7C3AED, #A78BFA); }
+        .dv-link { border: 0; background: none; padding: 6px 0; color: #15803D; font: 600 13.5px Inter, sans-serif; cursor: pointer; }
+        .dv-meta-ed { display: flex; gap: 8px; align-items: flex-end; margin: 6px 0; } .dv-meta-ed label { flex: 1; font-size: 12.5px; color: var(--text-dim); } .dv-meta-ed input { display: block; width: 100%; margin-top: 4px; }
+        .dv-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0; padding: 12px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        .dv-kpis small { display: block; font-size: 11.5px; color: var(--text-dim); line-height: 1.25; } .dv-kpis b { display: block; font: 700 clamp(13px, 3.6vw, 15.5px) Manrope, Inter, sans-serif; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dv-rec { color: #7C3AED; } :root[data-theme="dark"] .dv-rec { color: #A78BFA; }
+        .dv-sw { display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 14px; font-weight: 600; } .dv-sw > span { flex: 1; } .dv-sw small { display: block; font-weight: 400; font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+        .dv-sw input { position: absolute; opacity: 0; width: 1px; height: 1px; } .dv-sw > i { width: 42px; height: 25px; border-radius: 99px; background: #CBD5E1; position: relative; flex-shrink: 0; transition: background .2s; } .dv-sw > i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .2s; }
+        .dv-sw input:checked + i { background: #16A34A; } .dv-sw input:checked + i::after { transform: translateX(17px); } .dv-sw input:focus-visible + i { outline: 2px solid #16A34A; outline-offset: 2px; }
+        .dv-barras { position: relative; display: flex; align-items: flex-end; gap: 4px; height: 170px; padding-top: 8px; }
+        .dv-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; }
+        .dv-pilha { width: 100%; max-width: 34px; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+        .dv-pilha i { display: block; width: 100%; border-radius: 6px 6px 3px 3px; min-height: 0; } .dv-pilha i.pg { background: #7C3AED; } .dv-pilha i.rec { background: repeating-linear-gradient(-45deg, #DDD6FE 0 5px, #EDE9FE 5px 10px); border: 1px dashed #A78BFA; } .dv-pilha i.rec + i.pg { border-radius: 0 0 3px 3px; }
+        .dv-col small { font-size: 10.5px; color: var(--text-dim); white-space: nowrap; } .dv-col.hj small { color: var(--text); font-weight: 700; }
+        .dv-col:not(.on) .dv-pilha { opacity: .55; } .dv-col.on small { color: #7C3AED; font-weight: 700; }
+        .dv-linha-meta { position: absolute; left: 0; right: 0; border-top: 1.5px dashed #F59E0B; margin-bottom: 21px; pointer-events: none; } .dv-linha-meta span { position: absolute; right: 0; top: -17px; font-size: 10.5px; font-weight: 700; color: #B45309; background: var(--surface, #fff); padding: 0 4px; }
+        .dv-leg { display: flex; gap: 14px; font-size: 12px; color: var(--text-dim); margin: 8px 0 4px; } .dv-leg span { display: inline-flex; align-items: center; gap: 6px; } .dv-leg i { width: 10px; height: 10px; border-radius: 3px; } .dv-leg i.pg { background: #7C3AED; } .dv-leg i.rec { background: #EDE9FE; border: 1px dashed #A78BFA; }
+        .dv-sel { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 10px; } .dv-sel-h { display: flex; justify-content: space-between; font-size: 15px; margin-bottom: 4px; } .dv-sel-h .dv-sel-m::first-letter { text-transform: uppercase; }
+        .dv-it { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); } .dv-sel .dv-it:first-of-type { border-top: 0; }
+        .dv-it .atv-logo { width: 32px; height: 32px; } .dv-it-n { flex: 1; min-width: 0; } .dv-it-n b { display: block; font-size: 14.5px; } .dv-it-n small { display: block; font-size: 12px; color: var(--text-dim); line-height: 1.35; } .dv-it > b { white-space: nowrap; font-size: 14.5px; }
+        .dv-dia { width: 46px; text-align: center; font-size: 11px; color: var(--text-dim); line-height: 1.1; flex-shrink: 0; } .dv-dia b { display: block; font: 800 17px Manrope, Inter, sans-serif; color: var(--text); }
+        .dv-rank { display: flex; align-items: center; gap: 10px; padding: 9px 0; } .dv-rank .atv-logo { width: 32px; height: 32px; } .dv-rank-n { flex: 1; min-width: 0; } .dv-rank-n > span:first-child { display: flex; justify-content: space-between; font-size: 14.5px; }
+        .dv-rank-bar { display: block; height: 6px; border-radius: 4px; background: var(--surface-3, #EEF2F1); margin: 5px 0 3px; overflow: hidden; } .dv-rank-bar i { display: block; height: 100%; border-radius: 4px; } .dv-rank-n small { font-size: 11.5px; color: var(--text-dim); }
+        .dv-vazio { font-size: 14px; color: var(--text-dim); padding: 6px 0; }
+
+        /* patrimônio em barras (28/11/2026) */
+        .pat-ch.pat-bars { position: relative; height: auto; margin: 14px 0 4px; }
+        .pat-bars .pat-ap { fill: #0E5640; } .pat-bars .pat-ganho { fill: #6EE7B7; } .pat-bars .pat-perda { fill: #FCA5A5; }
+        :root[data-theme="dark"] .pat-bars .pat-ap { fill: #1F8A63; } :root[data-theme="dark"] .pat-bars .pat-ganho { fill: #6EE7B7; }
+        .pat-guia { stroke: var(--border); stroke-dasharray: 3 4; }
+        .pat-yl { position: absolute; right: 2px; top: 0; height: 170px; pointer-events: none; } .pat-yl span { position: absolute; right: 0; transform: translateY(-120%); font-size: 10.5px; color: var(--text-dim); white-space: nowrap; background: var(--surface, #fff); padding: 0 3px; border-radius: 4px; }
+        .pat-xl { display: flex; margin-top: 4px; } .pat-xl span { flex: 1; text-align: center; font-size: 11px; color: var(--text-dim); white-space: nowrap; min-width: 0; overflow: visible; } .pat-xl span.on { color: var(--text); font-weight: 700; }
+        .pat-leg { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--text-dim); margin: 8px 0 2px; } .pat-leg span { display: inline-flex; align-items: center; gap: 6px; }
+        .pat-leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; } .pat-leg i.ap { background: #0E5640; } .pat-leg i.gn { background: #6EE7B7; } .pat-leg i.pd { background: #FCA5A5; } .pat-leg i.ix { width: 14px; height: 0; border-top: 2.5px dashed; border-radius: 0; }
+
         .xl-conta { font-size: 13.5px; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
         .xl-prog { height: 8px; border-radius: 5px; background: var(--surface-3, #E7ECEA); overflow: hidden; margin: -4px 0 12px; } .xl-prog i { display: block; height: 100%; border-radius: 5px; background: #16A34A; }
         .xl-sec-btn { width: 100%; border: none; font: inherit; cursor: pointer; text-align: left; } .xl-sec-btn i { font-style: normal; margin-left: 4px; }
@@ -6674,7 +6879,8 @@ function App() {
           <InvestmentsTab investments={investments} portfolio={portfolio} cotacoes={cotacoes}
             addInvestment={addInvestment} removeInvestment={removeInvestment} adjustAvg={adjustAvg} ajustarInvestido={ajustarInvestido} removerAtivo={removerAtivo}
             setCotacao={setCotacao} brapiToken={brapiToken} setBrapiToken={setBrapiToken} refreshQuotes={refreshQuotes} quoteStatus={quoteStatus} quoteRun={quoteRun} usaCentral={!!(session && cloudCfg)}
-            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk} />
+            viewYear={viewYear} viewMonth={viewMonth} investmentsHistory12={investmentsHistory12} chartMonths={chartMonths} setChartMonths={setChartMonths} openSignal={signals.investimentos} discreto={discreto} setDiscreto={setDiscreto} desk={desk}
+            proventos={proventosLista} provNosRec={provNosRecebimentos} setProvNosRec={(v) => setContab((c) => ({ ...c, provRecebimentos: v }))} provMeta={Number(contab.metaDividendos) || 0} setProvMeta={(v) => setContab((c) => ({ ...c, metaDividendos: v }))} />
         )}
         {activeTab === "metas" && (
           <GoalsTab onVale={simples ? () => setValeAberto(true) : null} valoresPlantao={valoresPlantao} goals={goals} addGoal={addGoal} removeGoal={removeGoal} contributeGoal={contributeGoal} valorDaMeta={valorDaMeta} setGoalFonte={setGoalFonte} setGoalPatch={setGoalPatch} aporteMedio={aporteMedio} monthExpenseItems={monthExpenseItems} limits={limits} setLimit={setLimit} viewYear={viewYear} viewMonth={viewMonth} />
@@ -6698,7 +6904,7 @@ function App() {
             catAprendida={contab.catAprendida || {}} aprenderCat={(desc, cat) => { const k = chaveLoja(desc); if (k) setContab((p) => ({ ...p, catAprendida: { ...(p.catAprendida || {}), [k]: cat } })); }} />
         )}
         {activeTab === "backup" && (
-          <BackupTab modo={modoApp} onModo={trocarModo} contabAba={contabAba} setContabAba={(v) => setContab((p) => ({ ...p, aba: v }))} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
+          <BackupTab cobrancaCard={<CobrancaCard vinculos={vinculos} onSalvar={salvarNumeroCobranca} />} nCobranca={vinculos.filter((v) => !v.arquivado && v.cobrarWhats).length} modo={modoApp} onModo={trocarModo} contabAba={contabAba} setContabAba={(v) => setContab((p) => ({ ...p, aba: v }))} taxRateGeral={taxRateGeral} setTaxRateGeral={setTaxRateGeral} contabAuto={contab.modo === "contab"} downloadBackup={downloadBackup} fileInputRef={fileInputRef} handleImportFile={handleImportFile} saveError={saveError}
             notifCard={<LembretesCard on={notifOn} setOn={setNotifOn} itens={lembretes} />}
             themeCard={<ThemeCard tema={tema} setTema={setTema} />} goTab={goTab} conta={session && session.user ? session.user.email : ""} cloudLabel={cloudLabel} resumo={{ tema, discreto, pinOn: !!pinHash, notifOn }}
             privacyCard={<PrivacyCard discreto={discreto} setDiscreto={setDiscreto} pinOn={!!pinHash} onSetPin={setPinHash} bioId={bioId} onSetBio={setBioId} onRemovePin={() => { if (window.confirm("Remover a trava deste aparelho?")) setPinHash(""); }} />}
@@ -8119,7 +8325,7 @@ function PrivacyCard({ discreto, setDiscreto, pinOn, onSetPin, onRemovePin, bioI
   );
 }
 
-function BackupTab({ modo = "completo", onModo, contabAba = true, setContabAba, taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard, themeCard, goTab, conta, cloudLabel, resumo = {} }) {
+function BackupTab({ cobrancaCard = null, nCobranca = 0, modo = "completo", onModo, contabAba = true, setContabAba, taxRateGeral, setTaxRateGeral, downloadBackup, fileInputRef, handleImportFile, saveError, cloudCard, wipeCard, posicaoCard, contabAuto, notifCard, privacyCard, themeCard, goTab, conta, cloudLabel, resumo = {} }) {
   const [sec, setSec] = useState(null);
   const taxa = (
     <div className="day-panel" style={{ marginTop: 0 }}>
@@ -8161,7 +8367,7 @@ function BackupTab({ modo = "completo", onModo, contabAba = true, setContabAba, 
       <div className="field-hint" style={{ marginTop: 10 }}>Trocar de modo não apaga nada. O que fica escondido no Simples volta igual no Completo.</div>
     </div>
   );
-  const SECS = { modo: modoSec, contababa: abaContab, nuvem: cloudCard, aparencia: themeCard, privacidade: privacyCard, lembretes: notifCard, imposto: taxa, carteira: posicaoCard, backup, apagar: wipeCard };
+  const SECS = { cobranca: cobrancaCard, modo: modoSec, contababa: abaContab, nuvem: cloudCard, aparencia: themeCard, privacidade: privacyCard, lembretes: notifCard, imposto: taxa, carteira: posicaoCard, backup, apagar: wipeCard };
   if (sec) return (
     <div className="cfg-sub">
       <button type="button" className="cfg-back" onClick={() => setSec(null)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg> Configurações</button>
@@ -8190,6 +8396,7 @@ function BackupTab({ modo = "completo", onModo, contabAba = true, setContabAba, 
         {row("nuvem", "#3B82F6", ic(<path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8.5 4.8 4.8 0 0 1 17.5 18Z" />), "Nuvem e conta", conta ? "Entrar, sair e sincronizar" : "Criar conta ou entrar")}
         {row("aparencia", "#7C5CFC", ic(<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />), "Aparência", temaTxt)}
         {row("privacidade", "#64748B", ic(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>), "Privacidade e trava", (resumo.discreto ? "Valores escondidos" : "Valores à mostra") + (resumo.pinOn ? ", trava ligada" : ", sem trava"))}
+        {cobrancaCard && row("cobranca", "#25A244", ic(<><path d="M21 12a9 9 0 0 1-13.4 7.9L3 21l1.2-4.4A9 9 0 1 1 21 12Z" /><path d="M9 10h6M9 14h4" /></>), "WhatsApp de cobrança", nCobranca ? nCobranca + (nCobranca === 1 ? " número salvo" : " números salvos") : "Número do financeiro de cada hospital")}
         {row("lembretes", "#F59E0B", ic(<><path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7" /><path d="M10 20a2 2 0 0 0 4 0" /></>), "Lembretes no celular", resumo.notifOn ? "Ligados" : "Desligados")}
       </div>
       <div className="cfg-group">
@@ -9629,7 +9836,7 @@ function DashboardTab({ viewMonth, viewYear, patrimonioTotal, saldoRealizado, to
         </div>
         </div>
         <div className="dgrid" style={{ gridTemplateColumns: "1.9fr 1fr" }}>
-          <div className="card"><div className="card-head"><h3 className="card-title">Dinheiro do mês, dia a dia</h3></div><DFluxo fluxoDia={fluxoDia} viewYear={viewYear} viewMonth={viewMonth} /></div>
+          <div className="card"><div className="card-head"><h3 className="card-title">O dinheiro do mês, dia a dia</h3></div><DFluxo fluxoDia={fluxoDia} viewYear={viewYear} viewMonth={viewMonth} /></div>
           <div className="card"><div className="card-head"><h3 className="card-title">Próximos lançamentos</h3></div><DProximos incomeItems={monthIncomeItems} expenseItems={monthExpenseItems} max={5} onVer={() => setActiveTab("despesas")} /></div>
         </div>
         <DGrid>
@@ -10769,9 +10976,9 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
       ); return desk ? (
         <DGrid>
           <DGv id="desp-add" wide open icon={<IconPlus size={18} />} title="Adicionar despesa" sub="conta fixa ou só deste mês" val="">{conteudo}</DGv>
-          {!simples && <DGv id="desp-12m" icon={<IconTrending size={18} />} tone="#F59E0B" title="Despesas mês a mês" sub={`últimos ${chartMonths} meses`} val={"média " + fmtBRL(history12.length ? history12.reduce((a, h) => a + h.expenses, 0) / history12.length : 0)}>
+          {!simples && <DGv id="desp-12m" icon={<IconTrending size={18} />} tone="#F59E0B" title="Despesas mês a mês" sub={`últimos ${chartMonths} meses`} val={(() => { const l = history12.filter((h, k) => k >= history12.findIndex((x) => x.expenses > 0) && history12.findIndex((x) => x.expenses > 0) >= 0); return "média " + fmtBRL(l.length ? l.reduce((a, h) => a + h.expenses, 0) / l.length : 0); })()}>
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
-            <SvgAreaChart data={history12} height={200} color="#F59E0B" valueKey="expenses" onOpen={(d) => goMonth && goMonth(d.y, d.m)} />
+            <DespesasMeses history12={history12} viewYear={viewYear} viewMonth={viewMonth} onOpen={(d) => goMonth && goMonth(d.y, d.m)} />
           </DGv>}
           <DGv id="desp-venc" icon={<IconCalendar size={18} />} tone="#B91C1C" title="Próximos vencimentos" sub={monthExpenseItems.filter((e) => !e.paid).length + " conta(s) a pagar"} val={fmtBRL(totalPending)}>
             <DProximos incomeItems={[]} expenseItems={monthExpenseItems} max={10} />
@@ -10925,22 +11132,31 @@ function PatrimonioCard({ hist = [], investments = [], totalValue = 0, totalBoug
   const pctMode = !!ixSel;
   const serieB = ixSel ? pts.map((x) => (ixSel.em(x.d) / ixSel.em(pIni.d) - 1) * 100) : null;
   const sim = ixSel ? pts.reduce((acc, x, k) => { if (k === 0) return [x.v]; const a = pts[k - 1]; acc.push(acc[k - 1] * (ixSel.em(x.d) / ixSel.em(a.d)) + (custo(x) - custo(a))); return acc; }, []) : null;
-  const W = 600, H = 190, pt = 10, pb = 10;
-  const ts = pts.map((x) => new Date(x.d + "T12:00:00").getTime());
-  const t0 = ts[0], t1 = ts[ts.length - 1] || t0 + 1;
-  const valA = pctMode ? rent : pts.map((x) => x.v);
-  const vs = valA.concat(serieB || []); const vmin = Math.min(...vs), vmax = Math.max(...vs), faixaV = Math.max(pctMode ? 0.5 : 1, vmax - vmin);
-  const X = (t) => ((t - t0) / Math.max(1, t1 - t0)) * W;
-  const Y = (v) => pt + (H - pt - pb) * (1 - (v - vmin) / faixaV) * 0.9 + (H - pt - pb) * 0.05;
-  const xy = pts.map((x, k) => [X(ts[k]), Y(valA[k])]);
-  const linha = xy.map((q, k) => (k ? "L" : "M") + q[0].toFixed(1) + "," + q[1].toFixed(1)).join(" ");
-  const area = linha + ` L${W},${H} L0,${H} Z`;
-  const linhaB = serieB ? serieB.map((v, k) => (k ? "L" : "M") + X(ts[k]).toFixed(1) + "," + Y(v).toFixed(1)).join(" ") : null;
+  // barras do patrimônio (28/11/2026): uma por mês (por dia no 1M), com o que foi aplicado embaixo e o ganho (ou a perda) em cima
+  const W = 600, H = 190, pt = 14, pb = 4;
+  const buckets = (() => {
+    if (faixa === "1M") return pts.map((x, k) => k).filter((k) => k === pts.length - 1 || pts[k].d >= corte);
+    const m = {}; pts.forEach((x, k) => { if (faixa === "Tudo" || x.d >= corte || k === pts.length - 1) m[x.d.slice(0, 7)] = k; });
+    return Object.values(m);
+  })();
+  const n = Math.max(1, buckets.length);
+  const vmax = Math.max(1, ...buckets.map((k) => Math.max(pts[k].v, custo(pts[k]), sim ? sim[k] : 0))) * 1.08;
+  const Y = (v) => pt + (H - pt - pb) * (1 - Math.max(0, v) / vmax);
+  const bw = W / n, larg = Math.min(28, bw * 0.62);
+  const cx = (j) => j * bw + bw / 2;
+  const j0 = ativo !== null && ativo < n ? ativo : n - 1;
+  const i = buckets[j0];
+  const linhaB = sim ? buckets.map((k, j) => (j ? "L" : "M") + cx(j).toFixed(1) + "," + Y(sim[k]).toFixed(1)).join(" ") : null;
   const corSim = cmp ? (BENCHS.find((b) => b[0] === cmp) || [])[2] : null, nomeSim = cmp ? (BENCHS.find((b) => b[0] === cmp) || [])[1] : "";
-  const primeiro = pts[0].v, i = ativo !== null && ativo < pts.length ? ativo : pts.length - 1, atual = pts[i];
+  const primeiro = pts[0].v, atual = pts[i];
   const pct = rent[i], fluxoI = custo(atual) - custo(pIni), dif = (atual.v - primeiro) - fluxoI, sobe = dif >= 0;
   const cor = sobe ? "#16A34A" : "#DC2626";
-  const arr = useArrasto(pts.length, (x) => { let best = 0, bd = 1e9; xy.forEach((q, k) => { const dd = Math.abs(q[0] - x); if (dd < bd) { bd = dd; best = k; } }); return best; }, setAtivo);
+  const arr = useArrasto(n, (x) => Math.max(0, Math.min(n - 1, Math.floor(x / bw))), setAtivo);
+  const curto = (v) => v >= 1e6 ? (v / 1e6).toFixed(1).replace(".", ",") + " mi" : v >= 1e3 ? Math.round(v / 1e3) + " mil" : String(Math.round(v));
+  const guias = [0.33, 0.66, 1].map((f) => vmax / 1.08 * f);
+  const rotX = (d) => faixa === "1M" ? String(Number(d.slice(8, 10))) : (MONTHS_ABBR_PT[Number(d.slice(5, 7)) - 1] || "").slice(0, 3) + (n > 8 ? "" : "/" + d.slice(2, 4));
+  const passo = n > 14 ? Math.ceil(n / 7) : n > 8 ? 2 : 1;
+  const temPerda = buckets.some((k) => pts[k].v < custo(pts[k]) - 0.5);
   const dataTxt = (d) => { const [yy, mm, dd] = d.split("-").map(Number); return d === hoje ? "hoje" : `${dd} de ${MONTHS_ABBR_PT[mm - 1].toLowerCase()}. de ${yy}`; };
   const gid = "pg-" + faixa;
   return (
@@ -10948,22 +11164,31 @@ function PatrimonioCard({ hist = [], investments = [], totalValue = 0, totalBoug
       <div className="pat-top">
         <span className="pat-l">Patrimônio investido</span>
         <div className="pat-v mono">{comCentavos(fmtBRL(atual.v))}</div>
-        <div className={`pat-d ${sobe ? "up" : "down"}`}><b className="mono">{(sobe ? "+ " : "− ") + fmtBRL(Math.abs(dif))} ({(pct >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2).replace(".", ",")}%)</b><span>{pctMode ? `${nomeSim} ${pctTxt(serieB[i])} · ` : ""}{ativo !== null ? dataTxt(atual.d) + (atual.est ? " · valor aplicado" : "") : { "1M": "no último mês", "6M": "nos últimos 6 meses", "1A": "nos últimos 12 meses", Tudo: "desde o início" }[faixa]}</span></div>
+        <div className={`pat-d ${sobe ? "up" : "down"}`}><b className="mono">{(sobe ? "+ " : "− ") + fmtBRL(Math.abs(dif))} ({(pct >= 0 ? "+" : "−") + Math.abs(pct).toFixed(2).replace(".", ",")}%)</b><span>{cmp && benchPct[cmp] !== null ? `${nomeSim} ${pctTxt(benchPct[cmp])} · ` : ""}{ativo !== null ? dataTxt(atual.d) + (atual.est ? " · valor aplicado" : "") : { "1M": "no último mês", "6M": "nos últimos 6 meses", "1A": "nos últimos 12 meses", Tudo: "desde o início" }[faixa]}</span></div>
         {resumo && <div className="pat-res"><span>Aplicado <b className="mono">{fmtBRL(resumo.custo)}</b></span><span>Ganho desde a compra <b className={`mono ${resumo.ganho >= 0 ? "up" : "down"}`}>{(resumo.ganho >= 0 ? "+ " : "− ") + fmtBRL(Math.abs(resumo.ganho))} ({(resumo.pct >= 0 ? "+" : "−") + Math.abs(resumo.pct).toFixed(2).replace(".", ",")}%)</b></span></div>}
       </div>
-      <div className="chart-box pat-ch">
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="none" height="170" {...arr}>
-          <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={cor} stopOpacity="0.22" /><stop offset="100%" stopColor={cor} stopOpacity="0" /></linearGradient></defs>
-          <line x1="0" x2={W} y1={Y(pctMode ? 0 : primeiro)} y2={Y(pctMode ? 0 : primeiro)} className="pat-base" vectorEffect="non-scaling-stroke" />
-          <g className="revela" key={faixa + (cmp || "")}>
-            {!pctMode && <path d={area} fill={`url(#${gid})`} />}
-            {linhaB && <path d={linhaB} fill="none" stroke={corSim} strokeWidth="2" strokeDasharray="6 5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" data-bench-linha={cmp} />}
-            <path d={linha} fill="none" stroke={cor} strokeWidth="2.2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+      <div className="chart-box pat-ch pat-bars">
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="none" height="170" {...arr} role="img" aria-label="Patrimônio mês a mês: aplicado e ganho">
+          {guias.map((g, k) => <line key={k} x1="0" x2={W} y1={Y(g)} y2={Y(g)} className="pat-guia" vectorEffect="non-scaling-stroke" />)}
+          <g className="revela" key={faixa}>
+            {buckets.map((k, j) => {
+              const x = pts[k], ap = Math.max(0, custo(x)), v = Math.max(0, x.v), base = Math.min(ap, v), x0 = cx(j) - larg / 2;
+              const op = ativo === null || j === j0 ? 1 : 0.45;
+              return (
+                <g key={x.d} opacity={op} data-barra={x.d}>
+                  <rect x={x0} y={Y(base)} width={larg} height={Math.max(0, H - pb - Y(base))} rx="5" className="pat-ap" />
+                  {v > ap + 0.5 && <rect x={x0} y={Y(v)} width={larg} height={Math.max(1.5, Y(ap) - Y(v))} rx="5" className="pat-ganho" />}
+                  {v < ap - 0.5 && <rect x={x0} y={Y(ap)} width={larg} height={Math.max(1.5, Y(v) - Y(ap))} rx="5" className="pat-perda" />}
+                </g>
+              );
+            })}
+            {linhaB && <path d={linhaB} fill="none" stroke={corSim} strokeWidth="2.2" strokeDasharray="6 5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" data-bench-linha={cmp} />}
+            {linhaB && buckets.map((k, j) => <circle key={k} cx={cx(j)} cy={Y(sim[k])} r="3.2" fill={corSim} vectorEffect="non-scaling-stroke" />)}
           </g>
-          {ativo !== null && <line x1={xy[i][0]} x2={xy[i][0]} y1="0" y2={H} stroke="rgba(15,26,22,0.25)" vectorEffect="non-scaling-stroke" />}
         </svg>
-        {ativo !== null && <span className="pat-pt" style={{ left: `${(xy[i][0] / W) * 100}%`, top: `${(xy[i][1] / H) * 170}px`, background: cor }} />}
+        <div className="pat-xl" aria-hidden="true">{buckets.map((k, j) => <span key={k} className={j === j0 ? "on" : ""}>{j % passo === (n - 1) % passo ? rotX(pts[k].d) : ""}</span>)}</div>
       </div>
+      <div className="pat-leg"><span><i className="ap" />Aplicado</span><span><i className="gn" />Ganho</span>{temPerda && <span><i className="pd" />Perda</span>}{cmp && <span><i className="ix" style={{ borderColor: corSim }} />{nomeSim}</span>}</div>
       <div className="pat-f" role="tablist">{["1M", "6M", "1A", "Tudo"].map((f) => <button key={f} type="button" role="tab" aria-selected={faixa === f} className={faixa === f ? "on" : ""} onClick={() => { setFaixa(f); setAtivo(null); }}>{f}</button>)}</div>
       <div className="pat-cmp" id="comparar-indices" aria-label="Comparar com índices">
         <div className="pat-cmp-i voce"><span>Sua carteira</span><b className="mono">{pctTxt(rent[rent.length - 1])}</b></div>
@@ -11054,6 +11279,142 @@ function PillVar({ v, dia }) {
   );
 }
 
+// ---- Dividendos e rendimentos (28/11/2026): proventos da B3 × quantidade que a pessoa tinha na data com ----
+const PROV_URL = "https://hhqxkizvcgnohklztkef.supabase.co/functions/v1/proventos?t=";
+const PROV_CATS = ["Ações", "FII", "ETF"];
+// JCP tem 15% de imposto retido na fonte; dividendos e rendimentos de FII são isentos
+const provLiquido = (tipo, v) => (/JRS|JUROS|JCP/i.test(String(tipo || "")) ? v * 0.85 : v);
+const provNomeTipo = (tipo) => /JRS|JUROS|JCP/i.test(String(tipo || "")) ? "JCP" : /REND/i.test(String(tipo || "")) ? "Rendimento" : /AMORT/i.test(String(tipo || "")) ? "Amortização" : "Dividendo";
+function provTickers(investments) {
+  const set = new Set();
+  (investments || []).forEach((i) => { if (PROV_CATS.includes(i.category) && Number(i.qty) > 0 && /^[A-Z]{4}\d{1,2}$/.test(String(i.description || "").toUpperCase())) set.add(String(i.description).toUpperCase()); });
+  return [...set];
+}
+// quantidade de um ativo no fim de um dia (compras − vendas até a data)
+function qtdNaData(investments, t, dia) {
+  let q = 0;
+  (investments || []).forEach((i) => {
+    if (String(i.description || "").toUpperCase() !== t || !(Number(i.qty) > 0) || i.tipo === "ajuste" || !i.date || i.date > dia) return;
+    q += i.tipo === "venda" ? -Number(i.qty) : Number(i.qty);
+  });
+  return Math.max(0, q);
+}
+function calcProventos(investments, dados) {
+  const out = [];
+  Object.entries(dados || {}).forEach(([t, lista]) => {
+    const cat = ((investments || []).find((i) => String(i.description || "").toUpperCase() === t) || {}).category || "Ações";
+    (lista || []).forEach((x) => {
+      if (!x || !x.data_com || !(Number(x.valor) > 0)) return;
+      const q = qtdNaData(investments, t, x.data_com);
+      if (!(q > 0)) return;
+      const bruto = q * Number(x.valor);
+      const semData = !x.pagamento || /^9999/.test(x.pagamento); // a empresa ainda não marcou o dia do pagamento
+      out.push({ ticker: t, cat, dataCom: x.data_com, pag: semData ? "9999-12-31" : x.pagamento, semData, unit: Number(x.valor), qtd: q, bruto, liquido: provLiquido(x.tipo, bruto), tipo: provNomeTipo(x.tipo) });
+    });
+  });
+  return out.sort((a, b) => String(b.pag).localeCompare(String(a.pag)));
+}
+// aba Dividendos (28/11/2026): média por mês com meta, mês a mês (pagos e a receber), quem mais pagou e os próximos pagamentos
+function DividendosTab({ lista = [], positions = [], nosRecebimentos = true, setNosRecebimentos, meta = 0, setMeta, carregando = false }) {
+  const hoje = todayStr();
+  const [mesSel, setMesSel] = useState(hoje.slice(0, 7));
+  const [todos, setTodos] = useState(false);
+  const [editMeta, setEditMeta] = useState(false);
+  const [metaTxt, setMetaTxt] = useState(meta ? String(meta) : "");
+  const ini12 = (() => { const d = new Date(hoje + "T12:00:00"); d.setMonth(d.getMonth() - 11, 1); return d.toISOString().slice(0, 7); })();
+  const pagos12 = lista.filter((x) => x.pag <= hoje && x.pag.slice(0, 7) >= ini12);
+  const aReceber = lista.filter((x) => x.pag > hoje).sort((a, b) => a.pag.localeCompare(b.pag));
+  const tot12 = pagos12.reduce((a, x) => a + x.liquido, 0);
+  const media = tot12 / 12;
+  const totRec = aReceber.reduce((a, x) => a + x.liquido, 0);
+  const baseCart = positions.filter((p) => PROV_CATS.includes(p.category)).reduce((a, p) => a + p.value, 0);
+  const rendeAno = baseCart > 0 ? (tot12 / baseCart) * 100 : 0;
+  // meses: 12 para trás e até 3 para frente quando há pagamento anunciado
+  const meses = [];
+  { const d = new Date(ini12 + "-15T12:00:00"); const comData = aReceber.filter((x) => !x.semData); const fimF = comData.length ? comData[comData.length - 1].pag.slice(0, 7) : hoje.slice(0, 7);
+    for (let k = 0; k < 16; k++) { const mk = d.toISOString().slice(0, 7); if (mk > fimF && mk > hoje.slice(0, 7)) break; meses.push(mk); d.setMonth(d.getMonth() + 1); } }
+  const porMes = meses.map((mk) => { const l = lista.filter((x) => x.pag.slice(0, 7) === mk); return { mk, pago: l.filter((x) => x.pag <= hoje).reduce((a, x) => a + x.liquido, 0), rec: l.filter((x) => x.pag > hoje).reduce((a, x) => a + x.liquido, 0), itens: l }; });
+  const vmax = Math.max(1, ...porMes.map((m) => m.pago + m.rec), meta || 0) * 1.12;
+  const sel = porMes.find((m) => m.mk === mesSel) || porMes[porMes.length - 1];
+  const porAtivo = Object.values(pagos12.reduce((acc, x) => { const a = acc[x.ticker] || (acc[x.ticker] = { t: x.ticker, cat: x.cat, v: 0, n: 0 }); a.v += x.liquido; a.n++; return acc; }, {})).sort((a, b) => b.v - a.v);
+  const nomeMes = (mk, curto) => { const m = MONTHS_PT[Number(mk.slice(5, 7)) - 1] || ""; return curto ? m.slice(0, 3) : m.toLowerCase() + " de " + mk.slice(0, 4); };
+  const pctMeta = meta > 0 ? Math.min(100, (media / meta) * 100) : 0;
+  const temAtivos = positions.some((p) => PROV_CATS.includes(p.category) && p.isQty);
+  if (!temAtivos) return <div className="card"><div className="empty-state">Os dividendos aparecem aqui quando você tiver ações, FIIs ou ETFs da bolsa na carteira.</div></div>;
+  const salvarMeta = () => { const v = Number(String(metaTxt).replace(/\./g, "").replace(",", ".")) || 0; setMeta && setMeta(v); setEditMeta(false); };
+  return (
+    <div className="dv" id="dividendos">
+      <div className="dv-top">
+        <div className="card dv-res">
+          <span className="dv-l">Média por mês <small>últimos 12 meses</small></span>
+          <div className="dv-big mono">{comCentavos(fmtBRL(media))}</div>
+          {meta > 0 && !editMeta && <>
+            <div className="dv-meta"><span>Meta <b className="mono">{fmtBRL(meta)}</b> por mês</span><b className="mono">{Math.round(pctMeta)}%</b></div>
+            <div className="dv-bar"><i style={{ width: pctMeta + "%" }} /></div>
+          </>}
+          {editMeta ? (
+            <div className="dv-meta-ed"><label>Meta de dividendos por mês (R$)<input inputMode="decimal" value={metaTxt} onChange={(e) => setMetaTxt(e.target.value)} placeholder="ex.: 3000" autoFocus /></label><button type="button" className="btn btn-primary sm" onClick={salvarMeta}>Salvar</button></div>
+          ) : <button type="button" className="dv-link" onClick={() => { setMetaTxt(meta ? String(meta) : ""); setEditMeta(true); }}>{meta > 0 ? "Mudar a meta" : "Definir uma meta por mês"}</button>}
+          <div className="dv-kpis">
+            <div><small>Recebido em 12 meses</small><b className="mono">{fmtBRL(tot12)}</b></div>
+            <div><small>A receber</small><b className="mono dv-rec">{fmtBRL(totRec)}</b></div>
+            <div><small>Rende por ano</small><b className="mono">{rendeAno.toFixed(2).replace(".", ",")}%</b></div>
+          </div>
+          <label className="dv-sw"><span>Somar aos recebimentos<small>os pagos entram sozinhos em Plantões › Recebimentos e no saldo</small></span><input type="checkbox" role="switch" checked={nosRecebimentos} onChange={(e) => setNosRecebimentos && setNosRecebimentos(e.target.checked)} /><i aria-hidden="true" /></label>
+        </div>
+        <div className="card dv-ch">
+          <div className="card-head"><h3 className="card-title">Mês a mês</h3>{carregando && <span className="card-note">atualizando…</span>}</div>
+          <div className="dv-barras" role="group" aria-label="Dividendos por mês">
+            {meta > 0 && <div className="dv-linha-meta" style={{ bottom: `${(meta / vmax) * 100}%` }}><span>meta</span></div>}
+            {porMes.map((m) => (
+              <button key={m.mk} type="button" className={`dv-col ${m.mk === sel.mk ? "on" : ""} ${m.mk === hoje.slice(0, 7) ? "hj" : ""}`} onClick={() => setMesSel(m.mk)} aria-pressed={m.mk === sel.mk} aria-label={`${nomeMes(m.mk)}: ${fmtBRL(m.pago + m.rec)}`} data-mes={m.mk}>
+                <span className="dv-pilha">
+                  {m.rec > 0 && <i className="rec" style={{ height: `${(m.rec / vmax) * 100}%` }} />}
+                  {m.pago > 0 && <i className="pg" style={{ height: `${(m.pago / vmax) * 100}%` }} />}
+                </span>
+                <small>{nomeMes(m.mk, true)}</small>
+              </button>
+            ))}
+          </div>
+          <div className="dv-leg"><span><i className="pg" />Recebido</span><span><i className="rec" />A receber</span></div>
+          <div className="dv-sel">
+            <div className="dv-sel-h"><b className="dv-sel-m">{nomeMes(sel.mk)}</b><b className="mono">{fmtBRL(sel.pago + sel.rec)}</b></div>
+            {sel.itens.length === 0 && <div className="dv-vazio">Nenhum pagamento neste mês.</div>}
+            {[...sel.itens].sort((a, b) => a.pag.localeCompare(b.pag)).map((x, k) => (
+              <div key={k} className="dv-it"><AtivoLogo t={x.ticker} cor={invCatMeta(x.cat).color} /><span className="dv-it-n"><b>{x.ticker}</b><small>{x.tipo} · {fmtQty(x.qtd)} × {fmtBRL(x.unit).replace(/(,\d\d)$/, "$1")} · {x.pag > hoje ? "cai " : "caiu "}{fmtDatePt(x.pag).slice(0, 5)}</small></span><b className={`mono ${x.pag > hoje ? "dv-rec" : ""}`}>{fmtBRL(x.liquido)}</b></div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="dv-bot">
+        <div className="card">
+          <div className="card-head"><h3 className="card-title">Quem mais pagou</h3><span className="card-note">12 meses</span></div>
+          {porAtivo.length === 0 && <div className="dv-vazio">Nenhum pagamento nos últimos 12 meses.</div>}
+          {(todos ? porAtivo : porAtivo.slice(0, 6)).map((a) => (
+            <div key={a.t} className="dv-rank"><AtivoLogo t={a.t} cor={invCatMeta(a.cat).color} /><span className="dv-rank-n"><span><b>{a.t}</b><b className="mono">{fmtBRL(a.v)}</b></span><span className="dv-rank-bar"><i style={{ width: `${(a.v / porAtivo[0].v) * 100}%`, background: invCatMeta(a.cat).color }} /></span><small>{a.n} {a.n === 1 ? "pagamento" : "pagamentos"} · {tot12 > 0 ? Math.round((a.v / tot12) * 100) : 0}% do total</small></span></div>
+          ))}
+          {porAtivo.length > 6 && <button type="button" className="dv-link" onClick={() => setTodos(!todos)}>{todos ? "Mostrar menos" : `Ver os ${porAtivo.length}`}</button>}
+        </div>
+        <div className="card">
+          <div className="card-head"><h3 className="card-title">Próximos pagamentos</h3>{aReceber.length > 0 && <span className="card-note mono">{fmtBRL(totRec)}</span>}</div>
+          {aReceber.length === 0 && <div className="dv-vazio">Nenhum pagamento anunciado ainda.</div>}
+          {aReceber.slice(0, 8).map((x, k) => (
+            <div key={k} className="dv-it">{x.semData ? <span className="dv-dia"><b>—</b>a definir</span> : <span className="dv-dia"><b>{Number(x.pag.slice(8, 10))}</b>{(MONTHS_ABBR_PT[Number(x.pag.slice(5, 7)) - 1] || "").toLowerCase()}</span>}<span className="dv-it-n"><b>{x.ticker}</b><small>{x.tipo} · com {fmtQty(x.qtd)} {x.cat === "FII" ? "cotas" : "ações"}{x.semData ? " · data de pagamento a definir" : ""}</small></span><b className="mono dv-rec">{fmtBRL(x.liquido)}</b></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+// tipo e segmento dos FIIs mais negociados (para quem não conhece: o que o fundo faz para pagar rendimento)
+const FII_SEG = Object.fromEntries("HGLG11:T:Logística;XPLG11:T:Logística;BTLG11:T:Logística;VILG11:T:Logística;LVBI11:T:Logística;GGRC11:T:Logística;BRCO11:T:Logística;PATL11:T:Logística;XPIN11:T:Industrial;FIIB11:T:Industrial;MXRF11:H:Crédito e imóveis;XPML11:T:Shoppings;VISC11:T:Shoppings;HSML11:T:Shoppings;MALL11:T:Shoppings;WPLZ11:T:Shoppings;HGBS11:T:Shoppings;KNRI11:H:Escritórios e logística;HGRE11:T:Escritórios;PVBI11:T:Escritórios;JSRE11:T:Escritórios;RBRP11:T:Escritórios;BRCR11:T:Escritórios;VINO11:T:Escritórios;TRXF11:T:Renda urbana;HGRU11:T:Renda urbana;RVBI11:T:Renda urbana;GARE11:T:Renda urbana;ALZR11:H:Imóveis alugados para empresas;SARE11:H:Escritórios e logística;ZAVI11:H:Vários tipos de imóveis;TGAR11:H:Construção de imóveis;BBPO11:T:Agências bancárias;KNCR11:P:Recebíveis (CDI);KNIP11:P:Recebíveis (IPCA);KNHY11:P:Recebíveis de maior risco;KNSC11:P:Recebíveis;CPTS11:P:Recebíveis;RECR11:P:Recebíveis;RBRR11:P:Recebíveis de menor risco;MCCI11:P:Recebíveis;VGIR11:P:Recebíveis;IRDM11:P:Recebíveis;HABT11:P:Recebíveis;HCTR11:P:Recebíveis de maior risco;HGCR11:P:Recebíveis;DEVA11:P:Recebíveis de maior risco;URPR11:P:Recebíveis de maior risco;XPCI11:P:Recebíveis;VCRI11:P:Recebíveis;JURO11:P:Recebíveis;CVBI11:P:Recebíveis;BCFF11:F:Fundo de fundos;HFOF11:F:Fundo de fundos;MGFF11:F:Fundo de fundos;KFOF11:F:Fundo de fundos;RBRF11:F:Fundo de fundos;BTHF11:H:Multiestratégia;VGHF11:H:Multiestratégia;SNAG11:A:Crédito do agro;RZAG11:A:Crédito do agro;VCRA11:A:Crédito do agro;RZTR11:A:Terras agrícolas".split(";").map((x) => { const [t, g, seg] = x.split(":"); return [t, { g, seg }]; }));
+const FII_GRUPO = {
+  T: ["Tijolo", "Tem imóveis de verdade e paga o aluguel que recebe."],
+  P: ["Papel", "Empresta dinheiro para o setor imobiliário (CRI) e paga os juros que recebe."],
+  H: ["Híbrido", "Mistura imóveis e papéis, ou aplica em mais de uma estratégia."],
+  F: ["Fundo de fundos (FoF)", "Compra cotas de outros FIIs."],
+  A: ["Fiagro", "Investe no agronegócio: terras ou crédito para produtores."],
+};
 // ---- Análise completa de uma ação ou FII: preço (12 meses, B3), mínima/máxima, proventos (B3) ----
 const ANL_CACHE = {};
 const anlTipo = (t) => ({ RENDIMENTO: "Rendimento", DIVIDENDO: "Dividendo", "JRS CAP PROPRIO": "JCP", AMORTIZACAO: "Amortização", "AMORTIZAÇÃO": "Amortização" }[String(t || "").toUpperCase().trim()] || (String(t || "").charAt(0) + String(t || "").slice(1).toLowerCase()));
@@ -11139,6 +11500,7 @@ function AnaliseAtivo({ p, cotacoes = {}, onClose }) {
           <section className="anl-hero">
             <span>Último preço</span>
             <b className="mono">{comCentavos(fmtBRL(ult.v))}</b>
+            {fii && FII_SEG[t] && <div className="anl-seg" data-anl="segmento"><span className={"anl-seg-g g-" + FII_SEG[t].g}>{FII_GRUPO[FII_SEG[t].g][0]}</span><span className="anl-seg-s">{FII_SEG[t].seg}</span><small>{FII_GRUPO[FII_SEG[t].g][1]}</small></div>}
             <small>{ult.vivo ? "agora" : "fechamento de " + fmtDatePt(ult.d)}{p.qty > 0 && <> · você tem {fmtQty(p.qty)} {unid} = <strong className="mono">{fmtBRL(p.qty * ult.v)}</strong></>}</small>
             <div className="anl-tiles">
               <div data-anl="var12"><span>Valorização 12 meses</span><b className={"mono " + (var12 === null ? "" : var12 >= 0 ? "up" : "down")}>{var12 === null ? "—" : anlPct(var12)}</b></div>
@@ -11216,7 +11578,7 @@ function RfLigar({ p, investments, tdHoje, carregarTd, cdiUltimo, onLigar }) {
 }
 
 function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, removeInvestment, adjustAvg, ajustarInvestido, removerAtivo,
-  setCotacao, tdHoje = [], carregarTd, cdiUltimo = "", ligarRendaFixa, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, usaCentral, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk }) {
+  setCotacao, tdHoje = [], carregarTd, cdiUltimo = "", ligarRendaFixa, brapiToken, setBrapiToken, refreshQuotes, quoteStatus, quoteRun, usaCentral, viewYear, viewMonth, investmentsHistory12, chartMonths, setChartMonths, openSignal, discreto, setDiscreto, abrirPrint, desk, proventos = [], provNosRec = true, setProvNosRec, provMeta = 0, setProvMeta }) {
   const gv = useGv();
   const [tab, setTab] = useState("resumo");
   const [showForm, setShowForm] = useState(false);
@@ -11351,17 +11713,11 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
       {analise && <AnaliseAtivo p={analise} cotacoes={cotacoes} onClose={() => setAnalise(null)} />}
       <EyeBtn on={discreto} toggle={() => setDiscreto(!discreto)} />
       {positions.length > 0 && <PatrimonioCard hist={Array.isArray(cotacoes.__hist) ? cotacoes.__hist : []} investments={investments} totalValue={totalValue} totalBought={totalBought} totalSold={totalSold} resumo={{ custo: totalCost, ganho: profit, pct: profitPct }} />}
-      {desk && positions.length > 0 && (
-        <div className="dgrid" style={{ gridTemplateColumns: "minmax(0, 1fr)", marginBottom: 14 }}>
-          <div className="card dinv-ev"><div className="card-head"><h3 className="card-title">Quanto você já investiu, mês a mês</h3><RangeTabs value={chartMonths} onChange={setChartMonths} /></div>
-            <SvgAreaChart data={investmentsHistory12} height={170} color="#7C3AED" valueKey="acumulado" /></div>
-        </div>
-      )}
 
       <div className="subtabs-row">
-        <div className="subtabs">
-          {[["resumo", "Resumo"], ["ativos", "Ativos"], ["lancamentos", "Lançamentos"], ["evolucao", "Evolução"]].map(([k, l]) => (
-            <button key={k} className={`subtab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>{l}</button>
+        <div className="subtabs inv-tabs" role="tablist">
+          {[["resumo", "Resumo", "M4 13h4v7H4zM10 8h4v12h-4zM16 4h4v16h-4z"], ["ativos", "Ativos", "M4 6h16M4 12h16M4 18h10"], ["evolucao", "Evolução", "M3 17l6-6 4 4 8-8M15 7h6v6"], ["dividendos", "Dividendos", "M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3 4.5 1.3 4.5 3-2 3-4.5 3-4.5-1.3-4.5-3"], ["lancamentos", "Lançamentos", "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"]].map(([k, l, d]) => (
+            <button key={k} className={`subtab ${tab === k ? "active" : ""}`} data-aba={k} aria-pressed={tab === k} onClick={() => setTab(k)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>{l}</button>
           ))}
         </div>
         <div className="inv-acoes">
@@ -11780,6 +12136,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
       )}
 
       {/* ---------- EVOLUÇÃO ---------- */}
+      {tab === "dividendos" && <DividendosTab lista={proventos} positions={positions} nosRecebimentos={provNosRec} setNosRecebimentos={setProvNosRec} meta={provMeta} setMeta={setProvMeta} />}
       {tab === "evolucao" && (
         <div className="grid-2">
           <div className="card">
