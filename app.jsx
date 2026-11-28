@@ -12030,7 +12030,34 @@ function juntarCarteira(lista) {
   });
 }
 // Extrato mensal de corretora americana (Apex: Nomad, Avenue e outras) — compras e vendas do mês
+// data americana: AAAA-MM-DD, ou MM/DD/AAAA (se o primeiro número passa de 12, é DD/MM/AAAA)
+const dataUS = (t) => { if (/^\d{4}-/.test(t)) return t; const [x, y, z] = t.split("/"); return Number(x) > 12 ? `${z}-${y}-${x}` : `${z}-${x}-${y}`; };
+// Confirmação de negócio no padrão Apex Clearing (Nomad e outras corretoras americanas):
+// seções "You Bought" / "You Sold" e linhas "data negócio · data liquidação · código · quantidade · preço · bruto · taxas… · líquido"
+function lerConfirmacaoApex(lines) {
+  const out = []; let lado = "";
+  const L = (lines || []).map((raw) => String(raw || "").replace(/\s+/g, " ").trim());
+  L.forEach((l, i) => {
+    if (/\byou\s+bought\b|\bbought\b\s*$/i.test(l)) lado = "compra";
+    else if (/\byou\s+sold\b|\bsold\b\s*$/i.test(l)) lado = "venda";
+    const m = l.match(/^(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})\s+(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})\s+)?([A-Z][A-Z0-9.]{0,6})\s+(-?\d[\d,]*\.?\d*(?:\s+-?\$?\d[\d,]*\.?\d*){2,})/);
+    if (!m || US_STOP.has(m[2])) return;
+    const ns = numsOf(m[3].replace(/\$/g, ""), "us").map(Math.abs);
+    const [q, p, bruto] = ns;
+    if (!(q > 0 && p > 0 && bruto > 0) || Math.abs(q * p - bruto) > Math.max(0.05, bruto * 0.01)) return;
+    const liquido = ns.length >= 4 ? ns[ns.length - 1] : bruto;
+    // nome do ativo na linha "DESC:" logo abaixo
+    let nome = "";
+    for (let k = 1; k <= 3 && i + k < L.length; k++) { const d = L[i + k].match(/DESC(?:RIPTION)?:\s*(.+?)(?:\s+Trade\s*#|\s+CAP:|$)/i); if (d) { nome = d[1].trim(); break; } }
+    const sideTxt = l.match(/\b(BUY|SELL|BOUGHT|SOLD)\b/i);
+    const side = sideTxt ? (/^(SELL|SOLD)/i.test(sideTxt[1]) ? "venda" : "compra") : (lado || "compra");
+    out.push({ kind: "trade", src: "neg", nota: true, moeda: "USD", date: dataUS(m[1]), ticker: m[2].replace(/\.$/, ""), spec: nome || m[2], name: nome, incerto: false, category: "Exterior", side, qty: q, price: p, amount: Math.round((liquido > 0 ? liquido : bruto) * 100) / 100 });
+  });
+  return out;
+}
 function lerTradesExterior(lines) {
+  const apex = lerConfirmacaoApex(lines);
+  if (apex.length) return apex;
   const out = []; const loc = "us";
   (lines || []).forEach((raw) => {
     const l = String(raw || "").replace(/\s+/g, " ").trim();
