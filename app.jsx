@@ -5498,8 +5498,21 @@ function App() {
         .cl-row .ac-top.tb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px 16px; }
         .tb-atv { display: flex; align-items: center; gap: 11px; min-width: 0; }
         .tb-id { min-width: 0; } .tb-id b { display: block; font-size: 14.5px; } .tb-id small { display: block; font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-        .tb-c { display: none; }
+        .tb-c { display: none; } .tb-longo { display: none; }
         .tb-row .tb-s { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; } .tb-s b { font-size: 14.5px; white-space: nowrap; }
+        /* topo de cada grupo no verde do Sallos, com a grade fina e a linha de batimento */
+        .app .cl-tab .cl-head.tb-head { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(135deg, #0B3D2E, #0E5640); color: #fff; }
+        .app .cl-tab .cl-head.tb-head::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+          background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+          background-size: 22px 22px; opacity: 0.5;
+          -webkit-mask-image: linear-gradient(to left, #000 30%, transparent 100%); mask-image: linear-gradient(to left, #000 30%, transparent 100%); }
+        .app .cl-tab .tb-head .cl-name small, .app .cl-tab .tb-head .tb-kpi small { color: rgba(220,245,235,0.72); }
+        .app .cl-tab .tb-head .cl-chev { color: rgba(255,255,255,0.75); }
+        .app .cl-tab .tb-head .tb-ic { color: #6EE7B7 !important; } .app .cl-tab .tb-head .tb-ic > svg:last-child { color: #fff; }
+        .app .cl-tab .tb-head .pvar.up { background: #D1FAE5; color: #065F46; } .app .cl-tab .tb-head .pvar.down { background: #FEE2E2; color: #B91C1C; }
+        .app .cl-tab .tb-head .pvar.dia { background: none; color: #fff; } .app .cl-tab .tb-head .pvar.dia.up svg { color: #6EE7B7; } .app .cl-tab .tb-head .pvar.dia.down svg { color: #FCA5A5; }
+        .app .cl-tab .tb-head .tb-nd { color: rgba(220,245,235,0.6); }
+        .app .cl-tab .tb-cols { border-top: none; }
         @media (min-width: 1000px) {
           .cl-head.tb-head { grid-template-columns: 44px minmax(150px, 1.3fr) 70px 150px 120px 130px 110px 18px; gap: 16px; padding: 16px 20px; }
           .tb-head .cl-name small { display: none; } .tb-head .cl-name b { font-size: 18px; }
@@ -5510,6 +5523,7 @@ function App() {
           .tb-cols button { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; } .tb-cols button:hover, .tb-cols button.on { color: var(--text); } .tb-cols button.on::after { content: " ↓"; }
           .cl-row .ac-top.tb-row { padding: 12px 20px; }
           .tb-c { display: block; text-align: right; font-size: 14px; white-space: nowrap; }
+          .tb-longo { display: inline; } .tb-curto { display: none; }
           .tb-c.tb-w { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
           .tb-id small { display: none; } .tb-id b { font-weight: 600; font-size: 15px; }
           .tb-row .tb-s { display: block; } .tb-r-cel { display: none; }
@@ -11442,7 +11456,7 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                 {tabela ? (
                 <button type="button" className="cl-head tb-head" aria-expanded={aberta} onClick={alternar}>
                   <span className="tb-ic" style={{ color: invCatMeta(g.cat).color }} aria-hidden="true"><svg className="tb-anel" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeOpacity=".16" strokeWidth="3.5" /><circle cx="22" cy="22" r="19" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${Math.max(0.5, totalValue > 0 ? (sub / totalValue) * 119.4 : 0)} 200`} transform="rotate(-90 22 22)" /></svg><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{g.cat === "FII" ? <><path d="M3 21h18" /><path d="M5 21V8l7-5 7 5v13" /><path d="M10 21v-5h4v5" /></> : g.cat === "ETF" ? <><circle cx="12" cy="12" r="9" /><path d="M12 3v9l6.4 6.4" /></> : <><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>}</svg></span>
-                  <span className="cl-name"><b>{g.cat === "FII" ? "Fundos imobiliários" : g.cat === "ETF" ? "ETFs" : "Ações"}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}</small></span>
+                  <span className="cl-name"><b>{g.cat === "FII" ? <><span className="tb-longo">Fundos imobiliários</span><span className="tb-curto">FIIs</span></> : g.cat === "ETF" ? "ETFs" : "Ações"}</b><small>{g.items.length} {g.items.length === 1 ? "ativo" : "ativos"} · {pctOf(sub)}</small></span>
                   <span className="tb-kpi tb-k-n"><small>Ativos</small><b className="mono">{g.items.length}</b></span>
                   <span className="tb-kpi tb-k-v"><small>Valor total</small><b className="mono">{fmtBRL(sub)}</b>{subCost > 0 && <span className="tb-r-cel"><PillVar v={subPct} /></span>}</span>
                   <span className="tb-kpi tb-k-d"><small>{diaRot}</small>{diaClPct === null ? <b className="mono tb-nd">—</b> : <PillVar v={diaClPct} dia />}</span>
