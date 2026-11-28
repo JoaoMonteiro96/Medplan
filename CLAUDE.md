@@ -48,6 +48,7 @@ O aviso de `history12` duplicado na montagem é antigo e não atrapalha.
 - `node ferramentas/testes/offline.cjs`: app com o service worker ligado: abre sem internet, com as fontes, e mostra "Nova versão" quando há versão nova.
 - `node ferramentas/testes/importar-offline.cjs`: leitores do Importar (PDF, planilha e foto) carregam do próprio app e funcionam sem internet.
 - `node ferramentas/testes/fatura.cjs`: fatura fictícia em CSV (`ferramentas/dados/fatura-teste.csv`, formato C6): categoria do banco, luz/água/veterinário, "Revisar compras em Outros" e aprendizado da loja.
+- `node ferramentas/testes/toque-graficos.cjs`: toque com o dedo nos gráficos (344 px) marca o mês certo.
 - `node ferramentas/testes/nota-exterior.cjs` e `dolar-exterior.cjs`: nota americana (Apex/Nomad) e dólar do dia de cada compra.
 - `node ferramentas/testes/calculos.cjs`: contas de dinheiro (imposto, pró-labore, Simples, presumido, IR anual, metas, férias).
 - `node ferramentas/testes/nuvem.cjs`: testa a nuvem com um Supabase de mentira (envio, download só do que mudou, mudança sem internet, excluir conta). Rode sempre que mexer na sincronização.

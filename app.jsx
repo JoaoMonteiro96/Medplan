@@ -934,6 +934,11 @@ function useLargura(min = 600) {
   }, []);
   return [ref, w];
 }
+// no celular, depois de um toque o navegador avisa que o dedo "saiu" do gráfico; isso não pode apagar a escolha.
+// "saiuDoGrafico" só limpa quando foi o mouse que saiu (computador).
+let ultimoToque = 0;
+if (typeof window !== "undefined") window.addEventListener("touchstart", () => { ultimoToque = Date.now(); }, { capture: true, passive: true });
+const saiuDoGrafico = (fn) => (ev) => { if ((ev && ev.pointerType && ev.pointerType !== "mouse") || Date.now() - ultimoToque < 1500) return; fn(ev); };
 function useArrasto(n, indice, setActive) {
   const ultimo = useRef(null), arrastando = useRef(false);
   const mover = (ev) => {
@@ -976,7 +981,7 @@ function SvgBarChart({ data, height = 200, color = TEAL, negativeColor = BRICK, 
   const click = (i) => { if (tapped.current === i && onOpen) { onOpen(data[i]); tapped.current = null; } else { tapped.current = i; setActive(i); } };
   const arr = useArrasto(n, (x) => Math.floor((x - padL) / slot), setActive);
   return (
-    <div className="chart-box" ref={boxRef} onMouseLeave={() => setActive(null)}>
+    <div className="chart-box" ref={boxRef} onMouseLeave={saiuDoGrafico(() => setActive(null))}>
       <svg viewBox={`0 0 ${W} ${height}`} width="100%" {...arr}>
         <GradeEixo W={W} top={padTop} h={plotH} min={signed ? -maxAbs : 0} max={maxAbs} padX={padX} padL={padL} ticks={signed ? 2 : 3} fmt={fmtTick} />
         {data.map((d, i) => {
@@ -1021,7 +1026,7 @@ function SvgAreaChart({ data, height = 200, color = TEAL, valueKey = "value", la
   const click = (i) => { if (tapped.current === i && onOpen) { onOpen(data[i]); tapped.current = null; } else { tapped.current = i; setActive(i); } };
   const arr = useArrasto(n, (x) => (n > 1 ? Math.max(0, Math.min(n - 1, Math.round((x - padL) / stepX))) : 0), setActive);
   return (
-    <div className="chart-box" ref={boxRef} onMouseLeave={() => !bare && setActive(null)}>
+    <div className="chart-box" ref={boxRef} onMouseLeave={saiuDoGrafico(() => !bare && setActive(null))}>
       <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={bare ? height : undefined} preserveAspectRatio={bare ? "none" : "xMidYMid meet"} {...(bare ? { style: { display: "block" } } : arr)}>
         {!bare && <GradeEixo W={W} top={padTop} h={plotH} min={minV} max={maxV} padX={padX} padL={padL} />}
         <defs>
@@ -1071,7 +1076,7 @@ function SvgDualBarChart({ data, height = 200, onOpen }) {
   const arr = useArrasto(n, (x) => Math.floor((x - padL) / slot), setActive);
   return (
     <div>
-      <div className="chart-box" ref={boxRef} onMouseLeave={() => setActive(null)}>
+      <div className="chart-box" ref={boxRef} onMouseLeave={saiuDoGrafico(() => setActive(null))}>
         <svg viewBox={`0 0 ${W} ${height}`} width="100%" {...arr}>
           <GradeEixo W={W} top={padTop} h={plotH} min={min} max={max} padX={padX} padL={padL} />
           {data.map((d, i) => (
@@ -1113,7 +1118,7 @@ function InteractiveDonut({ data, size = 160, stroke = 22, centerLabel = "total"
   return (
     <div className="donut-wrap">
       <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} onMouseLeave={() => setAct(null)}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} onMouseLeave={saiuDoGrafico(() => setAct(null))}>
           <circle cx={c} cy={c} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={stroke} />
           {data.map((d, i) => {
             const v = Math.max(0, Number(d.value) || 0);
@@ -10361,7 +10366,7 @@ function GoalProjection({ g, atual, aporteSugerido, onPatch, hospitais = [] }) {
           {precisa <= aporte + 0.5 ? <>Dá para chegar até o prazo ({fmtDatePt(g.prazo)}).</> : <>Para chegar até {fmtDatePt(g.prazo)}, você precisaria de <b>{fmtBRL(precisa)} por mês</b>.</>}
         </div>
       )}
-      <div className="chart-box gp-chart" onMouseLeave={() => setAtivo(null)}>
+      <div className="chart-box gp-chart" onMouseLeave={saiuDoGrafico(() => setAtivo(null))}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Projeção da meta ${g.nome}`} {...arr}>
           <GradeEixo W={W} top={pt} h={ih} min={0} max={maxV} padX={pr} padL={pl} ticks={3} />
           <path d={areaG} fill={g.cor} fillOpacity=".16" />
@@ -11225,7 +11230,7 @@ function PatrimonioCard({ hist = [], investments = [], totalValue = 0, totalBoug
   const dataTxt = (d) => { const [yy, mm, dd] = d.split("-").map(Number); return d === hoje ? "hoje" : `${dd} de ${MONTHS_ABBR_PT[mm - 1].toLowerCase()}. de ${yy}`; };
   const gid = "pg-" + faixa;
   return (
-    <div className="card pat-card" onPointerLeave={() => setAtivo(null)}>
+    <div className="card pat-card" onPointerLeave={saiuDoGrafico(() => setAtivo(null))}>
       <div className="pat-top">
         <span className="pat-l">Patrimônio investido</span>
         <div className="pat-v mono">{comCentavos(fmtBRL(atual.v))}</div>
@@ -11592,7 +11597,7 @@ function AnaliseAtivo({ p, cotacoes = {}, onClose }) {
             <div className="anl-bar" aria-hidden="true"><i style={{ left: `${posFaixa * 100}%` }} /></div>
             <small>Hoje está {posFaixa < 0.2 ? "perto da mínima" : posFaixa > 0.8 ? "perto da máxima" : "no meio da faixa"} do último ano.</small>
           </section>
-          <section className="card pat-card anl-graf" onPointerLeave={() => setAtivo(null)}>
+          <section className="card pat-card anl-graf" onPointerLeave={saiuDoGrafico(() => setAtivo(null))}>
             <div className="pat-top">
               <span className="pat-l">Preço de fechamento</span>
               <div className="pat-v mono">{comCentavos(fmtBRL(sel ? sel.v : 0))}</div>
