@@ -1471,7 +1471,7 @@ Error generating stack: `+n.message+`
         .tb-id { min-width: 0; } .tb-id b { display: block; font-size: 14.5px; } .tb-id small { display: block; font-size: 12px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .tb-c { display: none; } .tb-longo { display: none; }
         .tb-row .tb-s { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; text-align: right; } .tb-s b { font-size: 14.5px; white-space: nowrap; }
-        /* topo de cada grupo no verde do Sallos, com a grade fina e a linha de batimento */
+        /* topo de cada grupo no verde do Sallos, com a grade fina */
         .app .cl-tab .cl-head.tb-head { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(135deg, #0B3D2E, #0E5640); color: #fff; }
         .app .cl-tab .cl-head.tb-head::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
           background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
@@ -2392,13 +2392,13 @@ Error generating stack: `+n.message+`
           .app .linha-anim { stroke-dashoffset: 0; }
         }
         /* ================= v114: acabamento premium ================= */
-        /* assinatura dos cart\xF5es verdes: grade fina de monitor e a linha de batimento, bem discretas */
+        /* assinatura dos cart\xF5es verdes: grade fina de monitor, bem discreta (a linha de batimento saiu a pedido do Jo\xE3o, 28/11/2026) */
         .app .balance-card, .app .ct-hero, .app .dhero, .app .wr-main { position: relative; isolation: isolate; overflow: hidden; }
         .app .balance-card::after, .app .ct-hero::after, .app .dhero::after, .app .wr-main::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 80' preserveAspectRatio='none'%3E%3Cpath d='M0 52 H240 l10 -7 l8 7 h14 l8 -38 l10 62 l8 -30 l7 6 h52 l12 -10 l12 10 H600' fill='none' stroke='white' stroke-width='1.6' stroke-linejoin='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E"), linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
-          background-size: 46% 40px, 22px 22px, 22px 22px; background-position: right 0 top 6px, 0 0, 0 0; background-repeat: no-repeat, repeat, repeat; opacity: 0.45;
+          background-image: linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+          background-size: 22px 22px; opacity: 0.45;
           -webkit-mask-image: linear-gradient(to left, #000 15%, transparent 80%); mask-image: linear-gradient(to left, #000 15%, transparent 80%); }
-        .app .dhero::after { background-size: 0 0, 22px 22px, 22px 22px; -webkit-mask-image: linear-gradient(to left, #000 30%, transparent 100%); mask-image: linear-gradient(to left, #000 30%, transparent 100%); }
+        .app .dhero::after { -webkit-mask-image: linear-gradient(to left, #000 30%, transparent 100%); mask-image: linear-gradient(to left, #000 30%, transparent 100%); }
         .app .balance-card, .app .ct-hero, .app .dhero { box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 22px 44px -22px rgba(8,41,31,0.6), 0 2px 6px rgba(8,41,31,0.14) !important; }
         /* cart\xF5es claros: mais ar, borda fina e sombra quase invis\xEDvel */
         :root:not([data-theme="dark"]) { --bg: #F2F4F3; --hair: rgba(15,30,24,0.07); --sombra: 0 1px 0 rgba(15,30,24,0.02), 0 14px 34px -26px rgba(15,30,24,0.22); }

@@ -1,6 +1,6 @@
 // Sallos: abre na hora com a cópia guardada e busca a versão nova por trás. Quando chega versão nova,
 // avisa o app ("Nova versão pronta") e a próxima abertura já usa a nova. Sem internet, usa a cópia guardada.
-const CACHE_NAME = "mediplan-202611281118";
+const CACHE_NAME = "mediplan-202611281131";
 const REM_CACHE = "mediplan-lembretes"; // lista de lembretes gravada pelo app; não é apagada nas atualizações
 // partes do programa com a versão no nome (libs/): ficam guardadas entre as atualizações do app, sem baixar de novo
 const LIB_CACHE = "sallos-libs-1";
