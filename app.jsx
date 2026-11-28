@@ -5625,6 +5625,38 @@ function App() {
         /* ================= v31: organização (caminho do dinheiro) ================= */
         .oa { max-width: 640px; } @media (min-width: 1100px) { .oa { max-width: none; } .oa-chips { max-width: 420px; } .oa.oa-rodape { max-width: none; margin-top: 12px; } }
         .oa-chips { display: flex; gap: 8px; margin-bottom: 12px; }
+        .xl-conta { font-size: 13.5px; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+        .xl-prog { height: 8px; border-radius: 5px; background: var(--surface-3, #E7ECEA); overflow: hidden; margin: -4px 0 12px; } .xl-prog i { display: block; height: 100%; border-radius: 5px; background: #16A34A; }
+        .xl-sec-btn { width: 100%; border: none; font: inherit; cursor: pointer; text-align: left; } .xl-sec-btn i { font-style: normal; margin-left: 4px; }
+        .xl-title[role="button"] { cursor: pointer; }
+        @media (max-width: 720px) { .xl-row { grid-template-columns: 30px minmax(0, 1fr) auto; padding: 10px 10px; } .xl-row .fz-pen { display: none; } .xl-row .xl-check { width: 28px; height: 28px; } }
+
+        /* ================= Contas em três caixinhas (28/11/2026) ================= */
+        .cx { max-width: 640px; } @media (min-width: 1100px) { .cx { max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-bottom: 14px; } .cx > .card { margin: 0; } .cx > :only-child { grid-column: 1 / -1; } }
+        .cx-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+        @media (min-width: 1100px) { .cx { align-items: stretch !important; } .cx-3 { margin: 0; gap: 12px; } .cx .cx-box { padding: 18px 16px; display: flex; flex-direction: column; } .cx .cx-box .cx-anel { width: 44px; height: 44px; margin-bottom: auto; } .cx .cx-box small { margin-top: 18px; font-size: 13px; } .cx .cx-box b { font-size: 26px; } .cx .cx-box span { font-size: 12.5px; } }
+        .cx-box { background: var(--surface, #fff); border: 1px solid var(--hair, var(--border)); border-radius: 18px; padding: 12px 11px 12px; min-width: 0; box-shadow: var(--sombra, none); }
+        .cx-anel { width: 34px; height: 34px; display: block; margin-bottom: 8px; }
+        .cx-box small { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+        .cx-box b { display: block; font-family: Manrope, Inter, sans-serif; font-weight: 800; font-size: clamp(14px, 4.2vw, 19px); letter-spacing: -0.02em; margin: 3px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cx-box span { display: block; font-size: 11.5px; color: var(--text-dim); line-height: 1.3; }
+        .cx-livre { background: linear-gradient(135deg, #0B3D2E, #0E5640); border-color: transparent; color: #fff; }
+        .cx-livre small, .cx-livre span { color: rgba(220,245,235,0.8); }
+        .cx-livre.neg { background: linear-gradient(135deg, #7F1D1D, #991B1B); }
+        .cx-sem .oa-h { margin: 0 0 10px; color: var(--text); }
+        .cx-dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-bottom: 4px; }
+        .cx-dias div { text-align: center; border-radius: 12px; padding: 6px 0 5px; background: var(--surface-3, #F4F7F5); font-size: 11px; color: var(--text-dim); }
+        .cx-dias b { display: block; font: 700 15px Manrope, Inter, sans-serif; color: var(--text); }
+        .cx-dias .hj { background: var(--text); color: var(--surface, #fff); } .cx-dias .hj b { color: var(--surface, #fff); }
+        .cx-dias em { display: block; width: 6px; height: 6px; border-radius: 50%; margin: 3px auto 0; } .cx-dias em.r { background: #DC2626; } .cx-dias em.a { background: #F59E0B; } .cx-dias em.g { background: #16A34A; }
+        .cx-li { display: flex; align-items: center; gap: 10px; padding: 12px 0 0; margin-top: 12px; border-top: 1px solid var(--border); }
+        .cx-li-n { flex: 1; min-width: 0; } .cx-li-n b { display: block; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .cx-li-n small { font-size: 12.5px; color: var(--text-dim); } .cx-li-n small.late { color: #DC2626; font-weight: 600; }
+        .cx-li-v { font-size: 15px; white-space: nowrap; }
+        .cx-pag { flex-shrink: 0; border: 1.5px solid #16A34A; color: #15803D; background: transparent; border-radius: 12px; padding: 8px 12px; font: 700 14px Inter, sans-serif; cursor: pointer; }
+        .cx-vazio { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 14px; color: var(--text-dim); } .cx-vazio b { color: var(--text); }
+        :root[data-theme="dark"] .cx-pag { color: #4ADE80; border-color: #22C55E; }
+        @media (max-width: 360px) { .cx-3 { gap: 6px; } .cx-box { padding: 10px 8px; } .cx-li { flex-wrap: wrap; } .cx-li-n { flex-basis: 100%; } .cx-li-v { flex: 1; } }
+
         .oa-chips button { flex: 1; font: inherit; font-size: 13.5px; font-weight: 600; padding: 10px 8px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); cursor: pointer; }
         .oa-chips button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
         .oa-chips button:focus-visible, .oa-li-r button:focus-visible, .oa-ir:focus-visible, .oa-mais:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
@@ -7918,7 +7950,46 @@ function OrganizacaoTab({ viewYear, viewMonth, incomeItems, expenseItems, invIte
       </div>
     </div>
   );
-  if (parte === "topo") return <div className="oa">{chips}<div className="oa-topo">{fluxo}{sugCard}</div></div>;
+  // topo de Contas em três caixinhas (28/11/2026): recebi, contas que faltam e livre para gastar; e as contas desta semana
+  if (parte === "topo") {
+    const totRec = recebido + aReceber, totContas = pagas + aPagar;
+    const livreCx = rel === 0 ? recebido - pagas - Math.max(0, investido) - aPagar : totRec - totContas - Math.max(0, investido);
+    const anel = (frac, cor, fundo) => (
+      <svg className="cx-anel" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke={fundo} strokeWidth="5" /><circle cx="18" cy="18" r="15" fill="none" stroke={cor} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, Math.min(1, frac)) * 94.25} 200`} transform="rotate(-90 18 18)" /></svg>
+    );
+    const caixas = (
+      <div className="cx-3" id="cx-caixinhas">
+        <div className="cx-box" data-cx="recebi">{anel(totRec > 0 ? recebido / totRec : 0, "#16A34A", "#DCFCE7")}<small>{rel > 0 ? "Vai receber" : "Recebi"}</small><b className="mono">{fmtBRL(Math.round(rel > 0 ? totRec : recebido)).replace(/,\d\d$/, "")}</b><span>{aReceber > 0.005 && rel <= 0 ? "faltam " + fmtBRL(Math.round(aReceber)).replace(/,\d\d$/, "") : totRec > 0 ? "tudo recebido" : "nada lançado"}</span></div>
+        <div className="cx-box" data-cx="contas">{anel(totContas > 0 ? pagas / totContas : 1, "#F59E0B", "#FEF3C7")}<small>Contas</small><b className="mono">{fmtBRL(Math.round(aPagar > 0.005 ? aPagar : pagas)).replace(/,\d\d$/, "")}</b><span>{aPagar > 0.005 ? "faltam pagar" : totContas > 0 ? "tudo pago" : "nenhuma conta"}</span></div>
+        <div className={`cx-box cx-livre ${livreCx < 0 ? "neg" : ""}`} data-cx="livre">{anel(recebido > 0 ? Math.max(0, livreCx) / Math.max(recebido, totRec) : 0, "#6EE7B7", "rgba(255,255,255,0.15)")}<small>{livreCx < 0 ? "Falta" : "Livre"}</small><b className="mono">{fmtBRL(Math.round(Math.abs(livreCx))).replace(/,\d\d$/, "")}</b><span>{livreCx < 0 ? "para pagar tudo" : rel < 0 ? "sobrou no mês" : rel > 0 ? "previsto" : "pode gastar"}</span></div>
+      </div>
+    );
+    let semana = null;
+    if (rel === 0) {
+      const hj = new Date(hojeIso + "T12:00:00"), dow = (hj.getDay() + 6) % 7;
+      const dias = Array.from({ length: 7 }, (_, k) => { const d = new Date(hj); d.setDate(hj.getDate() - dow + k); return d.toISOString().slice(0, 10); });
+      const fim = dias[6];
+      const daSemana = vaiSair.filter((e) => e.dateIso <= fim);
+      const prox = vaiSair.find((e) => e.dateIso > fim);
+      const pontoDe = (iso) => { const l = expenseItems.filter((e) => e.dateIso === iso); if (!l.length) return ""; if (l.some((e) => !e.paid && iso < hojeIso)) return "r"; if (l.some((e) => !e.paid)) return "a"; return "g"; };
+      const NOMES = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+      semana = (
+        <div className="card cx-sem" id="cx-semana">
+          <h3 className="oa-h">Esta semana</h3>
+          <div className="cx-dias">{dias.map((iso, k) => <div key={iso} className={iso === hojeIso ? "hj" : ""}><span>{NOMES[k]}</span><b>{Number(iso.slice(8, 10))}</b><em className={pontoDe(iso)} /></div>)}</div>
+          {daSemana.length === 0 && <div className="cx-vazio">{prox ? <>Nenhuma conta até domingo. Próxima: <b>{prox.description}</b>, dia {dm(prox.dateIso)} · <b className="mono">{fmtBRL(prox.amount)}</b></> : "Nenhuma conta para pagar neste mês."}</div>}
+          {daSemana.map((it) => { const st = subPag(it.dateIso); return (
+            <div key={it.key} className="cx-li" data-semana={it.description}>
+              <span className="cx-li-n"><b>{it.description}</b><small className={st.late ? "late" : ""}>{st.late && st.t !== "vence hoje" ? "venceu dia " + Number(it.dateIso.slice(8, 10)) : st.t}</small></span>
+              <b className="mono cx-li-v">{fmtBRL(it.amount)}</b>
+              {typeof it.toggle === "function" && <button type="button" className="cx-pag" onClick={it.toggle}>Paguei</button>}
+            </div>
+          ); })}
+        </div>
+      );
+    }
+    return <div className="oa cx">{caixas}{semana}</div>;
+  }
   if (parte === "rodape") return <div className="oa oa-rodape">{sobraCard}</div>;
   return <div className="oa">{chips}{fluxo}{sugCard}{sobraCard}</div>;
 }
@@ -10452,6 +10523,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
   const [anexosNovos, setAnexosNovos] = useState([]);
   useEffect(() => { if (dedSignal) { setShowForm(true); setDedut(true); } }, [dedSignal]);
   const [filter, setFilter] = useState("todas");
+  const [pagasAb, setPagasAb] = useState(false);
   const [sort, setSort] = useState("data");
   const [openFat, setOpenFat] = useState(null);
   const [openGrp, setOpenGrp] = useState({});
@@ -10505,21 +10577,18 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
       <div className={desk ? "dgrid dgrid-eq" : ""} style={desk ? { gridTemplateColumns: "1.7fr 1fr" } : null}>
       <div className="card">
         <div className="card-head">
-          <h3 className="card-title">Contas de {MONTHS_PT[viewMonth].toLowerCase()}</h3>
-          <div className="segmented sm">
-            {[["todas", "Todas"], ["pendentes", "Pendentes"], ["pagas", "Pagas"]].map(([k, l]) => (
-              <button key={k} className={`seg-btn ${filter === k ? "active" : ""}`} onClick={() => setFilter(k)}>{l}</button>
-            ))}
-          </div>
+          <h3 className="card-title">Todas as contas</h3>
+          {monthExpenseItems.length > 0 && <span className="xl-conta">{monthExpenseItems.filter((e) => e.paid).length} de {monthExpenseItems.length} pagas</span>}
         </div>
+        {total > 0 && <div className="xl-prog" aria-hidden="true"><i style={{ width: `${Math.min(100, (paidTotal / total) * 100)}%` }} /></div>}
         {visible.length === 0 && <div className="empty-state">{monthExpenseItems.length === 0 ? "Nenhuma despesa cadastrada neste mês." : "Nada por aqui neste filtro."}</div>}
-        {total > 0 && (
+        {false && total > 0 && (
           <div className="xl-cats" id="exp-cats">
             <div className="xl-bar">{catResumo.map((c) => <i key={c.id} style={{ width: `${(c.valor / total) * 100}%`, background: c.color }} title={`${c.label}: ${fmtBRL(c.valor)}`} />)}</div>
             <div className="xl-legend">{catResumo.slice(0, 5).map((c) => <span key={c.id}><i style={{ background: c.color }} />{c.label} <b>{Math.round((c.valor / total) * 100)}%</b></span>)}{catResumo.length > 5 && <span>+{catResumo.length - 5}</span>}</div>
           </div>
         )}
-        {visible.length > 1 && (
+        {false && visible.length > 1 && (
           <div className="xl-tools">
             <span>Ordenar por</span>
             {[["data", "Vencimento"], ["valor", "Maior valor"], ["categoria", "Categoria"]].map(([k, l]) => <button key={k} type="button" data-sort={k} className={`chip sm ${sort === k ? "active" : ""}`} aria-pressed={sort === k} onClick={() => setSort(k)}>{l}</button>)}
@@ -10530,8 +10599,10 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
             <div className="xl-row xl-head"><span /><span>Venc.</span><span>Descrição</span><span>Categoria</span><span className="xl-tipo">Tipo</span><span className="r">Valor</span><span>Situação</span><span /></div>
             {secs.map((sec) => (
               <div key={sec.id} className="xl-secbox" data-sec={sec.id}>
-                <div className={`xl-sec ${sec.id}`}><b>{sec.titulo}</b><span>{sec.items.length} {sec.items.length === 1 ? "conta" : "contas"} · {fmtBRL(sec.items.reduce((a, e) => a + e.amount, 0))}</span></div>
-                {sec.items.map((e) => {
+                {sec.id === "pagas"
+                  ? <button type="button" className="xl-sec pagas xl-sec-btn" aria-expanded={pagasAb} data-pagas onClick={() => setPagasAb(!pagasAb)}><b>{sec.items.length} {sec.items.length === 1 ? "conta paga" : "contas pagas"}</b><span>{fmtBRL(sec.items.reduce((a, e) => a + e.amount, 0))} <i aria-hidden="true">{pagasAb ? "▴" : "▾"}</i></span></button>
+                  : <div className={`xl-sec ${sec.id}`}><b>{sec.titulo}</b><span>{sec.items.length} {sec.items.length === 1 ? "conta" : "contas"} · {fmtBRL(sec.items.reduce((a, e) => a + e.amount, 0))}</span></div>}
+                {(sec.id !== "pagas" || pagasAb) && sec.items.map((e) => {
                   const meta = EXP_CAT_MAP[e.category] || EXP_CAT_MAP.outros;
                   const di = dueInfo(e.dateIso, today, e.paid), dm = e.dateIso.slice(8, 10) + "/" + e.dateIso.slice(5, 7);
                   const linha = (
@@ -10541,7 +10612,7 @@ function ExpensesTab({ catAprendida = {}, aprenderCat, dedSignal, monthExpenseIt
                       </button>
                       <span className="xl-date mono">{dm}</span>
                       <div className="xl-main">
-                        <div className="xl-title">{e.description}{(e.anexos || []).length > 0 && <span className="xl-anx" title="Nota anexada" aria-label="Nota anexada"><ProIc n="clipe" size={13} color="var(--text-dim)" /></span>}{ehDedutivel(e) && <span className="xl-ded" title="Dedutível no IR">IR</span>}</div>
+                        <div className="xl-title" role="button" tabIndex={0} onClick={() => setEditKey(editKey === e.key ? null : e.key)} onKeyDown={(ev) => { if (ev.key === "Enter") setEditKey(editKey === e.key ? null : e.key); }}>{e.description}{(e.anexos || []).length > 0 && <span className="xl-anx" title="Nota anexada" aria-label="Nota anexada"><ProIc n="clipe" size={13} color="var(--text-dim)" /></span>}{ehDedutivel(e) && <span className="xl-ded" title="Dedutível no IR">IR</span>}</div>
                         {e.itens && <button type="button" className="xl-more" data-fat-open aria-expanded={openFat === e.key} onClick={() => setOpenFat(openFat === e.key ? null : e.key)}>{openFat === e.key ? "Fechar" : (e.itens.length === 1 ? "Ver 1 gasto" : `Ver os ${e.itens.length} gastos`)} <span aria-hidden="true">{openFat === e.key ? "▴" : "▾"}</span></button>}
                         <div className="xl-sub"><span className="mono">{dm}</span><span>·</span><i style={{ background: meta.color }} /><span>{meta.label}</span>{e.tipo === "recorrente" && <><span>·</span><span>todo mês</span></>}</div>
                       </div>
