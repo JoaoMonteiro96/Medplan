@@ -399,21 +399,56 @@ function ajustesPM(investments) {
   });
   return tot;
 }
+// dólar oficial (PTAX de venda do Banco Central) de cada dia, para o custo em reais das compras no exterior.
+// Busca o período de uma vez; se o Banco Central não responder, usa a AwesomeAPI. Fim de semana e feriado: o último dia útil antes.
+const ptaxIso = (d) => d.toISOString().slice(0, 10);
+async function buscarPtaxPeriodo(ini, fim) {
+  const mdY = (iso) => `${iso.slice(5, 7)}-${iso.slice(8, 10)}-${iso.slice(0, 4)}`;
+  const out = {};
+  try {
+    const u = "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@dataInicial='" + mdY(ini) + "'&@dataFinalCotacao='" + mdY(fim) + "'&$format=json&$select=cotacaoVenda,dataHoraCotacao";
+    const j = await fetch(u).then((r) => r.json());
+    (j && j.value || []).forEach((x) => { const d = String(x.dataHoraCotacao || "").slice(0, 10); const v = Number(x.cotacaoVenda); if (d && v > 0) out[d] = v; });
+  } catch (e) {}
+  if (!Object.keys(out).length) {
+    try {
+      const ymd = (iso) => iso.replace(/-/g, "");
+      const j = await fetch(`https://economia.awesomeapi.com.br/json/daily/USD-BRL/1000?start_date=${ymd(ini)}&end_date=${ymd(fim)}`).then((r) => r.json());
+      (Array.isArray(j) ? j : []).forEach((x) => { const v = Number(x.bid); const t = Number(x.timestamp) * 1000; if (v > 0 && t) { const d = new Date(t - 3 * 3600e3).toISOString().slice(0, 10); if (!out[d]) out[d] = v; } });
+    } catch (e) {}
+  }
+  return out;
+}
+// dólar de um dia a partir da tabela: o do dia ou o último dia útil antes (até 7 dias)
+function ptaxDoDia(tab, iso) {
+  const d = new Date(iso + "T12:00:00");
+  for (let k = 0; k < 8; k++) { const x = ptaxIso(d); if (tab[x] > 0) return tab[x]; d.setDate(d.getDate() - 1); }
+  return 0;
+}
+// valor de um lançamento em reais: no exterior, o valor em dólar × dólar do dia dele (ou o de hoje, enquanto não buscou)
+const valorInvBRL = (i, cotacoes) => { const v = Number(i && i.amount) || 0; return invCatMeta(i && i.category).moeda === "USD" ? v * (Number(i.fx) > 0 ? Number(i.fx) : dolarHoje(cotacoes)) : v; };
 // Calcula posições da carteira (preço médio, valor atual, rentabilidade) a partir dos lançamentos
 const DOLAR_PADRAO = 5.3;
 const dolarHoje = (cotacoes) => numOf(cotacoes && cotacoes.__USD) || numOf(cotacoes && cotacoes.__USDauto) || DOLAR_PADRAO;
 const fmtUSD = (v) => "US$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Exterior (como as corretoras e a Receita): preço médio em dólar; custo em reais pelo dólar (PTAX) do dia de cada compra,
+// que fica fixo; só o valor de hoje usa o dólar de hoje. Sem o dólar da data guardado (i.fx), usa o de hoje até buscar.
 function computePortfolio(investments, cotacoes) {
   const groups = {};
+  const fxHoje = dolarHoje(cotacoes);
   [...investments].sort((a, b) => (a.date || "").localeCompare(b.date || "") || String(a.id).localeCompare(String(b.id))).forEach((i) => {
     const cat = i.category || "Outro";
     const key = cat + "|" + i.description;
-    const g = groups[key] = groups[key] || { key, category: cat, description: i.description, assetName: i.assetName || ASSET_NAME[i.description] || "", qty: 0, cost: 0, realized: 0, bought: 0, sold: 0, legacyCost: 0, entries: 0 };
+    const g = groups[key] = groups[key] || { key, category: cat, description: i.description, assetName: i.assetName || ASSET_NAME[i.description] || "", qty: 0, cost: 0, realized: 0, bought: 0, sold: 0, legacyCost: 0, entries: 0, costBrl: 0, boughtBrl: 0, soldBrl: 0, realizedBrl: 0, semFx: 0 };
     g.entries += 1;
+    const usdCat = invCatMeta(cat).moeda === "USD";
+    const fxI = usdCat ? (numOf(i.fx) || fxHoje) : 1;
+    if (usdCat && !numOf(i.fx) && i.tipo !== "ajuste") g.semFx += 1;
+    const c0 = g.cost, q0 = g.qty, b0 = g.bought, s0 = g.sold, cb0 = g.costBrl;
     if (i.assetName && !g.assetName) g.assetName = i.assetName;
     // ajuste manual do preço médio: muda só o custo da posição, sem compra, venda nem movimento de caixa
     if (i.tipo === "ajuste") {
-      if (g.qty > 0) g.cost = Math.max(0, g.cost + Number(i.ajuste || 0));
+      if (g.qty > 0) { const antes = g.cost; g.cost = Math.max(0, g.cost + Number(i.ajuste || 0)); if (usdCat) g.costBrl = Math.max(0, g.costBrl + (g.cost - antes) * fxI); }
       // renda fixa: corrige o valor investido (conta como carteira inicial, não como aporte nem como ganho)
       else if (ehRendaFixa(cat)) { const d = Math.max(-g.cost, Number(i.ajuste || 0)); g.cost += d; g.legacyCost += d; if (d > 0) g.bought += d; else g.sold -= d; }
       return;
@@ -429,6 +464,12 @@ function computePortfolio(investments, cotacoes) {
       } else { g.qty += q; g.cost += Math.abs(amt); g.bought += Math.abs(amt); }
     } else if (amt >= 0) { g.cost += amt; g.legacyCost += amt; g.bought += amt; }
     else { g.cost += amt; g.legacyCost += amt; g.sold += Math.abs(amt); }
+    if (usdCat) {
+      // em reais: compra soma pelo dólar da data; venda tira a parte proporcional do custo em reais
+      g.boughtBrl += (g.bought - b0) * fxI; g.soldBrl += (g.sold - s0) * fxI;
+      if (q > 0 && i.tipo === "venda" && q0 > 0) { const parte = (q0 - g.qty) / q0; const tira = cb0 * parte; g.costBrl -= tira; g.realizedBrl += Math.abs(amt) * fxI - tira; }
+      else g.costBrl += (g.cost - c0) * fxI;
+    }
   });
   const positions = Object.values(groups).filter((g) => g.qty > 0.0000001 || g.cost > 0.005).map((g) => {
     const meta = invCatMeta(g.category);
@@ -438,14 +479,18 @@ function computePortfolio(investments, cotacoes) {
     const value = rf ? g.cost : isQty ? (cot > 0 ? g.qty * cot + g.legacyCost : g.cost) : (cot > 0 ? cot : g.cost);
     const base = { ...g, meta, isQty, cotacao: cot, avg: isQty ? g.cost / g.qty : 0, value, profit: value - g.cost, profitPct: g.cost > 0 ? ((value - g.cost) / g.cost) * 100 : 0 };
     if (meta.moeda !== "USD") return base;
-    // exterior: lançamentos em dólar, totais convertidos para real pelo dólar de hoje
-    const fx = dolarHoje(cotacoes);
-    return { ...base, usd: true, fx, costUsd: g.cost, valueUsd: value, avgUsd: base.avg, cotacaoUsd: cot, profitUsd: value - g.cost, cost: g.cost * fx, value: value * fx, profit: (value - g.cost) * fx };
+    // exterior: rentabilidade em dólar (como na corretora); em reais, custo pelo dólar de cada compra e valor pelo de hoje
+    const fx = fxHoje, valorBrl = value * fx, custoBrl = g.costBrl;
+    const ganhoAtivo = (value - g.cost) * fx; // quanto o ativo rendeu em dólar, levado a reais pelo dólar de hoje
+    return { ...base, usd: true, fx, costUsd: g.cost, valueUsd: value, avgUsd: base.avg, cotacaoUsd: cot, profitUsd: value - g.cost,
+      fxMedio: g.cost > 0 ? custoBrl / g.cost : fx, cost: custoBrl, value: valorBrl, profit: valorBrl - custoBrl, ganhoAtivo, efeitoCambio: valorBrl - custoBrl - ganhoAtivo,
+      realized: g.realizedBrl, semFx: g.semFx };
   }).sort((a, b) => b.value - a.value);
   const totalCost = positions.reduce((a, p) => a + p.cost, 0);
   const totalValue = positions.reduce((a, p) => a + p.value, 0);
-  const totalBought = Object.values(groups).reduce((a, g) => a + g.bought, 0);
-  const totalSold = Object.values(groups).reduce((a, g) => a + g.sold, 0);
+  const usdG = (g) => invCatMeta(g.category).moeda === "USD";
+  const totalBought = Object.values(groups).reduce((a, g) => a + (usdG(g) ? g.boughtBrl : g.bought), 0);
+  const totalSold = Object.values(groups).reduce((a, g) => a + (usdG(g) ? g.soldBrl : g.sold), 0);
   return { positions, totalCost, totalValue, totalBought, totalSold, unrealized: totalValue - totalCost };
 }
 const ASSET_DB = [];
@@ -3096,7 +3141,7 @@ function App() {
   const totalPaidExpenses = monthExpenseItems.filter((i) => i.paid).reduce((a, i) => a + i.amount, 0);
   const totalPendingExpenses = monthExpenseItems.filter((i) => !i.paid).reduce((a, i) => a + i.amount, 0);
   const totalExpensesMonth = totalPaidExpenses + totalPendingExpenses;
-  const totalInvestedMonth = monthInvestments.reduce((a, i) => a + Number(i.amount || 0), 0);
+  const totalInvestedMonth = monthInvestments.reduce((a, i) => a + valorInvBRL(i, cotacoes), 0);
   const totalHoursMonth = monthShifts.reduce((a, s) => a + Number(s.hours || 0), 0) + monthPresencas.reduce((a, p) => a + Number(p.hours || 0), 0);
   const weeklyHours = totalHoursMonth / 4;
 
@@ -3314,6 +3359,23 @@ function App() {
     return { ...r, paidMonths: { ...r.paidMonths, [mk]: { paid: !(current && current.paid), paidDate: !(current && current.paid) ? todayStr() : null } } };
   }));
 
+  // exterior: grava em cada compra/venda o dólar do dia dela (uma vez só; fica guardado no lançamento e vai para a nuvem)
+  const fxFaltando = useMemo(() => investments.filter((i) => invCatMeta(i.category).moeda === "USD" && i.date && i.tipo !== "ajuste" && !(Number(i.fx) > 0) && i.date <= todayStr()).map((i) => i.date).sort().join(","), [investments]);
+  useEffect(() => {
+    if (!loaded || !fxFaltando || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+    let vivo = true;
+    const datas = fxFaltando.split(",");
+    const ini = new Date(datas[0] + "T12:00:00"); ini.setDate(ini.getDate() - 8);
+    buscarPtaxPeriodo(ptaxIso(ini), datas[datas.length - 1]).then((tab) => {
+      if (!vivo || !Object.keys(tab).length) return;
+      setInvestments((prev) => prev.map((i) => {
+        if (invCatMeta(i.category).moeda !== "USD" || !i.date || i.tipo === "ajuste" || Number(i.fx) > 0) return i;
+        const v = ptaxDoDia(tab, i.date);
+        return v > 0 ? { ...i, fx: Math.round(v * 10000) / 10000 } : i;
+      }));
+    });
+    return () => { vivo = false; };
+  }, [fxFaltando, loaded]);
   const addInvestment = (d) => setInvestments((prev) => [...prev, { id: uid(), description: d.description, assetName: d.assetName || "", category: d.category, date: d.date,
     tipo: d.tipo || "compra", qty: d.qty || 0, price: d.price || 0, amount: Number(d.amount) || 0, ...(d.moeda ? { moeda: d.moeda } : {}), ...(d.posicaoInicial ? { posicaoInicial: true } : {}), ...(d.td ? { td: d.td } : {}), ...(d.cdiPct > 0 ? { cdiPct: d.cdiPct } : {}) }]);
   // Ajusta o preço médio de um ativo para o valor informado, registrando a diferença como um lançamento de ajuste
@@ -3552,7 +3614,7 @@ function App() {
   const monthStats = (y, m) => {
     const inc = buildIncomeItems(y, m);
     const exp = buildExpenseItems(y, m);
-    const inv = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, y, m)).reduce((a, i) => a + Number(i.amount || 0), 0);
+    const inv = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, y, m)).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0);
     const hrs = shifts.filter((s) => inMonth(s.date, y, m)).reduce((a, s) => a + Number(s.hours || 0), 0) +
                 presencas.filter((p) => inMonth(p.date, y, m)).reduce((a, p) => a + Number(p.hours || 0), 0);
     const net = inc.reduce((a, i) => a + i.net, 0);
@@ -3613,7 +3675,7 @@ function App() {
     // o que dá para pagar com o que já caiu no mês
     const recebido = incCur.filter((i) => i.recebido).reduce((a, i) => a + (Number(i.net) || 0), 0);
     const pagas = expCur.filter((e) => e.paid).reduce((a, e) => a + (Number(e.amount) || 0), 0);
-    const investido = investments.filter((i) => !i.posicaoInicial && i.tipo !== "ajuste" && inMonth(i.date, ty, tm)).reduce((a, i) => a + (Number(i.amount) || 0), 0);
+    const investido = investments.filter((i) => !i.posicaoInicial && i.tipo !== "ajuste" && inMonth(i.date, ty, tm)).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0);
     const caixa = Math.max(0, recebido - pagas - Math.max(0, investido));
     let resta = caixa, n = 0, total = 0;
     expCur.filter((e) => !e.paid && e.amount > 0).sort((a, b) => String(a.dateIso).localeCompare(String(b.dateIso))).forEach((e) => { if (e.amount <= resta + 0.005) { resta -= e.amount; n++; total += e.amount; } });
@@ -3652,10 +3714,10 @@ function App() {
       if (inv.posicaoInicial) return true; // a posição inicial já é o ponto de partida do acumulado, sem virar aporte de um mês
       const [iy, im] = inv.date.split("-").map(Number);
       return iy < windowStart.y || (iy === windowStart.y && im - 1 < windowStart.m);
-    }).reduce((a, i) => a + Number(i.amount || 0), 0);
+    }).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0);
     let cumulative = before;
     monthsWindow.forEach(({ y, m }) => {
-      const monthTotal = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, y, m)).reduce((a, i) => a + Number(i.amount || 0), 0);
+      const monthTotal = investments.filter((i) => !i.posicaoInicial && inMonth(i.date, y, m)).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0);
       cumulative += monthTotal;
       arr.push({ full: MONTHS_PT[m] + " " + y, label: MONTHS_ABBR_PT[m], aporte: Math.round(monthTotal * 100) / 100, acumulado: Math.round(cumulative * 100) / 100 });
     });
@@ -3685,9 +3747,9 @@ function App() {
     return total;
   }, [expenses, recurringExpenses]);
 
-  const totalInvestedAllTime = investments.filter((i) => !i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0);
+  const totalInvestedAllTime = investments.filter((i) => !i.posicaoInicial).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0);
   // os ajustes de preço médio entram aqui para o patrimônio não mudar quando o custo da posição é corrigido
-  const posicaoInicialTotal = investments.filter((i) => i.posicaoInicial).reduce((a, i) => a + Number(i.amount || 0), 0) + ajustesPM(investments);
+  const posicaoInicialTotal = investments.filter((i) => i.posicaoInicial).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0) + ajustesPM(investments);
   // dólar do dia para a carteira no exterior (uma vez por dia, só se houver investimento em dólar)
   useEffect(() => {
     if (!investments.some((i) => i.moeda === "USD")) return;
@@ -3762,8 +3824,8 @@ function App() {
     if (!lanc.length) return 0;
     const primeiro = Math.min(...lanc.map((i) => idx(i.date)));
     const meses = Math.max(1, Math.min(6, cur - primeiro));
-    const tot = lanc.filter((i) => idx(i.date) >= cur - meses && idx(i.date) < cur).reduce((a, i) => a + (Number(i.amount) || 0), 0);
-    if (cur - primeiro <= 0) return Math.max(0, lanc.filter((i) => idx(i.date) === cur).reduce((a, i) => a + (Number(i.amount) || 0), 0));
+    const tot = lanc.filter((i) => idx(i.date) >= cur - meses && idx(i.date) < cur).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0);
+    if (cur - primeiro <= 0) return Math.max(0, lanc.filter((i) => idx(i.date) === cur).reduce((a, i) => a + valorInvBRL(i, cotacoes), 0));
     return Math.max(0, tot / meses);
   }, [investments]);
   const saldoRealizado = totalRecebidoAllTime - totalPagoAllTime - totalInvestedAllTime;
@@ -3777,7 +3839,7 @@ function App() {
   }, [scopedExpenseAmounts]);
   const investByCategory = useMemo(() => {
     const map = {};
-    scopedInvestments.forEach((i) => { const cat = i.category || "Outro"; map[cat] = (map[cat] || 0) + Number(i.amount || 0); });
+    scopedInvestments.forEach((i) => { const cat = i.category || "Outro"; map[cat] = (map[cat] || 0) + valorInvBRL(i, cotacoes); });
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [scopedInvestments]);
 
@@ -5732,6 +5794,8 @@ function App() {
         /* ================= v31: organização (caminho do dinheiro) ================= */
         .oa { max-width: 640px; } @media (min-width: 1100px) { .oa { max-width: none; } .oa-chips { max-width: 420px; } .oa.oa-rodape { max-width: none; margin-top: 12px; } }
         .oa-chips { display: flex; gap: 8px; margin-bottom: 12px; }
+        .kv-sub { display: block; font-size: 11.5px; color: var(--text-dim); font-weight: 400; margin-top: 1px; }
+
         /* barra lateral (28/11/2026): grupos com títulos e divisórias, item ativo com marca verde */
         @media (min-width: 1100px) {
           .dsb { background: linear-gradient(180deg, var(--surface, #fff), var(--surface, #fff) 70%, rgba(22,163,74,0.035)); }
@@ -5807,6 +5871,7 @@ function App() {
         .dv-rank { display: flex; align-items: center; gap: 10px; padding: 9px 0; } .dv-rank .atv-logo { width: 32px; height: 32px; } .dv-rank-n { flex: 1; min-width: 0; } .dv-rank-n > span:first-child { display: flex; justify-content: space-between; font-size: 14.5px; }
         .dv-rank-bar { display: block; height: 6px; border-radius: 4px; background: var(--surface-3, #EEF2F1); margin: 5px 0 3px; overflow: hidden; } .dv-rank-bar i { display: block; height: 100%; border-radius: 4px; } .dv-rank-n small { font-size: 11.5px; color: var(--text-dim); }
         .dv-vazio { font-size: 14px; color: var(--text-dim); padding: 6px 0; }
+        .dv-est { font-style: normal; font-size: 10.5px; font-weight: 700; color: #7C3AED; background: #F3EEFF; border-radius: 99px; padding: 2px 7px; margin-left: 6px; vertical-align: 2px; } :root[data-theme="dark"] .dv-est { background: rgba(167,139,250,.16); color: #C4B5FD; }
 
         /* patrimônio em barras (28/11/2026) */
         .pat-ch.pat-bars { position: relative; height: auto; margin: 14px 0 4px; }
@@ -11294,7 +11359,8 @@ function provTickers(investments) {
 function qtdNaData(investments, t, dia) {
   let q = 0;
   (investments || []).forEach((i) => {
-    if (String(i.description || "").toUpperCase() !== t || !(Number(i.qty) > 0) || i.tipo === "ajuste" || !i.date || i.date > dia) return;
+    // "já tinha antes de usar o app" (posição inicial, inclusive a importada de print): conta desde sempre, seja qual for a data do lançamento
+    if (String(i.description || "").toUpperCase() !== t || !(Number(i.qty) > 0) || i.tipo === "ajuste" || !i.date || (i.date > dia && !i.posicaoInicial)) return;
     q += i.tipo === "venda" ? -Number(i.qty) : Number(i.qty);
   });
   return Math.max(0, q);
@@ -11311,6 +11377,24 @@ function calcProventos(investments, dados) {
       const semData = !x.pagamento || /^9999/.test(x.pagamento); // a empresa ainda não marcou o dia do pagamento
       out.push({ ticker: t, cat, dataCom: x.data_com, pag: semData ? "9999-12-31" : x.pagamento, semData, unit: Number(x.valor), qtd: q, bruto, liquido: provLiquido(x.tipo, bruto), tipo: provNomeTipo(x.tipo) });
     });
+  });
+  // FIIs pagam todo mês, mas o rendimento só é anunciado perto da data com (fim do mês). Enquanto não sai,
+  // estima pelo último rendimento por cota × as cotas de hoje, com pagamento no mesmo dia do mês seguinte.
+  const hoje = todayStr(), mesHoje = hoje.slice(0, 7);
+  Object.entries(dados || {}).forEach(([t, lista]) => {
+    const cat = ((investments || []).find((i) => String(i.description || "").toUpperCase() === t) || {}).category;
+    if (cat !== "FII") return;
+    const l = (lista || []).filter((x) => x && x.data_com && Number(x.valor) > 0 && !/AMORT/i.test(String(x.tipo || ""))).sort((a, b) => String(b.data_com).localeCompare(String(a.data_com)));
+    const ult = l[0];
+    if (!ult || ult.data_com.slice(0, 7) >= mesHoje) return; // o deste mês já foi anunciado
+    const q = qtdNaData(investments, t, hoje);
+    if (!(q > 0)) return;
+    const fimMes = (() => { const d = new Date(hoje + "T12:00:00"); d.setMonth(d.getMonth() + 1, 0); return ptaxIso(d); })();
+    const pagUlt = ult.pagamento && !/^9999/.test(ult.pagamento) ? ult.pagamento : null;
+    const dia = pagUlt ? Math.min(28, Number(pagUlt.slice(8, 10))) : 15;
+    const prox = new Date(hoje + "T12:00:00"); prox.setMonth(prox.getMonth() + 1, dia);
+    const bruto = q * Number(ult.valor);
+    out.push({ ticker: t, cat, dataCom: fimMes, pag: ptaxIso(prox), semData: false, estimado: true, unit: Number(ult.valor), qtd: q, bruto, liquido: bruto, tipo: "Rendimento (estimado)" });
   });
   return out.sort((a, b) => String(b.pag).localeCompare(String(a.pag)));
 }
@@ -11356,7 +11440,7 @@ function DividendosTab({ lista = [], positions = [], nosRecebimentos = true, set
           ) : <button type="button" className="dv-link" onClick={() => { setMetaTxt(meta ? String(meta) : ""); setEditMeta(true); }}>{meta > 0 ? "Mudar a meta" : "Definir uma meta por mês"}</button>}
           <div className="dv-kpis">
             <div><small>Recebido em 12 meses</small><b className="mono">{fmtBRL(tot12)}</b></div>
-            <div><small>A receber</small><b className="mono dv-rec">{fmtBRL(totRec)}</b></div>
+            <div><small>{aReceber.some((x) => x.estimado) ? "A receber (com estimativa)" : "A receber"}</small><b className="mono dv-rec">{fmtBRL(totRec)}</b></div>
             <div><small>Rende por ano</small><b className="mono">{rendeAno.toFixed(2).replace(".", ",")}%</b></div>
           </div>
           <label className="dv-sw"><span>Somar aos recebimentos<small>os pagos entram sozinhos em Plantões › Recebimentos e no saldo</small></span><input type="checkbox" role="switch" checked={nosRecebimentos} onChange={(e) => setNosRecebimentos && setNosRecebimentos(e.target.checked)} /><i aria-hidden="true" /></label>
@@ -11396,7 +11480,7 @@ function DividendosTab({ lista = [], positions = [], nosRecebimentos = true, set
           <div className="card-head"><h3 className="card-title">Próximos pagamentos</h3>{aReceber.length > 0 && <span className="card-note mono">{fmtBRL(totRec)}</span>}</div>
           {aReceber.length === 0 && <div className="dv-vazio">Nenhum pagamento anunciado ainda.</div>}
           {aReceber.slice(0, 8).map((x, k) => (
-            <div key={k} className="dv-it">{x.semData ? <span className="dv-dia"><b>—</b>a definir</span> : <span className="dv-dia"><b>{Number(x.pag.slice(8, 10))}</b>{(MONTHS_ABBR_PT[Number(x.pag.slice(5, 7)) - 1] || "").toLowerCase()}</span>}<span className="dv-it-n"><b>{x.ticker}</b><small>{x.tipo} · com {fmtQty(x.qtd)} {x.cat === "FII" ? "cotas" : "ações"}{x.semData ? " · data de pagamento a definir" : ""}</small></span><b className="mono dv-rec">{fmtBRL(x.liquido)}</b></div>
+            <div key={k} className="dv-it">{x.semData ? <span className="dv-dia"><b>—</b>a definir</span> : <span className="dv-dia"><b>{Number(x.pag.slice(8, 10))}</b>{(MONTHS_ABBR_PT[Number(x.pag.slice(5, 7)) - 1] || "").toLowerCase()}</span>}<span className="dv-it-n"><b>{x.ticker}{x.estimado && <em className="dv-est">estimado</em>}</b><small>{x.tipo.replace(" (estimado)", "")} · com {fmtQty(x.qtd)} {x.cat === "FII" ? "cotas" : "ações"}{x.semData ? " · data de pagamento a definir" : ""}</small></span><b className="mono dv-rec">{fmtBRL(x.liquido)}</b></div>
           ))}
         </div>
     </div>
@@ -11920,7 +12004,9 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
             const sub = g.items.reduce((a, p) => a + p.value, 0);
             const subCost = g.items.reduce((a, p) => a + p.cost, 0);
             const subProfit = sub - subCost;
-            const subPct = subCost > 0 ? (subProfit / subCost) * 100 : 0;
+            const subCostUsd = g.items.reduce((a, p) => a + (p.costUsd || 0), 0), subValUsd = g.items.reduce((a, p) => a + (p.valueUsd || 0), 0);
+            // exterior: rentabilidade em dólar, como na corretora (o efeito do dólar aparece no cartão de cada ativo)
+            const subPct = g.cat === "Exterior" && subCostUsd > 0 ? ((subValUsd - subCostUsd) / subCostUsd) * 100 : subCost > 0 ? (subProfit / subCost) * 100 : 0;
             const aberta = catsAbertas === null ? gi === 0 : catsAbertas.includes(g.cat);
             const alternar = () => setCatsAbertas((prev) => { const atual = prev === null ? [maiorCat] : prev; return atual.includes(g.cat) ? atual.filter((c) => c !== g.cat) : [...atual, g.cat]; });
             const LIM = 5, todas = catsTodas[g.cat] || g.items.length <= LIM + 1;
@@ -12050,7 +12136,13 @@ function InvestmentsTab({ investments, portfolio, cotacoes, addInvestment, remov
                         {open && (
                           <div className="ac-more">
                             {p.isQty && <div className="kv-line"><span>Quantidade</span><b className="mono">{fmtQty(p.qty)}</b></div>}
-                            <div className="kv-line"><span>Total investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>
+                            {p.usd ? <>
+                              <div className="kv-line"><span>Investido em dólar</span><b className="mono">{fmtUSD(p.costUsd)}</b></div>
+                              <div className="kv-line"><span>Custo em reais<small className="kv-sub">{p.semFx ? "buscando o dólar do dia da compra…" : "pelo dólar do dia de cada compra (média " + fmtBRL(p.fxMedio).replace("R$", "R$ ") + ")"}</small></span><b className="mono">{fmtBRL(p.cost)}</b></div>
+                              <div className="kv-line"><span>Valor hoje<small className="kv-sub">dólar de hoje {fmtBRL(p.fx)}</small></span><b className="mono">{fmtBRL(p.value)}</b></div>
+                              {p.cotacao > 0 && <div className="kv-line"><span>Ganho do ativo (em dólar)</span><b className="mono" style={{ color: p.profitUsd >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(p.profitUsd)} {fmtUSD(Math.abs(p.profitUsd))}</b></div>}
+                              {!p.semFx && <div className="kv-line"><span>Efeito do dólar</span><b className="mono" style={{ color: p.efeitoCambio >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(p.efeitoCambio)} {fmtBRL(Math.abs(p.efeitoCambio))}</b></div>}
+                            </> : <div className="kv-line"><span>Total investido</span><b className="mono">{fmtBRL(p.cost)}</b></div>}
                             {!ehRendaFixa(p.category) && <div className="kv-line"><span>Valor atual</span><b className="mono">{fmtBRL(p.value)}</b></div>}
                             {Math.abs(p.realized) > 0.005 && <div className="kv-line"><span>Resultado de vendas</span><b className="mono" style={{ color: p.realized >= 0 ? "var(--teal)" : "var(--brick)" }}>{sgn(p.realized)} {fmtBRL(Math.abs(p.realized))}</b></div>}
                             <div className="ac-hist-title">{hist.length} {hist.length === 1 ? "lançamento" : "lançamentos"}</div>
@@ -12451,6 +12543,7 @@ function lerNotaGenerica(lines) {
   const rows = out.map((t) => ({ kind: "trade", src: "neg", nota: true, date: t.date || todayStr(), semData: !t.date, ticker: t.tk, spec: t.spec, name: ASSET_NAME[t.tk] || "", incerto: true, category: b3Category(t.tk, "", ""), side: t.side, qty: t.qty, price: t.price, amount: t.amount }));
   return { rows, outros: 0, ehNota: rows.length > 0, datas: [...new Set(rows.map((r) => r.date))].sort() };
 }
+if (typeof window !== "undefined") window.__carteira = computePortfolio;
 if (typeof window !== "undefined") window.__mp = { pdfToLines, parseNotaCorretagem, lerCarteiraTexto, lerCarteiraTabelas, juntarCarteira, lerTradesExterior, lerNotaGenerica, detectLoc, numLoc, catCompra, chaveLoja };
 
 function CarteiraImport({ fonte, commitPrint, investments = [], portfolio, goTab }) {
